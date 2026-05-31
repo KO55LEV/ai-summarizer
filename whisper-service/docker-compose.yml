@@ -1,0 +1,19 @@
+services:
+  whisper:
+    build:
+      context: .
+    container_name: whisper-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      WHISPER_MODEL: base
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+    volumes:
+      - whisper-models:/models
+      - whisper-temp:/tmp
+
+volumes:
+  whisper-models:
+  whisper-temp:
