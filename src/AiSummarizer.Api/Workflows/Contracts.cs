@@ -11,6 +11,7 @@ public sealed record CreateYoutubeSummaryWorkflowRequest(
 public sealed record WorkflowResponse(
     Guid Id,
     Guid? RequestedByUserId,
+    Guid? SourceId,
     string WorkflowType,
     string Status,
     JsonElement Input,

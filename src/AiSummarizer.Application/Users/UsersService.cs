@@ -143,6 +143,10 @@ public sealed class UsersService(
             {
                 throw new UserUnauthorizedException("External account does not provide an email address.");
             }
+            if (provider == AuthProvider.Google && !profile.EmailVerified)
+            {
+                throw new UserUnauthorizedException("Google account email must be verified.");
+            }
             var now = DateTimeOffset.UtcNow;
             var normalizedEmail = NormalizeEmail(profile.Email);
 

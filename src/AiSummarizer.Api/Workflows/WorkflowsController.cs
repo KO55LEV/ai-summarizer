@@ -1,3 +1,4 @@
+using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Workflows;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,12 +11,12 @@ public sealed class WorkflowsController(IWorkflowsService workflowsService) : Co
     [HttpPost("youtube-summary")]
     public async Task<ActionResult<WorkflowResponse>> CreateYoutubeSummary([FromBody] CreateYoutubeSummaryWorkflowRequest request, CancellationToken cancellationToken)
     {
-        if (!IsSafeHttpUrl(request.YoutubeUrl))
+        if (!IsYouTubeUrl(request.YoutubeUrl))
         {
             return BadRequest(new
             {
                 status = StatusCodes.Status400BadRequest,
-                detail = "YoutubeUrl must be an absolute http or https URL."
+                detail = "YoutubeUrl must be a valid YouTube video URL."
             });
         }
 
@@ -52,6 +53,7 @@ public sealed class WorkflowsController(IWorkflowsService workflowsService) : Co
         => new(
             workflow.Id,
             workflow.RequestedByUserId,
+            workflow.SourceId,
             workflow.WorkflowType,
             workflow.Status,
             workflow.Input,
@@ -101,15 +103,21 @@ public sealed class WorkflowsController(IWorkflowsService workflowsService) : Co
             workflowEvent.Context,
             workflowEvent.CreatedAt);
 
-    private static bool IsSafeHttpUrl(string? value)
+    private static bool IsYouTubeUrl(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
             return false;
         }
 
-        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-               (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-                uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
+        try
+        {
+            _ = MediaSourceIdentityParser.ParseYouTube(value);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

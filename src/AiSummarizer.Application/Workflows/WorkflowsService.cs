@@ -1,22 +1,48 @@
 using System.Text.Json;
+using AiSummarizer.Application.MediaSources;
+using AiSummarizer.Domain.MediaSources;
 using AiSummarizer.Domain.Workflows;
 
 namespace AiSummarizer.Application.Workflows;
 
-public sealed class WorkflowsService(IWorkflowsRepository repository) : IWorkflowsService
+public sealed class WorkflowsService(
+    IMediaSourcesRepository mediaSourcesRepository,
+    IWorkflowsRepository repository) : IWorkflowsService
 {
     public async Task<WorkflowDto> CreateYoutubeSummaryWorkflowAsync(CreateYoutubeSummaryWorkflowCommand command, CancellationToken cancellationToken)
     {
+        var identity = MediaSourceIdentityParser.ParseYouTube(command.YoutubeUrl);
         var now = DateTimeOffset.UtcNow;
+        var mediaSource = await mediaSourcesRepository.UpsertMediaSourceAsync(new MediaSource
+        {
+            Id = Guid.NewGuid(),
+            SourceProvider = identity.SourceProvider,
+            SourceKind = identity.SourceKind,
+            ExternalSourceId = identity.ExternalSourceId,
+            CanonicalUrl = identity.CanonicalUrl,
+            OriginalUrl = identity.OriginalUrl,
+            DurationSeconds = null,
+            NativeTranscriptAvailable = null,
+            NativeTranscriptCheckedAt = null,
+            NativeTranscriptLanguage = null,
+            Metadata = JsonSerializer.SerializeToElement(new { }),
+            CreatedAt = now,
+            UpdatedAt = now
+        }, null, cancellationToken);
+
         var workflow = await repository.CreateWorkflowAsync(new Workflow
         {
             Id = Guid.NewGuid(),
             RequestedByUserId = command.RequestedByUserId,
+            SourceId = mediaSource.Id,
             WorkflowType = "youtube.summary",
             Status = "queued",
             Input = JsonSerializer.SerializeToElement(new
             {
-                youtubeUrl = command.YoutubeUrl.Trim(),
+                sourceId = mediaSource.Id,
+                sourceProvider = mediaSource.SourceProvider,
+                sourceKind = mediaSource.SourceKind,
+                sourceExternalId = mediaSource.ExternalSourceId,
                 language = string.IsNullOrWhiteSpace(command.Language) ? "en" : command.Language.Trim(),
                 preferNativeTranscript = command.PreferNativeTranscript
             }),
@@ -51,6 +77,7 @@ public sealed class WorkflowsService(IWorkflowsRepository repository) : IWorkflo
         => new(
             workflow.Id,
             workflow.RequestedByUserId,
+            workflow.SourceId,
             workflow.WorkflowType,
             workflow.Status,
             workflow.Input,

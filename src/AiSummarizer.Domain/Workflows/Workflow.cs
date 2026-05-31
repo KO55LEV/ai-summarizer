@@ -6,6 +6,7 @@ public sealed record Workflow
 {
     public Guid Id { get; init; }
     public Guid? RequestedByUserId { get; init; }
+    public Guid? SourceId { get; init; }
     public string WorkflowType { get; init; } = string.Empty;
     public string Status { get; init; } = string.Empty;
     public JsonElement Input { get; init; }

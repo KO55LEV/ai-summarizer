@@ -5,4 +5,6 @@ public sealed class YouTubeDownloadOptions
     public string YtDlpExecutable { get; set; } = "yt-dlp";
     public int MaxAttempts { get; set; } = 3;
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(30);
+    public int MaxConcurrentDownloads { get; set; } = 1;
+    public int CooldownBetweenDownloadsSeconds { get; set; } = 10;
 }

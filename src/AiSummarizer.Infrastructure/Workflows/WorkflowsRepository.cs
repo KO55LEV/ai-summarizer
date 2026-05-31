@@ -37,6 +37,18 @@ public sealed class WorkflowsRepository(NpgsqlDataSource dataSource, ISqlScriptL
     public Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("Workflows/GetWorkflowById.sql", cmd => cmd.Parameters.AddWithValue("workflow_id", workflowId), cancellationToken);
 
+    public Task<Workflow?> GetActiveWorkflowBySourceIdAsync(Guid sourceId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Workflows/GetActiveWorkflowBySourceId.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("source_id", sourceId);
+        }, cancellationToken);
+
+    public Task<Workflow?> GetActiveWorkflowBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Workflows/GetActiveWorkflowBySourceUrl.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("source_url", sourceUrl);
+        }, cancellationToken);
+
     public Task<IReadOnlyList<Workflow>> ListActiveWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken)
         => QueryManyAsync("Workflows/ListActiveWorkflows.sql", cmd =>
         {
@@ -171,6 +183,7 @@ public sealed class WorkflowsRepository(NpgsqlDataSource dataSource, ISqlScriptL
     {
         command.Parameters.AddWithValue("id", workflow.Id);
         command.Parameters.AddWithValue("requested_by_user_id", (object?)workflow.RequestedByUserId ?? DBNull.Value);
+        command.Parameters.AddWithValue("source_id", (object?)workflow.SourceId ?? DBNull.Value);
         command.Parameters.AddWithValue("workflow_type", workflow.WorkflowType);
         command.Parameters.AddWithValue("status", workflow.Status);
         command.Parameters.Add(new NpgsqlParameter("input_json", NpgsqlDbType.Jsonb)
@@ -229,6 +242,7 @@ public sealed class WorkflowsRepository(NpgsqlDataSource dataSource, ISqlScriptL
         {
             Id = reader.GetGuid(reader.GetOrdinal("id")),
             RequestedByUserId = reader.IsDBNull(reader.GetOrdinal("requested_by_user_id")) ? null : reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
+            SourceId = reader.IsDBNull(reader.GetOrdinal("source_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_id")),
             WorkflowType = reader.GetString(reader.GetOrdinal("workflow_type")),
             Status = reader.GetString(reader.GetOrdinal("status")),
             Input = ParseJson(reader.GetString(reader.GetOrdinal("input_json"))),

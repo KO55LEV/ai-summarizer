@@ -49,11 +49,27 @@
 - `cancelled`
 - `dead`
 
+### Media sources
+
+- `media_sources`
+
+`media_sources` is the normalized identity layer for external content sources. It stores:
+
+- `source_provider` such as `youtube` or `facebook`
+- `source_kind` such as `video`
+- `external_source_id` as the provider-specific stable id
+- `canonical_url`
+- `original_url`
+- cached native transcript discovery metadata
+
 ### Transcripts
 
 - `transcripts`
 - `transcript_segments`
 - `transcript_artifacts`
+- `public_request_runs`
+
+`transcripts` stores the normalized transcript body, including `transcript_text` for the full text view and `source_id` for UI lookups.
 
 `transcripts.status`:
 
@@ -61,6 +77,18 @@
 - `running`
 - `ready`
 - `failed`
+
+`public_request_runs` stores the public API audit trail:
+
+- `api_area`, `operation_name`, `http_method`, `request_path`
+- `source_url` and source identity snapshot for UI/history
+- request JSON
+- response JSON
+- status
+- error code / error message
+- source identity
+- workflow / transcript ids
+- started_at / finished_at
 
 ### Workflows
 
@@ -144,6 +172,8 @@
 - `sessions.auth_identity_id` -> `auth_identities.id`
 - `jobs.requested_by_user_id` -> `users.id`
 - `workflow.requested_by_user_id` -> `users.id`
+- `workflows.source_id` -> `media_sources.id`
+- `transcripts.source_id` -> `media_sources.id`
 - `workflow_steps.workflow_id` -> `workflows.id`
 - `workflow_steps.job_id` -> `jobs.id`
 - `workflow_events.workflow_id` -> `workflows.id`

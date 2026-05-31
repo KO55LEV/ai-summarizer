@@ -6,6 +6,7 @@ public sealed record Transcript
 {
     public Guid Id { get; init; }
     public Guid JobId { get; init; }
+    public Guid? SourceId { get; init; }
     public Guid? SourceJobId { get; init; }
     public string? SourceUrl { get; init; }
     public string? SourceFilePath { get; init; }

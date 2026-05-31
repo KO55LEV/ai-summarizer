@@ -68,6 +68,7 @@ public sealed class TranscriptImportJobHandler(
         var duration = root.TryGetProperty("duration", out var durationProperty) && durationProperty.TryGetDecimal(out var durationValue) ? durationValue : 0m;
 
         var transcriptId = context.Job.Id;
+        var sourceId = payload.SourceId;
         var sourceJobId = payload.SourceJobId ?? context.Job.ParentJobId;
         var transcriptBuilder = new StringBuilder();
         var transcriptSegments = new List<TranscriptSegment>();
@@ -116,6 +117,7 @@ public sealed class TranscriptImportJobHandler(
         {
             Id = transcriptId,
             JobId = context.Job.Id,
+            SourceId = sourceId,
             SourceJobId = sourceJobId,
             SourceUrl = payload.SourceUrl,
             SourceFilePath = payload.SourceFilePath,
@@ -206,7 +208,7 @@ public sealed class TranscriptImportJobHandler(
         }
     }
 
-    private sealed record TranscriptImportPayload(string TranscriptFilePath, string? SourceFilePath, string? SourceUrl, Guid? SourceJobId);
+    private sealed record TranscriptImportPayload(string TranscriptFilePath, string? SourceFilePath, string? SourceUrl, Guid? SourceId, Guid? SourceJobId);
 
     private static TranscriptImportPayload? ParsePayload(JsonElement payload)
     {
@@ -218,6 +220,7 @@ public sealed class TranscriptImportJobHandler(
         var transcriptFilePath = ReadString(payload, "transcriptFilePath", "filePath", "sourceTranscriptFilePath");
         var sourceFilePath = ReadString(payload, "sourceFilePath", "audioFilePath", "sourceAudioFilePath");
         var sourceUrl = ReadString(payload, "sourceUrl", "youtubeUrl", "sourceVideoUrl");
+        var sourceId = ReadGuid(payload, "sourceId", "source_id");
         var sourceJobId = ReadGuid(payload, "sourceJobId", "whisperJobId");
 
         if (string.IsNullOrWhiteSpace(transcriptFilePath))
@@ -225,7 +228,7 @@ public sealed class TranscriptImportJobHandler(
             return null;
         }
 
-        return new TranscriptImportPayload(transcriptFilePath, sourceFilePath, sourceUrl, sourceJobId);
+        return new TranscriptImportPayload(transcriptFilePath, sourceFilePath, sourceUrl, sourceId, sourceJobId);
     }
 
     private static string? ReadString(JsonElement payload, params string[] names)

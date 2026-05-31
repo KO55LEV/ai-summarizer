@@ -4,6 +4,7 @@
 
 - `jobs` для низкоуровневых фоновых задач
 - `workflows` для user-facing orchestration
+- `media_sources` для нормализованной source-identity между платформами
 
 ## Jobs
 
@@ -39,6 +40,29 @@ Jobs исполняются worker-процессом.
    - whisper transcribe
    - import transcript
 5. После успешного import workflow завершается `succeeded`.
+
+## Workflow `youtube.transcript`
+
+Это workflow для public transcript scheduling endpoint.
+
+### Логика
+
+1. Проверяется native transcript.
+2. Если native transcript найден, он импортируется сразу.
+3. Если native transcript не найден, запускается manual pipeline.
+4. Manual pipeline:
+   - download video
+   - extract audio
+   - whisper transcribe
+   - import transcript
+5. После успешного import workflow завершается `succeeded`.
+
+### Отличие от `youtube.summary`
+
+В worker используется тот же набор шагов, но тип workflow отдельный:
+
+- `youtube.summary` для summary-oriented orchestration
+- `youtube.transcript` для transcript scheduling и reuse
 
 ### Шаги
 

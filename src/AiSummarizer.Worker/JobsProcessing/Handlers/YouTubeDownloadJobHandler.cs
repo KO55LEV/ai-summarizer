@@ -13,6 +13,10 @@ public sealed class YouTubeDownloadJobHandler(
     ILogger<YouTubeDownloadJobHandler> logger) : IJobHandler
 {
     private static readonly Regex ProgressRegex = new(@"(\d+(?:\.\d+)?)%", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private readonly SemaphoreSlim downloadGate = new(Math.Max(1, options.Value.MaxConcurrentDownloads), Math.Max(1, options.Value.MaxConcurrentDownloads));
+    private readonly TimeSpan cooldownBetweenDownloads = TimeSpan.FromSeconds(Math.Max(0, options.Value.CooldownBetweenDownloadsSeconds));
+    private readonly object gateStateLock = new();
+    private DateTimeOffset nextAllowedStartAt = DateTimeOffset.MinValue;
 
     public string JobType => "youtube.download";
 
@@ -35,55 +39,85 @@ public sealed class YouTubeDownloadJobHandler(
 
         Directory.CreateDirectory(outputRoot);
 
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        await AcquireDownloadSlotAsync(cancellationToken);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var attemptDirectory = Path.Combine(outputRoot, context.Job.Id.ToString("N"));
-                Directory.CreateDirectory(attemptDirectory);
+                cancellationToken.ThrowIfCancellationRequested();
 
-                await context.LogInfoAsync($"Resolving YouTube metadata (attempt {attempt}/{maxAttempts})", null, cancellationToken);
-                context.ReportProgress(5, "Fetching video metadata");
-                var metadata = await FetchMetadataAsync(workerOptions.YtDlpExecutable, payload.Url, cancellationToken);
-
-                var title = metadata.Title ?? payload.CustomFileName ?? $"video_{metadata.Id ?? context.Job.Id.ToString("N")}";
-                var baseFileName = SanitizeFileName(payload.CustomFileName ?? title, metadata.Id ?? context.Job.Id.ToString("N"));
-                var finalFilePath = Path.Combine(attemptDirectory, $"{baseFileName}.mp4");
-                var template = Path.Combine(attemptDirectory, $"{baseFileName}.%(ext)s");
-
-                await context.LogInfoAsync($"Downloading {title}", JsonSerializer.SerializeToElement(new
+                try
                 {
-                    title,
-                    videoId = metadata.Id,
-                    durationSeconds = metadata.DurationSeconds
-                }), cancellationToken);
+                    var attemptDirectory = Path.Combine(outputRoot, context.Job.Id.ToString("N"));
+                    Directory.CreateDirectory(attemptDirectory);
 
-                context.ReportProgress(10, "Downloading video");
-                var download = await RunDownloadAsync(
-                    workerOptions.YtDlpExecutable,
-                    payload.Url,
-                    template,
-                    attemptDirectory,
-                    percent =>
-                    {
-                        var scaled = (short)Math.Clamp(10 + (percent * 0.80), 10, 90);
-                        context.ReportProgress(scaled, $"Downloading: {percent:0}%");
-                    },
-                    cancellationToken);
+                    await context.LogInfoAsync($"Resolving YouTube metadata (attempt {attempt}/{maxAttempts})", null, cancellationToken);
+                    context.ReportProgress(5, "Fetching video metadata");
+                    var metadata = await FetchMetadataAsync(workerOptions.YtDlpExecutable, payload.Url, cancellationToken);
 
-                if (download.ExitCode != 0)
-                {
-                    var errorText = string.Join(Environment.NewLine, download.ErrorLines);
-                    if (IsFatalError(errorText))
+                    var title = metadata.Title ?? payload.CustomFileName ?? $"video_{metadata.Id ?? context.Job.Id.ToString("N")}";
+                    var baseFileName = SanitizeFileName(payload.CustomFileName ?? title, metadata.Id ?? context.Job.Id.ToString("N"));
+                    var finalFilePath = Path.Combine(attemptDirectory, $"{baseFileName}.mp4");
+                    var template = Path.Combine(attemptDirectory, $"{baseFileName}.%(ext)s");
+
+                    await context.LogInfoAsync($"Downloading {title}", JsonSerializer.SerializeToElement(new
                     {
-                        await context.LogErrorAsync("YouTube download failed with a fatal error", JsonSerializer.SerializeToElement(new
+                        title,
+                        videoId = metadata.Id,
+                        durationSeconds = metadata.DurationSeconds
+                    }), cancellationToken);
+
+                    context.ReportProgress(10, "Downloading video");
+                    var download = await RunDownloadAsync(
+                        workerOptions.YtDlpExecutable,
+                        payload.Url,
+                        template,
+                        attemptDirectory,
+                        percent =>
                         {
-                            attempt,
-                            exitCode = download.ExitCode,
-                            error = errorText
-                        }), cancellationToken);
+                            var scaled = (short)Math.Clamp(10 + (percent * 0.80), 10, 90);
+                            context.ReportProgress(scaled, $"Downloading: {percent:0}%");
+                        },
+                        cancellationToken);
+
+                    if (download.ExitCode != 0)
+                    {
+                        var errorText = string.Join(Environment.NewLine, download.ErrorLines);
+                        if (IsFatalError(errorText))
+                        {
+                            await context.LogErrorAsync("YouTube download failed with a fatal error", JsonSerializer.SerializeToElement(new
+                            {
+                                attempt,
+                                exitCode = download.ExitCode,
+                                error = errorText
+                            }), cancellationToken);
+
+                            return JobHandlerResult.DeadLetter("youtube_download_failed", "YouTube download failed.", JsonSerializer.SerializeToElement(new
+                            {
+                                exitCode = download.ExitCode,
+                                error = errorText
+                            }));
+                        }
+
+                        if (attempt < maxAttempts)
+                        {
+                            await context.LogWarningAsync("YouTube download failed; retrying", JsonSerializer.SerializeToElement(new
+                            {
+                                attempt,
+                                exitCode = download.ExitCode,
+                                error = errorText
+                            }), cancellationToken);
+
+                            return JobHandlerResult.Retry(
+                                "youtube_download_retryable",
+                                "YouTube download failed; retrying.",
+                                JsonSerializer.SerializeToElement(new
+                                {
+                                    exitCode = download.ExitCode,
+                                    error = errorText
+                                }),
+                                workerOptions.RetryDelay);
+                        }
 
                         return JobHandlerResult.DeadLetter("youtube_download_failed", "YouTube download failed.", JsonSerializer.SerializeToElement(new
                         {
@@ -92,107 +126,83 @@ public sealed class YouTubeDownloadJobHandler(
                         }));
                     }
 
-                    if (attempt < maxAttempts)
+                    if (!File.Exists(finalFilePath))
                     {
-                        await context.LogWarningAsync("YouTube download failed; retrying", JsonSerializer.SerializeToElement(new
-                        {
-                            attempt,
-                            exitCode = download.ExitCode,
-                            error = errorText
-                        }), cancellationToken);
+                        var found = Directory.GetFiles(attemptDirectory, $"{baseFileName}.*")
+                            .FirstOrDefault(path => !path.EndsWith(".part", StringComparison.OrdinalIgnoreCase));
 
-                        return JobHandlerResult.Retry(
-                            "youtube_download_retryable",
-                            "YouTube download failed; retrying.",
-                            JsonSerializer.SerializeToElement(new
+                        if (found is null || !File.Exists(found))
+                        {
+                            return JobHandlerResult.DeadLetter("youtube_output_missing", "The downloaded output file was not found.", JsonSerializer.SerializeToElement(new
                             {
-                                exitCode = download.ExitCode,
-                                error = errorText
-                            }),
-                            workerOptions.RetryDelay);
+                                expectedPath = finalFilePath,
+                                attemptDirectory
+                            }));
+                        }
+
+                        finalFilePath = found;
                     }
 
-                    return JobHandlerResult.DeadLetter("youtube_download_failed", "YouTube download failed.", JsonSerializer.SerializeToElement(new
+                    context.ReportProgress(100, "Completed");
+                    await context.LogInfoAsync("YouTube download completed", JsonSerializer.SerializeToElement(new
                     {
-                        exitCode = download.ExitCode,
-                        error = errorText
+                        outputFilePath = finalFilePath,
+                        title,
+                        videoId = metadata.Id,
+                        durationSeconds = metadata.DurationSeconds
+                    }), cancellationToken);
+
+                    return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new
+                    {
+                        sourceUrl = payload.Url,
+                        videoId = metadata.Id,
+                        title,
+                        durationSeconds = metadata.DurationSeconds,
+                        outputDirectory = attemptDirectory,
+                        outputFilePath = finalFilePath
                     }));
                 }
-
-                if (!File.Exists(finalFilePath))
+                catch (OperationCanceledException)
                 {
-                    var found = Directory.GetFiles(attemptDirectory, $"{baseFileName}.*")
-                        .FirstOrDefault(path => !path.EndsWith(".part", StringComparison.OrdinalIgnoreCase));
-
-                    if (found is null || !File.Exists(found))
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "YouTube download attempt {Attempt} failed", attempt);
+                    if (attempt >= maxAttempts)
                     {
-                        return JobHandlerResult.DeadLetter("youtube_output_missing", "The downloaded output file was not found.", JsonSerializer.SerializeToElement(new
+                        return JobHandlerResult.DeadLetter("youtube_download_failed", ex.Message, JsonSerializer.SerializeToElement(new
                         {
-                            expectedPath = finalFilePath,
-                            attemptDirectory
+                            attempt,
+                            exception = ex.GetType().FullName,
+                            stackTrace = ex.StackTrace
                         }));
                     }
 
-                    finalFilePath = found;
-                }
-
-                context.ReportProgress(100, "Completed");
-                await context.LogInfoAsync("YouTube download completed", JsonSerializer.SerializeToElement(new
-                {
-                    outputFilePath = finalFilePath,
-                    title,
-                    videoId = metadata.Id,
-                    durationSeconds = metadata.DurationSeconds
-                }), cancellationToken);
-
-                return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new
-                {
-                    sourceUrl = payload.Url,
-                    videoId = metadata.Id,
-                    title,
-                    durationSeconds = metadata.DurationSeconds,
-                    outputDirectory = attemptDirectory,
-                    outputFilePath = finalFilePath
-                }));
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "YouTube download attempt {Attempt} failed", attempt);
-                if (attempt >= maxAttempts)
-                {
-                    return JobHandlerResult.DeadLetter("youtube_download_failed", ex.Message, JsonSerializer.SerializeToElement(new
+                    await context.LogWarningAsync("YouTube download attempt failed; retrying", JsonSerializer.SerializeToElement(new
                     {
                         attempt,
                         exception = ex.GetType().FullName,
-                        stackTrace = ex.StackTrace
-                    }));
+                        message = ex.Message
+                    }), cancellationToken);
+
+                    return JobHandlerResult.Retry(
+                        "youtube_download_retryable",
+                        ex.Message,
+                        JsonSerializer.SerializeToElement(new
+                        {
+                            attempt,
+                            exception = ex.GetType().FullName,
+                            stackTrace = ex.StackTrace
+                        }),
+                        workerOptions.RetryDelay);
                 }
-
-                await context.LogWarningAsync("YouTube download attempt failed; retrying", JsonSerializer.SerializeToElement(new
-                {
-                    attempt,
-                    exception = ex.GetType().FullName,
-                    message = ex.Message
-                }), cancellationToken);
-
-                return JobHandlerResult.Retry(
-                    "youtube_download_retryable",
-                    ex.Message,
-                    JsonSerializer.SerializeToElement(new
-                    {
-                        attempt,
-                        exception = ex.GetType().FullName,
-                        stackTrace = ex.StackTrace
-                    }),
-                    workerOptions.RetryDelay);
             }
         }
-
-        return JobHandlerResult.DeadLetter("youtube_download_failed", "YouTube download failed after all attempts.", null);
+        finally
+        {
+            ReleaseDownloadSlot();
+        }
     }
 
     private static async Task<YouTubeMetadata> FetchMetadataAsync(string executable, string url, CancellationToken cancellationToken)
@@ -346,6 +356,34 @@ public sealed class YouTubeDownloadJobHandler(
         process.WaitForExit();
 
         return new ProcessResult(process.ExitCode, outputLines, errorLines);
+    }
+
+    private async Task AcquireDownloadSlotAsync(CancellationToken cancellationToken)
+    {
+        await downloadGate.WaitAsync(cancellationToken);
+
+        TimeSpan delay;
+        lock (gateStateLock)
+        {
+            delay = nextAllowedStartAt > DateTimeOffset.UtcNow
+                ? nextAllowedStartAt - DateTimeOffset.UtcNow
+                : TimeSpan.Zero;
+        }
+
+        if (delay > TimeSpan.Zero)
+        {
+            await Task.Delay(delay, cancellationToken);
+        }
+    }
+
+    private void ReleaseDownloadSlot()
+    {
+        lock (gateStateLock)
+        {
+            nextAllowedStartAt = DateTimeOffset.UtcNow.Add(cooldownBetweenDownloads);
+        }
+
+        downloadGate.Release();
     }
 
     private static YouTubeDownloadPayload? ParsePayload(JsonElement payload)

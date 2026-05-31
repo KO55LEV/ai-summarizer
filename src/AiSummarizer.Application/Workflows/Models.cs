@@ -5,6 +5,7 @@ namespace AiSummarizer.Application.Workflows;
 public sealed record WorkflowDto(
     Guid Id,
     Guid? RequestedByUserId,
+    Guid? SourceId,
     string WorkflowType,
     string Status,
     JsonElement Input,

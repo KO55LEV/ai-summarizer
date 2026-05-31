@@ -33,6 +33,7 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
         {
             cmd.Parameters.AddWithValue("id", transcript.Id);
             cmd.Parameters.AddWithValue("job_id", transcript.JobId);
+            cmd.Parameters.AddWithValue("source_id", (object?)transcript.SourceId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("source_job_id", (object?)transcript.SourceJobId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("source_url", (object?)transcript.SourceUrl ?? DBNull.Value);
             cmd.Parameters.AddWithValue("source_file_path", transcript.SourceFilePath);
@@ -49,6 +50,18 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
                 Value = transcript.Metadata.ValueKind == JsonValueKind.Undefined ? "{}" : transcript.Metadata.GetRawText()
             });
         }, transaction, cancellationToken, MapTranscript);
+
+    public Task<Transcript?> GetTranscriptBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Transcripts/GetTranscriptBySourceUrl.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("source_url", sourceUrl);
+        }, cancellationToken);
+
+    public Task<Transcript?> GetTranscriptBySourceIdAsync(Guid sourceId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Transcripts/GetTranscriptBySourceId.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("source_id", sourceId);
+        }, cancellationToken);
 
     public Task DeleteTranscriptSegmentsAsync(Guid transcriptId, DbTransaction? transaction, CancellationToken cancellationToken)
         => ExecuteAsync("Transcripts/DeleteTranscriptSegments.sql", cmd => cmd.Parameters.AddWithValue("transcript_id", transcriptId), transaction, cancellationToken);
@@ -142,6 +155,15 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
         }
     }
 
+    private async Task<Transcript?> QuerySingleOrDefaultAsync(string sqlPath, Action<NpgsqlCommand> configure, CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sqlScriptLoader.Load(sqlPath), connection);
+        configure(command);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? MapTranscript(reader) : null;
+    }
+
     private static void BindTranscriptSegment(NpgsqlCommand command, TranscriptSegment segment)
     {
         command.Parameters.AddWithValue("id", segment.Id);
@@ -166,6 +188,7 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
         {
             Id = reader.GetGuid(reader.GetOrdinal("id")),
             JobId = reader.GetGuid(reader.GetOrdinal("job_id")),
+            SourceId = reader.IsDBNull(reader.GetOrdinal("source_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_id")),
             SourceJobId = reader.IsDBNull(reader.GetOrdinal("source_job_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_job_id")),
             SourceUrl = reader.IsDBNull(reader.GetOrdinal("source_url")) ? null : reader.GetString(reader.GetOrdinal("source_url")),
             SourceFilePath = reader.IsDBNull(reader.GetOrdinal("source_file_path")) ? null : reader.GetString(reader.GetOrdinal("source_file_path")),

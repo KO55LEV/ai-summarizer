@@ -101,6 +101,56 @@ public sealed class UsersServiceTests
     }
 
     [Fact]
+    public async Task Google_login_links_to_existing_password_user_by_verified_email()
+    {
+        var repo = new FakeUsersRepository();
+        var passwordHasher = new FakePasswordHasher();
+        var refreshTokens = new FakeRefreshTokenService();
+        var verifier = new FakeExternalIdentityVerifier
+        {
+            Result = new ExternalIdentityProfile(AuthProvider.Google, "google-subject", "user@example.com", "Display Name", "https://avatar", true)
+        };
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+
+        var user = repo.SeedUser("user@example.com");
+        repo.SeedIdentity(new AuthIdentity
+        {
+            UserId = user.Id,
+            Provider = AuthProvider.Password,
+            ProviderSubject = "user@example.com",
+            ProviderEmail = "user@example.com",
+            PasswordHash = passwordHasher.Hash("Password123!"),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+
+        var result = await service.LoginWithGoogleAsync(new ExternalLoginCommand("external-token"), CancellationToken.None);
+
+        Assert.Equal(user.Id, result.User.Id);
+        Assert.Equal(user.Email, result.User.Email);
+        Assert.Equal(2, repo.CreatedIdentities.Count);
+        Assert.Equal(AuthProvider.Google, repo.CreatedIdentities.Last().Provider);
+        Assert.Equal(user.Id, repo.CreatedIdentities.Last().UserId);
+    }
+
+    [Fact]
+    public async Task Google_login_rejects_unverified_email()
+    {
+        var repo = new FakeUsersRepository();
+        var passwordHasher = new FakePasswordHasher();
+        var refreshTokens = new FakeRefreshTokenService();
+        var verifier = new FakeExternalIdentityVerifier
+        {
+            Result = new ExternalIdentityProfile(AuthProvider.Google, "google-subject", "user@example.com", "Display Name", "https://avatar", false)
+        };
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+
+        await Assert.ThrowsAsync<UserUnauthorizedException>(() => service.LoginWithGoogleAsync(new ExternalLoginCommand("external-token"), CancellationToken.None));
+        Assert.Empty(repo.CreatedUsers);
+        Assert.Empty(repo.CreatedIdentities);
+    }
+
+    [Fact]
     public async Task LogoutAsync_revokes_session()
     {
         var repo = new FakeUsersRepository();

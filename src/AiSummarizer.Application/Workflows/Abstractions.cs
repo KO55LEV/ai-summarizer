@@ -9,6 +9,8 @@ public interface IWorkflowsRepository
     Task<T> ExecuteInTransactionAsync<T>(Func<IWorkflowsRepository, DbTransaction, Task<T>> action, CancellationToken cancellationToken);
     Task<Workflow> CreateWorkflowAsync(Workflow workflow, DbTransaction? transaction, CancellationToken cancellationToken);
     Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId, CancellationToken cancellationToken);
+    Task<Workflow?> GetActiveWorkflowBySourceIdAsync(Guid sourceId, CancellationToken cancellationToken);
+    Task<Workflow?> GetActiveWorkflowBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken);
     Task<IReadOnlyList<Workflow>> ListActiveWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<Workflow>> ListHistoryWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkflowStep>> ListStepsAsync(Guid workflowId, CancellationToken cancellationToken);

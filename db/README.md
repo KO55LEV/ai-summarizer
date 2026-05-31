@@ -25,9 +25,11 @@ Seed data and manual test fixtures live in `db/seeds`.
 
 Transcript data lives in three core tables:
 
+- `media_sources` for normalized cross-platform source identity and cached discovery data
 - `transcripts` for the transcript root record and searchable plain text
 - `transcript_segments` for timestamped segment rows
 - `transcript_artifacts` for future AI outputs built from a transcript, such as summaries, quotes, quizzes, and study guides
+- `public_request_runs` for public API request audit logs with request/response payloads, timing, source/workflow links, and endpoint metadata
 
 Workflow data lives in:
 
@@ -46,4 +48,15 @@ Prompt data lives in:
 - `prompt_archive` for immutable prompt snapshots captured on update/delete
 - `prompt_runs` for execution audit logs with request/response payloads and token usage
 
-`transcripts.source_url` stores the original YouTube URL when the transcript comes from a native subtitle source. `source_file_path` stays available for audio-backed transcripts and can be null when the transcript comes straight from the video source.
+`media_sources` stores the normalized source identity:
+
+- `source_provider`
+- `source_kind`
+- `external_source_id`
+- `canonical_url`
+- `original_url`
+- `native_transcript_available`
+- `native_transcript_checked_at`
+- `native_transcript_language`
+
+`transcripts.source_id` and `workflows.source_id` reference `media_sources.id`. `transcripts.source_url` stays available as legacy compatibility data and can still store the canonical or original source URL. `source_file_path` stays available for audio-backed transcripts and can be null when the transcript comes straight from the video source.
