@@ -7,7 +7,8 @@ public sealed record Transcript
     public Guid Id { get; init; }
     public Guid JobId { get; init; }
     public Guid? SourceJobId { get; init; }
-    public string SourceFilePath { get; init; } = string.Empty;
+    public string? SourceUrl { get; init; }
+    public string? SourceFilePath { get; init; }
     public string TranscriptFilePath { get; init; } = string.Empty;
     public string Language { get; init; } = string.Empty;
     public decimal LanguageProbability { get; init; }

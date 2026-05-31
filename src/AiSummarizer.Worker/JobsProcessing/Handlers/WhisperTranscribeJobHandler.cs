@@ -32,7 +32,12 @@ public sealed class WhisperTranscribeJobHandler(
 
         var workerOptions = options.Value;
         var maxAttempts = Math.Max(1, workerOptions.MaxAttempts);
-        var outputRoot = NormalizePath(string.IsNullOrWhiteSpace(payload.OutputDirectory) ? workerOptions.OutputDirectory : payload.OutputDirectory);
+        if (string.IsNullOrWhiteSpace(payload.OutputDirectory))
+        {
+            return JobHandlerResult.DeadLetter("invalid_payload", "Whisper transcribe job payload must include outputDirectory.", null);
+        }
+
+        var outputRoot = NormalizePath(payload.OutputDirectory);
 
         Directory.CreateDirectory(outputRoot);
 
@@ -235,7 +240,7 @@ public sealed class WhisperTranscribeJobHandler(
         };
     }
 
-    private sealed record WhisperTranscribePayload(string SourceFilePath, string? OutputDirectory, string? Language);
+    private sealed record WhisperTranscribePayload(string SourceFilePath, string OutputDirectory, string? Language);
 
     private static WhisperTranscribePayload? ParsePayload(JsonElement payload)
     {
@@ -276,7 +281,12 @@ public sealed class WhisperTranscribeJobHandler(
             return null;
         }
 
-        return new WhisperTranscribePayload(sourceFilePath.Trim(), outputDirectory, language?.Trim());
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            return null;
+        }
+
+        return new WhisperTranscribePayload(sourceFilePath.Trim(), outputDirectory.Trim(), language?.Trim());
     }
 
     private static string NormalizePath(string path) => Path.GetFullPath(path);

@@ -99,3 +99,18 @@ Current hardcoded fixture values:
 ```bash
 -- edit the values in db/seeds/0006_seed_transcript_import_job.sql and run it
 ```
+
+## YouTube summary workflow
+
+`0007_seed_youtube_summary_workflow.sql` creates a queued `youtube.summary` workflow for the current YouTube URL.
+
+Current hardcoded fixture values:
+
+- requested by user id: `617a8af2-bae2-43a6-938f-7c384e3061ee`
+- youtube url: `https://www.youtube.com/watch?v=lJ-qZc0toN0`
+- language: `en`
+- prefer native transcript: `true`
+
+```bash
+-- edit the values in db/seeds/0007_seed_youtube_summary_workflow.sql and run it
+```

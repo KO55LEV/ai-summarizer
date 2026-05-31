@@ -28,3 +28,11 @@ Transcript data lives in three core tables:
 - `transcripts` for the transcript root record and searchable plain text
 - `transcript_segments` for timestamped segment rows
 - `transcript_artifacts` for future AI outputs built from a transcript, such as summaries, quotes, quizzes, and study guides
+
+Workflow data lives in:
+
+- `workflows` for the user-facing orchestration state
+- `workflow_steps` for each step inside a workflow
+- `workflow_events` for the timeline / event log
+
+`transcripts.source_url` stores the original YouTube URL when the transcript comes from a native subtitle source. `source_file_path` stays available for audio-backed transcripts and can be null when the transcript comes straight from the video source.

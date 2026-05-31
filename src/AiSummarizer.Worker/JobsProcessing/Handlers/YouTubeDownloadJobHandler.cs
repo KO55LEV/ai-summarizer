@@ -26,7 +26,12 @@ public sealed class YouTubeDownloadJobHandler(
 
         var workerOptions = options.Value;
         var maxAttempts = Math.Max(1, workerOptions.MaxAttempts);
-        var outputRoot = NormalizePath(string.IsNullOrWhiteSpace(payload.OutputDirectory) ? workerOptions.OutputDirectory : payload.OutputDirectory);
+        if (string.IsNullOrWhiteSpace(payload.OutputDirectory))
+        {
+            return JobHandlerResult.DeadLetter("invalid_payload", "YouTube download job payload must include outputDirectory.", null);
+        }
+
+        var outputRoot = NormalizePath(payload.OutputDirectory);
 
         Directory.CreateDirectory(outputRoot);
 
@@ -198,6 +203,7 @@ public sealed class YouTubeDownloadJobHandler(
             {
                 "--no-playlist",
                 "--dump-single-json",
+                "--",
                 url
             },
             workingDirectory: null,
@@ -238,6 +244,7 @@ public sealed class YouTubeDownloadJobHandler(
             "--progress",
             "--force-overwrite",
             "--no-playlist",
+            "--",
             url
         };
 
@@ -380,8 +387,23 @@ public sealed class YouTubeDownloadJobHandler(
             return null;
         }
 
-        return new YouTubeDownloadPayload(url.Trim(), customFileName, outputDirectory);
+        if (!IsSafeHttpUrl(url))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            return null;
+        }
+
+        return new YouTubeDownloadPayload(url.Trim(), customFileName, outputDirectory.Trim());
     }
+
+    private static bool IsSafeHttpUrl(string value)
+        => Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+           (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+            uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsFatalError(string error)
     {
@@ -422,7 +444,7 @@ public sealed class YouTubeDownloadJobHandler(
         return sanitized;
     }
 
-    private sealed record YouTubeDownloadPayload(string Url, string? CustomFileName, string? OutputDirectory);
+    private sealed record YouTubeDownloadPayload(string Url, string? CustomFileName, string OutputDirectory);
 
     private sealed record YouTubeMetadata(string? Id, string? Title, int? DurationSeconds);
 

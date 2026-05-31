@@ -1,5 +1,6 @@
 using AiSummarizer.Application.Users;
 using AiSummarizer.Application.Jobs;
+using AiSummarizer.Application.Workflows;
 
 namespace AiSummarizer.Api.Middleware;
 
@@ -24,6 +25,10 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
         }
         catch (JobNotFoundException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (WorkflowNotFoundException ex)
         {
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
         }

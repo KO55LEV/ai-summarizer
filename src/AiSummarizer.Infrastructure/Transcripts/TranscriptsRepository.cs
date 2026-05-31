@@ -34,6 +34,7 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
             cmd.Parameters.AddWithValue("id", transcript.Id);
             cmd.Parameters.AddWithValue("job_id", transcript.JobId);
             cmd.Parameters.AddWithValue("source_job_id", (object?)transcript.SourceJobId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("source_url", (object?)transcript.SourceUrl ?? DBNull.Value);
             cmd.Parameters.AddWithValue("source_file_path", transcript.SourceFilePath);
             cmd.Parameters.AddWithValue("transcript_file_path", transcript.TranscriptFilePath);
             cmd.Parameters.AddWithValue("language", transcript.Language);
@@ -166,7 +167,8 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
             Id = reader.GetGuid(reader.GetOrdinal("id")),
             JobId = reader.GetGuid(reader.GetOrdinal("job_id")),
             SourceJobId = reader.IsDBNull(reader.GetOrdinal("source_job_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_job_id")),
-            SourceFilePath = reader.GetString(reader.GetOrdinal("source_file_path")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("source_url")) ? null : reader.GetString(reader.GetOrdinal("source_url")),
+            SourceFilePath = reader.IsDBNull(reader.GetOrdinal("source_file_path")) ? null : reader.GetString(reader.GetOrdinal("source_file_path")),
             TranscriptFilePath = reader.GetString(reader.GetOrdinal("transcript_file_path")),
             Language = reader.GetString(reader.GetOrdinal("language")),
             LanguageProbability = reader.GetDecimal(reader.GetOrdinal("language_probability")),

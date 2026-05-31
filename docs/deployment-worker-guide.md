@@ -79,11 +79,18 @@ Worker__LeaseSeconds=60
 Worker__HeartbeatSeconds=10
 Worker__MaxConcurrentJobs=1
 
-Jobs__YouTubeDownload__OutputDirectory=/data/downloads/youtube
+Workflows__OutputDirectory=/data/downloads/workflows
 Jobs__YouTubeDownload__YtDlpExecutable=yt-dlp
 Jobs__YouTubeDownload__MaxAttempts=3
 Jobs__YouTubeDownload__RetryDelay=00:00:30
 ```
+
+Workflow steps should derive their step folders from `Workflows__OutputDirectory` and the current `workflowId`. For example:
+
+- `.../workflows/{workflowId}/download/`
+- `.../workflows/{workflowId}/audio/`
+- `.../workflows/{workflowId}/transcript/`
+- `.../workflows/{workflowId}/import/`
 
 ## Как это работает в Docker
 

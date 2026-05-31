@@ -32,7 +32,12 @@ public sealed class MediaExtractAudioJobHandler(
 
         var workerOptions = options.Value;
         var maxAttempts = Math.Max(1, workerOptions.MaxAttempts);
-        var outputRoot = NormalizePath(string.IsNullOrWhiteSpace(payload.OutputDirectory) ? workerOptions.OutputDirectory : payload.OutputDirectory);
+        if (string.IsNullOrWhiteSpace(payload.OutputDirectory))
+        {
+            return JobHandlerResult.DeadLetter("invalid_payload", "Media extract audio job payload must include outputDirectory.", null);
+        }
+
+        var outputRoot = NormalizePath(payload.OutputDirectory);
         var audioFormat = NormalizeAudioFormat(string.IsNullOrWhiteSpace(payload.AudioFormat) ? workerOptions.DefaultAudioFormat : payload.AudioFormat);
 
         Directory.CreateDirectory(outputRoot);
@@ -333,7 +338,7 @@ public sealed class MediaExtractAudioJobHandler(
 
     private sealed record ProcessResult(int ExitCode, IReadOnlyList<string> OutputLines, IReadOnlyList<string> ErrorLines);
 
-    private sealed record MediaExtractAudioPayload(string SourceFilePath, string? OutputDirectory, string? AudioFormat, string? CustomFileName);
+    private sealed record MediaExtractAudioPayload(string SourceFilePath, string OutputDirectory, string? AudioFormat, string? CustomFileName);
 
     private static MediaExtractAudioPayload? ParsePayload(JsonElement payload)
     {
@@ -376,7 +381,12 @@ public sealed class MediaExtractAudioJobHandler(
             return null;
         }
 
-        return new MediaExtractAudioPayload(sourceFilePath.Trim(), outputDirectory, audioFormat, customFileName);
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            return null;
+        }
+
+        return new MediaExtractAudioPayload(sourceFilePath.Trim(), outputDirectory.Trim(), audioFormat, customFileName);
     }
 
     private static string NormalizePath(string path) => Path.GetFullPath(path);
