@@ -43,5 +43,7 @@ Role data lives in:
 Prompt data lives in:
 
 - `prompts` for reusable LLM prompt templates with provider and model metadata
+- `prompt_archive` for immutable prompt snapshots captured on update/delete
+- `prompt_runs` for execution audit logs with request/response payloads and token usage
 
 `transcripts.source_url` stores the original YouTube URL when the transcript comes from a native subtitle source. `source_file_path` stays available for audio-backed transcripts and can be null when the transcript comes straight from the video source.

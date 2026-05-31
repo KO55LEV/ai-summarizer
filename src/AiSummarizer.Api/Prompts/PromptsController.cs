@@ -48,6 +48,35 @@ public sealed class PromptsController(IPromptsService promptsService) : Controll
         return NoContent();
     }
 
+    [HttpGet("{promptId:guid}/archive")]
+    public async Task<ActionResult<IReadOnlyList<PromptArchiveResponse>>> ListArchive([FromRoute] Guid promptId, [FromQuery] int limit = 100, [FromQuery] int offset = 0, CancellationToken cancellationToken = default)
+        => Ok((await promptsService.ListPromptArchivesAsync(promptId, limit, offset, cancellationToken)).Select(Map).ToArray());
+
+    [HttpGet("{promptId:guid}/runs")]
+    public async Task<ActionResult<IReadOnlyList<PromptRunResponse>>> ListRuns([FromRoute] Guid promptId, [FromQuery] int limit = 100, [FromQuery] int offset = 0, CancellationToken cancellationToken = default)
+        => Ok((await promptsService.ListPromptRunsAsync(promptId, limit, offset, cancellationToken)).Select(Map).ToArray());
+
+    [HttpGet("{promptId:guid}/usage")]
+    public async Task<ActionResult<PromptRunUsageResponse>> GetUsage([FromRoute] Guid promptId, CancellationToken cancellationToken)
+        => Ok(Map(await promptsService.GetPromptRunUsageAsync(promptId, cancellationToken)));
+
+    [HttpPost("{promptId:guid}/runs")]
+    public async Task<ActionResult<PromptRunResponse>> RecordRun([FromRoute] Guid promptId, [FromBody] CreatePromptRunRequest request, CancellationToken cancellationToken)
+        => Ok(Map(await promptsService.RecordPromptRunAsync(promptId, new CreatePromptRunCommand(
+            request.WorkflowId,
+            request.StepKey,
+            request.Request,
+            request.Response,
+            request.Status,
+            request.ErrorCode,
+            request.ErrorMessage,
+            request.InputTokens,
+            request.OutputTokens,
+            request.TotalTokens,
+            request.DurationMs,
+            request.StartedAt ?? DateTimeOffset.UtcNow,
+            request.FinishedAt), cancellationToken)));
+
     private static PromptResponse Map(PromptDto prompt)
         => new(
             prompt.Id,
@@ -62,4 +91,57 @@ public sealed class PromptsController(IPromptsService promptsService) : Controll
             prompt.IsActive,
             prompt.CreatedAt,
             prompt.UpdatedAt);
+
+    private static PromptArchiveResponse Map(PromptArchiveDto archive)
+        => new(
+            archive.Id,
+            archive.PromptId,
+            archive.ArchiveVersion,
+            archive.ArchiveReason,
+            archive.PromptKey,
+            archive.Title,
+            archive.Description,
+            archive.WorkflowType,
+            archive.Provider,
+            archive.Model,
+            archive.SystemPrompt,
+            archive.UserPrompt,
+            archive.IsActive,
+            archive.ArchivedAt,
+            archive.SourceUpdatedAt);
+
+    private static PromptRunResponse Map(PromptRunDto run)
+        => new(
+            run.Id,
+            run.PromptId,
+            run.WorkflowId,
+            run.StepKey,
+            run.PromptKey,
+            run.Title,
+            run.WorkflowType,
+            run.Provider,
+            run.Model,
+            run.Request,
+            run.Response,
+            run.Status,
+            run.ErrorCode,
+            run.ErrorMessage,
+            run.InputTokens,
+            run.OutputTokens,
+            run.TotalTokens,
+            run.DurationMs,
+            run.StartedAt,
+            run.FinishedAt,
+            run.CreatedAt,
+            run.UpdatedAt);
+
+    private static PromptRunUsageResponse Map(PromptRunUsageDto usage)
+        => new(
+            usage.PromptId,
+            usage.TotalRuns,
+            usage.SucceededRuns,
+            usage.FailedRuns,
+            usage.RunningRuns,
+            usage.LastRunAt,
+            usage.LastStatus);
 }
