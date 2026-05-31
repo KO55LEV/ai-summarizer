@@ -2,7 +2,7 @@
 
 These SQL files are for manual bootstrap and test data.
 
-Each file has a small editable config block in the `params` CTE. Change the values directly in the file, then copy-paste and run it.
+Some files have a small editable config block in a `params` CTE. Others use hardcoded fixture values. Change the values directly in the file, then copy-paste and run it.
 
 ## Test user
 
@@ -11,6 +11,15 @@ Each file has a small editable config block in the `params` CTE. Change the valu
 Parameters:
 
 - `user_id` - optional UUID to make the seed deterministic
+- `user_email` - required, default `test@test.com`
+- `display_name` - optional, default `Test User`
+
+## Roles and admin assignment
+
+`0008_seed_roles_and_admin_user.sql` creates the base `admin` and `user` roles and assigns the test user to `admin`.
+
+Edit the values directly in the file:
+
 - `user_email` - required, default `test@test.com`
 - `display_name` - optional, default `Test User`
 
