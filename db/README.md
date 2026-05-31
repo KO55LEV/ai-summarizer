@@ -19,3 +19,4 @@ db/
     0003_...
 ```
 
+All project tables live in `public`. Keep new tables there so the database stays single-schema unless we explicitly decide to split it later.

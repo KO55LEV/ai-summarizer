@@ -4,9 +4,8 @@ __pycache__/
 node_modules/
 dist/
 build/
-bin/
-obj/
+**/bin/
+**/obj/
 .env
 .env.*
 !.env.example
-
