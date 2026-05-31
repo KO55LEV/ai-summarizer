@@ -18,7 +18,7 @@ set status = 'running',
     locked_until = now() + (@lease_seconds * interval '1 second'),
     started_at = coalesce(started_at, now()),
     updated_at = now(),
-    attempt_count = attempt_count + 1
+    attempt_count = j.attempt_count + 1
 from next_job
 where j.id = next_job.id
-returning id, parent_job_id, requested_by_user_id, job_type, priority, status, payload_json, result_json, error_code, error_message, error_details_json, attempt_count, max_attempts, available_at, locked_by, locked_at, locked_until, started_at, finished_at, last_error_at, heartbeat_at, progress_percent, progress_message, cancel_requested_at, created_at, updated_at;
+returning j.id, j.parent_job_id, j.requested_by_user_id, j.job_type, j.priority, j.status, j.payload_json, j.result_json, j.error_code, j.error_message, j.error_details_json, j.attempt_count, j.max_attempts, j.available_at, j.locked_by, j.locked_at, j.locked_until, j.started_at, j.finished_at, j.last_error_at, j.heartbeat_at, j.progress_percent, j.progress_message, j.cancel_requested_at, j.created_at, j.updated_at;

@@ -111,7 +111,7 @@ public sealed class JobsRepository(NpgsqlDataSource dataSource, ISqlScriptLoader
             cmd.Parameters.AddWithValue("message", message);
             cmd.Parameters.Add(new NpgsqlParameter("context_json", NpgsqlDbType.Jsonb)
             {
-                Value = context is null ? DBNull.Value : context.Value.GetRawText()
+                Value = context is null ? "{}" : context.Value.GetRawText()
             });
         }, cancellationToken, MapJobLog);
 

@@ -1,6 +1,10 @@
 update jobs
 set status = 'succeeded',
     result_json = @result_json,
+    error_code = null,
+    error_message = null,
+    error_details_json = null,
+    last_error_at = null,
     finished_at = now(),
     heartbeat_at = now(),
     locked_by = null,

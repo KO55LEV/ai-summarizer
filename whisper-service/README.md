@@ -22,6 +22,8 @@ curl http://127.0.0.1:8000/health
 curl -X POST http://127.0.0.1:8000/transcribe -F "file=@/path/to/audio.mp3" -o transcript.json
 ```
 
+By default the service uses English. If you want to force another language, send a multipart `language` field, for example `ru` or `es`.
+
 ## Storage behavior
 
 Uploaded audio or video files are written only to a temporary file in `/tmp` during processing and deleted immediately after transcription completes, even when transcription fails.

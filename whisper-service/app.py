@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 
@@ -12,6 +12,7 @@ from faster_whisper import WhisperModel
 MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+DEFAULT_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "en").strip() or "en"
 
 app = FastAPI()
 model = WhisperModel(
@@ -37,7 +38,10 @@ def health() -> dict[str, str]:
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile | None = File(default=None)) -> JSONResponse:
+async def transcribe(
+    file: UploadFile | None = File(default=None),
+    language: str | None = Form(default=None),
+) -> JSONResponse:
     if file is None:
         raise HTTPException(status_code=400, detail="file is required")
 
@@ -54,6 +58,7 @@ async def transcribe(file: UploadFile | None = File(default=None)) -> JSONRespon
             beam_size=5,
             vad_filter=True,
             word_timestamps=False,
+            language=language or DEFAULT_LANGUAGE,
         )
 
         segment_items = [

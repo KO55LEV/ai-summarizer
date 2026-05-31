@@ -1,6 +1,7 @@
 .env
 **/bin/
 **/obj/
+**/__pycache__/
 *.user
 *.suo
 .DS_Store

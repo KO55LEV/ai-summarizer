@@ -20,3 +20,11 @@ db/
 ```
 
 All project tables live in `public`. Keep new tables there so the database stays single-schema unless we explicitly decide to split it later.
+
+Seed data and manual test fixtures live in `db/seeds`.
+
+Transcript data lives in three core tables:
+
+- `transcripts` for the transcript root record and searchable plain text
+- `transcript_segments` for timestamped segment rows
+- `transcript_artifacts` for future AI outputs built from a transcript, such as summaries, quotes, quizzes, and study guides

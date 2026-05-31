@@ -14,8 +14,8 @@ public sealed class JobsProcessorHostedService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var workerOptions = options.Value;
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(workerOptions.PollIntervalMilliseconds));
         var activeJobs = new List<Task>();
+        var pollDelay = TimeSpan.FromMilliseconds(workerOptions.PollIntervalMilliseconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -34,11 +34,12 @@ public sealed class JobsProcessorHostedService(
 
             if (activeJobs.Count == 0)
             {
-                await timer.WaitForNextTickAsync(stoppingToken);
+                await Task.Delay(pollDelay, stoppingToken);
                 continue;
             }
 
-            await Task.WhenAny(activeJobs.Append(timer.WaitForNextTickAsync(stoppingToken).AsTask()));
+            var delayTask = Task.Delay(pollDelay, stoppingToken);
+            await Task.WhenAny(activeJobs.Append(delayTask));
         }
     }
 

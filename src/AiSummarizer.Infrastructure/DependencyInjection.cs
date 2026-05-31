@@ -1,7 +1,9 @@
 using AiSummarizer.Application.Users;
+using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Infrastructure.Persistence;
 using AiSummarizer.Infrastructure.Jobs;
+using AiSummarizer.Infrastructure.Transcripts;
 using AiSummarizer.Infrastructure.Users;
 using AiSummarizer.Infrastructure.Users.ExternalAuth;
 using AiSummarizer.Infrastructure.Users.Security;
@@ -18,6 +20,7 @@ public static class DependencyInjection
         services.AddSingleton<ISqlScriptLoader, FileSqlScriptLoader>();
         services.AddScoped<IUsersRepository, UsersRepository>();
         services.AddScoped<IJobsRepository, JobsRepository>();
+        services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
         services.AddSingleton<IRefreshTokenService, RefreshTokenService>();
         services.AddHttpClient<GoogleIdentityVerifier>();
