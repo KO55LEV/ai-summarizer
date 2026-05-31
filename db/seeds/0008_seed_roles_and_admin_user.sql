@@ -3,7 +3,11 @@ with upserted_roles as (
     insert into roles (role_key, display_name, description)
     values
         ('admin', 'Admin', 'Full access to the system.'),
-        ('user', 'User', 'Standard application access.')
+        ('user', 'User', 'Standard application access.'),
+        ('moderator', 'Moderator', 'Can review and moderate user-generated content.'),
+        ('editor', 'Editor', 'Can create and edit content.'),
+        ('support', 'Support', 'Can assist users and handle operational issues.'),
+        ('viewer', 'Viewer', 'Read-only access.')
     on conflict (role_key)
     do update set
         display_name = excluded.display_name,
