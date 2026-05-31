@@ -1,9 +1,11 @@
 using AiSummarizer.Application.Users;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Application.Jobs;
+using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Infrastructure.Persistence;
 using AiSummarizer.Infrastructure.Jobs;
+using AiSummarizer.Infrastructure.Prompts;
 using AiSummarizer.Infrastructure.Transcripts;
 using AiSummarizer.Infrastructure.Workflows;
 using AiSummarizer.Infrastructure.Users;
@@ -23,12 +25,14 @@ public static class DependencyInjection
         services.AddScoped<IUsersRepository, UsersRepository>();
         services.AddScoped<IJobsRepository, JobsRepository>();
         services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
+        services.AddScoped<IPromptsRepository, PromptsRepository>();
         services.AddScoped<IWorkflowsRepository, WorkflowsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
         services.AddSingleton<IRefreshTokenService, RefreshTokenService>();
         services.AddHttpClient<GoogleIdentityVerifier>();
         services.AddHttpClient<FacebookIdentityVerifier>();
         services.AddScoped<IExternalIdentityVerifier, ExternalIdentityVerifier>();
+        services.AddScoped<IPromptsService, PromptsService>();
         return services;
     }
 }

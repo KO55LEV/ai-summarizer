@@ -40,4 +40,8 @@ Role data lives in:
 - `roles` for reusable access roles such as `admin`, `user`, `moderator`, `editor`, `support`, and `viewer`
 - `user_roles` for the many-to-many assignment between users and roles
 
+Prompt data lives in:
+
+- `prompts` for reusable LLM prompt templates with provider and model metadata
+
 `transcripts.source_url` stores the original YouTube URL when the transcript comes from a native subtitle source. `source_file_path` stays available for audio-backed transcripts and can be null when the transcript comes straight from the video source.
