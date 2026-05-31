@@ -1,8 +1,11 @@
+using AiSummarizer.Shared;
 using AiSummarizer.Api.Middleware;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Users;
 using AiSummarizer.Infrastructure;
 using Microsoft.Extensions.Options;
+
+EnvironmentBootstrapper.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Worker">
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\AiSummarizer.Application\AiSummarizer.Application.csproj" />
+    <ProjectReference Include="..\AiSummarizer.Domain\AiSummarizer.Domain.csproj" />
     <ProjectReference Include="..\AiSummarizer.Infrastructure\AiSummarizer.Infrastructure.csproj" />
     <ProjectReference Include="..\AiSummarizer.Shared\AiSummarizer.Shared.csproj" />
   </ItemGroup>

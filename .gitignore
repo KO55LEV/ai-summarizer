@@ -1,11 +1,6 @@
-.DS_Store
-__pycache__/
-*.pyc
-node_modules/
-dist/
-build/
+.env
 **/bin/
 **/obj/
-.env
-.env.*
-!.env.example
+*.user
+*.suo
+.DS_Store

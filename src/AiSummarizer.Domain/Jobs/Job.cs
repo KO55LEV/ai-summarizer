@@ -24,6 +24,10 @@ public sealed record Job
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? FinishedAt { get; init; }
     public DateTimeOffset? LastErrorAt { get; init; }
+    public DateTimeOffset? HeartbeatAt { get; init; }
+    public short? ProgressPercent { get; init; }
+    public string? ProgressMessage { get; init; }
+    public DateTimeOffset? CancelRequestedAt { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 }

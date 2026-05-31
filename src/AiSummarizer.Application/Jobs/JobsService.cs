@@ -58,6 +58,10 @@ public sealed class JobsService(IJobsRepository repository) : IJobsService
             job.StartedAt,
             job.FinishedAt,
             job.LastErrorAt,
+            job.HeartbeatAt,
+            job.ProgressPercent,
+            job.ProgressMessage,
+            job.CancelRequestedAt,
             job.CreatedAt,
             job.UpdatedAt);
 

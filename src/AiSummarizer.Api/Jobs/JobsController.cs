@@ -57,6 +57,10 @@ public sealed class JobsController(IJobsService jobsService) : ControllerBase
             job.StartedAt,
             job.FinishedAt,
             job.LastErrorAt,
+            job.HeartbeatAt,
+            job.ProgressPercent,
+            job.ProgressMessage,
+            job.CancelRequestedAt,
             job.CreatedAt,
             job.UpdatedAt);
 

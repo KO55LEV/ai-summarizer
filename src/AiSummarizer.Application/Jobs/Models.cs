@@ -24,6 +24,10 @@ public sealed record JobDto(
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt,
     DateTimeOffset? LastErrorAt,
+    DateTimeOffset? HeartbeatAt,
+    short? ProgressPercent,
+    string? ProgressMessage,
+    DateTimeOffset? CancelRequestedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
