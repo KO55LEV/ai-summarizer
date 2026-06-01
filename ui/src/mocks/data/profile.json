@@ -1,0 +1,32 @@
+{
+  "user": {
+    "name": "Researcher Pro",
+    "email": "researcher.pro@example.com",
+    "initials": "RS",
+    "plan": "pro",
+    "memberSince": "Jan 2026"
+  },
+  "stats": [
+    { "label": "Videos analyzed", "value": "42",  "color": "#4dc8e8", "iconKey": "play" },
+    { "label": "Hours saved",      "value": "31h", "color": "#00d4aa", "iconKey": "clock" },
+    { "label": "Exports",          "value": "18",  "color": "#f59e0b", "iconKey": "download" },
+    { "label": "Insights",         "value": "189", "color": "#a78bfa", "iconKey": "sparkles" }
+  ],
+  "languages": [
+    { "lang": "Russian (RU)", "count": 28, "pct": 67 },
+    { "lang": "English (EN)", "count": 12, "pct": 28 },
+    { "lang": "German (DE)",  "count": 2,  "pct": 5  }
+  ],
+  "recentActivity": [
+    { "title": "Как ПРАВИЛЬНО читать книги", "channel": "Беседы с Маргуляном", "age": "1h ago",     "thumbnail": "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg" },
+    { "title": "Как устроена Вселенная?",    "channel": "Космос Просто",        "age": "Yesterday", "thumbnail": "https://img.youtube.com/vi/ZSt9tm3RoUU/mqdefault.jpg" },
+    { "title": "Mars: The Next Frontier",    "channel": "Cosmic Future",        "age": "3 days ago","thumbnail": "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg" }
+  ],
+  "subscription": {
+    "planName": "Researcher Pro",
+    "price": "$19/mo",
+    "renewsAt": "Jun 12, 2026",
+    "used": 42,
+    "total": 500
+  }
+}

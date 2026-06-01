@@ -1,0 +1,22 @@
+{
+  "stats": [
+    { "label": "Videos analyzed", "value": "42", "sub": "this month",       "color": "#4dc8e8", "iconKey": "play" },
+    { "label": "Hours saved",      "value": "31h", "sub": "vs watching fully", "color": "#00d4aa", "iconKey": "clock" },
+    { "label": "Transcripts",      "value": "42",  "sub": "total generated",   "color": "#a78bfa", "iconKey": "file-text" },
+    { "label": "Exports",          "value": "18",  "sub": "downloads total",   "color": "#f59e0b", "iconKey": "download" }
+  ],
+  "recentVideos": [
+    { "title": "Как ПРАВИЛЬНО читать книги и превратить чтение в привычку", "channel": "Беседы с Маргуляном", "duration": "1:04:06", "language": "RU", "age": "1h 4m ago",   "thumbnail": "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "source": "Whisper" },
+    { "title": "Как устроена Вселенная?",                                    "channel": "Космос Просто",         "duration": "46m",     "language": "RU", "age": "Yesterday",    "thumbnail": "https://img.youtube.com/vi/ZSt9tm3RoUU/mqdefault.jpg", "url": "https://www.youtube.com/watch?v=ZSt9tm3RoUU", "source": "YouTube captions" },
+    { "title": "Продуктивность без выгорания — методы лучших",               "channel": "Максим Дорофеев",       "duration": "58m",     "language": "RU", "age": "2 days ago",   "thumbnail": "https://img.youtube.com/vi/ysz5S6PUM-U/mqdefault.jpg", "url": "https://www.youtube.com/watch?v=ysz5S6PUM-U", "source": "Whisper" },
+    { "title": "Mars: The Next Frontier – SpaceX Plan",                       "channel": "Cosmic Future",         "duration": "22:47",   "language": "EN", "age": "3 days ago",   "thumbnail": "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "source": "YouTube captions" },
+    { "title": "How to Think Like a Programmer",                              "channel": "Fireship",              "duration": "18:32",   "language": "EN", "age": "1 week ago",   "thumbnail": "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "source": "YouTube captions" }
+  ],
+  "usageBreakdown": [
+    { "title": "Quick Summaries generated", "count": 42,  "color": "#4dc8e8", "iconKey": "sparkles" },
+    { "title": "Key Takeaways extracted",   "count": 189, "color": "#f59e0b", "iconKey": "star" },
+    { "title": "Languages processed",       "count": 4,   "color": "#a78bfa", "iconKey": "globe" },
+    { "title": "Whisper transcriptions",    "count": 31,  "color": "#00d4aa", "iconKey": "bar-chart-2" }
+  ],
+  "monthlyUsage": { "used": 42, "total": 500 }
+}

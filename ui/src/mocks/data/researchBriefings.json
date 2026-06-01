@@ -1,0 +1,203 @@
+{
+  "briefings": {
+    "r1": {
+      "topicId": "r1",
+      "topicName": "AI & Machine Learning Weekly",
+      "generatedAt": "June 1, 2026 · 08:00",
+      "period": "May 31 – June 1, 2026",
+      "readTime": "4 min",
+      "wordCount": 847,
+      "summary": "A landmark 24 hours in artificial intelligence: OpenAI previewed its next-generation reasoning model, Google DeepMind published breakthrough research on autonomous agents, and the EU finalised implementation guidelines for the AI Act affecting enterprise deployments across all 27 member states.",
+      "sections": [
+        {
+          "title": "Top Stories",
+          "sentiment": "positive",
+          "items": [
+            "OpenAI previewed GPT-5 Turbo with a 10× improvement on complex reasoning benchmarks — general availability expected Q3 2026.",
+            "Google DeepMind's 'Project Astra' paper demonstrates real-time multimodal reasoning across 12 concurrent tasks with < 200ms latency.",
+            "Anthropic raised $3.5B Series F at a $61B valuation; funds earmarked for compute infrastructure expansion.",
+            "EU AI Act implementation guidelines published — enterprises have 18 months to achieve compliance for high-risk AI systems."
+          ]
+        },
+        {
+          "title": "Research Papers",
+          "sentiment": "neutral",
+          "items": [
+            "\"Scaling Laws for Agent Memory\" (arXiv 2026.05981) — memory-augmented LLMs outperform base models by 34% on long-horizon tasks.",
+            "\"MoE-Attention: Sparse Attention Routing in Mixture-of-Experts\" (arXiv 2026.05820) — 2.4× inference speedup with 98.7% quality retention.",
+            "Stanford HAI 'AI Index 2026' released — global AI investment reached $412B in 2025, up 67% year-over-year."
+          ]
+        },
+        {
+          "title": "Product Launches",
+          "sentiment": "positive",
+          "items": [
+            "Mistral AI released Mistral Large 3 with 128K context and native tool-use, available via API and self-hosted.",
+            "Perplexity launched 'Deep Research Pro' featuring automated multi-step web research and citation tracking.",
+            "Microsoft Copilot Studio added Agent Orchestration — connect multiple specialised agents into a single workflow.",
+            "Meta open-sourced LLaMA 4.1 Scout — 17B parameters, claimed GPT-4o parity on code and reasoning tasks."
+          ]
+        },
+        {
+          "title": "Regulatory & Policy",
+          "sentiment": "neutral",
+          "items": [
+            "US Senate passed the 'Responsible AI Deployment Act' requiring watermarking of all AI-generated content.",
+            "UK AI Safety Institute published updated red-teaming guidelines for frontier model evaluations.",
+            "China's MIIT issued new requirements for AI-generated content labelling, effective July 1, 2026."
+          ]
+        }
+      ],
+      "sources": [
+        { "title": "OpenAI Blog", "domain": "openai.com" },
+        { "title": "Google DeepMind Research", "domain": "deepmind.google" },
+        { "title": "arXiv cs.AI", "domain": "arxiv.org" },
+        { "title": "TechCrunch AI", "domain": "techcrunch.com" },
+        { "title": "The Information", "domain": "theinformation.com" },
+        { "title": "Stanford HAI", "domain": "hai.stanford.edu" },
+        { "title": "EU AI Office", "domain": "digital-strategy.ec.europa.eu" },
+        { "title": "Hugging Face Blog", "domain": "huggingface.co" }
+      ],
+      "pastBriefings": [
+        { "id": "b1", "date": "May 31, 2026", "preview": "Meta released LLaMA 4.1 Scout open-source. EU AI Act compliance deadlines clarified for SMEs. Perplexity raised $500M at $14B valuation." },
+        { "id": "b2", "date": "May 30, 2026", "preview": "Anthropic published Constitutional AI v2 safety research. OpenAI reduced API pricing by 40% across all models." },
+        { "id": "b3", "date": "May 29, 2026", "preview": "Google I/O keynote: Gemini 2.5 Ultra announced with 2M token context window and native video understanding." },
+        { "id": "b4", "date": "May 28, 2026", "preview": "Microsoft Build: Copilot+ PC lineup expanded. Azure AI Foundry GA. Phi-4 small model released as open-source." }
+      ]
+    },
+    "r2": {
+      "topicId": "r2",
+      "topicName": "Global Stock Market Digest",
+      "generatedAt": "June 1, 2026 · 07:30",
+      "period": "May 31 – June 1, 2026",
+      "readTime": "3 min",
+      "wordCount": 612,
+      "summary": "US equities closed higher led by tech and energy sectors. Federal Reserve minutes reinforced a rate hold position. Strong non-farm payrolls data suggests continued economic resilience heading into Q3.",
+      "sections": [
+        {
+          "title": "Market Summary",
+          "sentiment": "positive",
+          "items": [
+            "S&P 500 +0.82% | Nasdaq +1.14% | Dow Jones +0.31% | Russell 2000 +0.55%",
+            "10-year Treasury yield 4.41%, down 3bps on Fed hold expectations.",
+            "WTI crude oil $73.40/bbl (+1.2%) on OPEC+ production discipline signals.",
+            "USD/EUR 1.0812, stable ahead of ECB meeting Thursday."
+          ]
+        },
+        {
+          "title": "Key Events",
+          "sentiment": "neutral",
+          "items": [
+            "Fed May minutes: all members favoured holding rates; 2 members raised possibility of 1 cut in H2 2026.",
+            "US May jobs report: +187K non-farm payrolls, unemployment 3.9%, wages +3.8% YoY — above consensus.",
+            "Nvidia Q1 2027 earnings: revenue $36.4B (+112% YoY), data centre segment +143%, EPS $0.96 vs $0.88 estimated.",
+            "Apple announced $110B share buyback programme, largest in company history. Shares +2.1% after-hours."
+          ]
+        },
+        {
+          "title": "Watchlist",
+          "sentiment": "neutral",
+          "items": [
+            "ECB rate decision Thursday — consensus expects hold at 3.25%, watch Lagarde press conference.",
+            "US CPI print Friday — estimate 3.1% YoY, any upside surprise would pressure equities.",
+            "Q2 earnings season begins mid-July — JPMorgan, Wells Fargo, Delta, PepsiCo in first wave."
+          ]
+        }
+      ],
+      "sources": [
+        { "title": "Bloomberg Markets", "domain": "bloomberg.com" },
+        { "title": "Reuters Finance", "domain": "reuters.com" },
+        { "title": "Federal Reserve", "domain": "federalreserve.gov" },
+        { "title": "CNBC Markets", "domain": "cnbc.com" }
+      ],
+      "pastBriefings": [
+        { "id": "b5", "date": "May 31, 2026", "preview": "Mixed session as core PCE came in slightly above estimates at 3.3%. Tech pulled back 0.4%, energy outperformed." },
+        { "id": "b6", "date": "May 30, 2026", "preview": "Consumer confidence beat: 106.2 vs 103.0 expected. Gold hit 6-month high at $2,340/oz. Dollar weakened." }
+      ]
+    },
+    "r3": {
+      "topicId": "r3",
+      "topicName": "Cybersecurity Threat Intelligence",
+      "generatedAt": "May 29, 2026",
+      "period": "May 22 – May 29, 2026",
+      "readTime": "5 min",
+      "wordCount": 1024,
+      "summary": "A critical authentication bypass vulnerability in OpenLDAP (CVE-2026-22847, CVSS 9.8) was disclosed and patched. Active exploitation campaigns targeting unpatched systems were observed within 48 hours. Volt Typhoon expanded targeting scope to European critical infrastructure.",
+      "sections": [
+        {
+          "title": "Critical Vulnerabilities",
+          "sentiment": "negative",
+          "items": [
+            "CVE-2026-22847 (CVSS 9.8): OpenLDAP authentication bypass — patch to 2.6.9 immediately, active exploitation confirmed.",
+            "CVE-2026-21903 (CVSS 8.1): Remote code execution in Ivanti Connect Secure VPN — CISA emergency directive issued.",
+            "CVE-2026-20441 (CVSS 7.5): Linux kernel privilege escalation (6.7–6.9) — fixed in 6.9.4, update distributions."
+          ]
+        },
+        {
+          "title": "Threat Campaigns",
+          "sentiment": "negative",
+          "items": [
+            "APT-41 linked group 'Volt Typhoon' expanded targeting to European energy grid and water treatment operators.",
+            "New ransomware variant 'LockBit 4' observed in the wild with improved EDR evasion — 3 confirmed enterprise victims.",
+            "Phishing campaign mimicking Microsoft 365 MFA prompts targeting C-suite at financial institutions — 40+ organisations hit."
+          ]
+        },
+        {
+          "title": "Patches & Mitigations",
+          "sentiment": "neutral",
+          "items": [
+            "Microsoft released out-of-band patch for Exchange Server SSRF vulnerability — apply immediately, no reboot required.",
+            "Cisco issued advisory for IOS XE web UI vulnerability (CVE-2026-20328) — disable HTTP server interface if patching delayed.",
+            "CISA updated KEV catalogue with 4 new entries — federal agencies have 21 days to remediate."
+          ]
+        }
+      ],
+      "sources": [
+        { "title": "CISA Advisories", "domain": "cisa.gov" },
+        { "title": "NVD / NIST", "domain": "nvd.nist.gov" },
+        { "title": "Krebs on Security", "domain": "krebsonsecurity.com" },
+        { "title": "BleepingComputer", "domain": "bleepingcomputer.com" }
+      ],
+      "pastBriefings": [
+        { "id": "b7", "date": "May 22, 2026", "preview": "Patch Tuesday: 47 CVEs addressed by Microsoft, 6 rated Critical. Exchange zero-day confirmed exploited in the wild." }
+      ]
+    },
+    "r4": {
+      "topicId": "r4",
+      "topicName": "Space Exploration Updates",
+      "generatedAt": "May 18, 2026",
+      "period": "May 11 – May 18, 2026",
+      "readTime": "3 min",
+      "wordCount": 520,
+      "summary": "SpaceX Starship IFT-4 achieved full mission success with both booster and ship recovered. NASA revised the Artemis III crewed lunar landing to November 2027 pending HLS Starship certification.",
+      "sections": [
+        {
+          "title": "Mission Updates",
+          "sentiment": "positive",
+          "items": [
+            "SpaceX Starship IFT-4: Booster 12 caught by Mechazilla tower arms — first time in history. Ship 28 splashed down precisely in Indian Ocean.",
+            "NASA Artemis III crewed lunar landing now targeting November 2027, revised from mid-2026 following HLS Starship certification delays.",
+            "ESA Hera mission completed Mars gravity assist — now on final trajectory to Didymos-Dimorphos binary asteroid system, ETA 2026 Q4."
+          ]
+        },
+        {
+          "title": "Upcoming Launches",
+          "sentiment": "neutral",
+          "items": [
+            "Rocket Lab Neutron medium-lift vehicle: first launch targeted June 2026 from Wallops Island, VA.",
+            "ULA Vulcan Centaur VC2S: second flight carrying Amazon Kuiper broadband satellites scheduled late June.",
+            "ISRO Gaganyaan crewed mission: third uncrewed test flight delayed to Q3 2026 following parachute redesign."
+          ]
+        }
+      ],
+      "sources": [
+        { "title": "NASA", "domain": "nasa.gov" },
+        { "title": "SpaceX", "domain": "spacex.com" },
+        { "title": "Spaceflight Now", "domain": "spaceflightnow.com" }
+      ],
+      "pastBriefings": [
+        { "id": "b8", "date": "May 11, 2026", "preview": "Rocket Lab Electron launched NOAA weather satellite. Blue Origin NS-26 crewed flight completed with 6 passengers." }
+      ]
+    }
+  }
+}

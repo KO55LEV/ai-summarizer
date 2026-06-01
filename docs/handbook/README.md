@@ -20,6 +20,7 @@
 - [Prompts и LLM-аудит](prompts.md)
 - [Пользователи, роли и безопасность](security.md)
 - [Операции и запуск](operations.md)
+- [UI (React frontend)](ui.md)
 
 Примечание:
 

@@ -1,0 +1,62 @@
+{
+  "topics": [
+    {
+      "id": "r1",
+      "name": "AI & Machine Learning Weekly",
+      "description": "Daily digest of the latest AI research papers, product launches, and industry news from arXiv, TechCrunch, and major AI lab blogs.",
+      "frequency": "daily",
+      "status": "active",
+      "sources": ["web", "arXiv", "news"],
+      "tags": ["AI", "LLM", "machine learning"],
+      "briefingsCount": 14,
+      "lastRun": "2h ago",
+      "nextRun": "in 22h",
+      "lastBriefingPreview": "OpenAI previewed GPT-5 Turbo with 10× reasoning improvements. Google DeepMind published a breakthrough paper on autonomous agents. EU AI Act implementation guidelines finalised."
+    },
+    {
+      "id": "r2",
+      "name": "Global Stock Market Digest",
+      "description": "Daily summary of major market movements, earnings releases, macroeconomic events, and analyst commentary across global equities.",
+      "frequency": "daily",
+      "status": "active",
+      "sources": ["web", "news", "financial-data"],
+      "tags": ["stocks", "markets", "finance"],
+      "briefingsCount": 23,
+      "lastRun": "5h ago",
+      "nextRun": "in 19h",
+      "lastBriefingPreview": "S&P 500 closed +0.82% led by tech. Fed minutes hint at rate hold through Q3. Nvidia Q1 earnings beat expectations with $36.4B revenue."
+    },
+    {
+      "id": "r3",
+      "name": "Cybersecurity Threat Intelligence",
+      "description": "Weekly roundup of newly disclosed CVEs, active exploit campaigns, and security patches for enterprise software and infrastructure.",
+      "frequency": "weekly",
+      "status": "active",
+      "sources": ["web", "CVE", "news"],
+      "tags": ["security", "CVE", "threats"],
+      "briefingsCount": 6,
+      "lastRun": "3 days ago",
+      "nextRun": "in 4 days",
+      "lastBriefingPreview": "Critical auth bypass in OpenLDAP (CVE-2026-22847, CVSS 9.8) exploited within 48h of disclosure. Volt Typhoon expands targeting to European critical infrastructure."
+    },
+    {
+      "id": "r4",
+      "name": "Space Exploration Updates",
+      "description": "Weekly highlights from NASA, SpaceX, ESA and private space companies — missions, discoveries, and launch schedules.",
+      "frequency": "weekly",
+      "status": "paused",
+      "sources": ["web", "news"],
+      "tags": ["space", "NASA", "SpaceX"],
+      "briefingsCount": 8,
+      "lastRun": "2 weeks ago",
+      "nextRun": "paused",
+      "lastBriefingPreview": "SpaceX Starship IFT-4 fully successful — booster caught by Mechazilla, ship recovered. NASA Artemis III targeting November 2027."
+    }
+  ],
+  "stats": {
+    "activeTopics": 3,
+    "briefingsGenerated": 51,
+    "sourcesTracked": 18,
+    "avgReadTime": "4 min"
+  }
+}
