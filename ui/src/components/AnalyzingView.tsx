@@ -1,5 +1,4 @@
 import {
-  Sparkles,
   Link as LinkIcon,
   XCircle,
   Check,
@@ -129,7 +128,7 @@ export default function AnalyzingView({ url, state, onCancel }: AnalyzingViewPro
         </div>
 
         {/* Whisper fallback warning */}
-        {state.steps[2]?.status === 'warning' || state.steps[2]?.status === 'completed' ? (
+        {state.processingMeta.transcriptSource.toLowerCase().includes('whisper') ? (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 mb-3 flex items-center gap-2.5">
             <AlertTriangle size={15} className="text-amber-500 flex-shrink-0" />
             <div>

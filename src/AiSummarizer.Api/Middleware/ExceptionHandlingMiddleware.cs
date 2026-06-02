@@ -1,5 +1,6 @@
 using AiSummarizer.Application.Users;
 using AiSummarizer.Application.Jobs;
+using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.Workflows;
 
@@ -40,6 +41,14 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         catch (WorkflowNotFoundException ex)
         {
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (ResearchNotFoundException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (ResearchValidationException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {

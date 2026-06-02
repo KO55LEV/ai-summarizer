@@ -35,7 +35,28 @@ export interface DashboardData {
 
 // ── History ──────────────────────────────────────────────────────────────────
 
+export interface TranscriptHistoryRun {
+  requestId: string;
+  sourceId: string | null;
+  sourceProvider: string | null;
+  sourceKind: string | null;
+  externalSourceId: string | null;
+  sourceUrl: string | null;
+  workflowId: string | null;
+  transcriptId: string | null;
+  status: string;
+  displayStatus: 'completed' | 'queued' | 'running' | 'failed' | 'cancelled' | 'unknown';
+  sourceLabel: string | null;
+  language: string | null;
+  durationSeconds: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
 export interface HistoryItem {
+  requestId: string;
+  sourceId: string | null;
   title: string;
   channel: string;
   duration: string;
@@ -43,8 +64,12 @@ export interface HistoryItem {
   date: string;
   thumbnail: string;
   source: string;
-  insights: number;
   url: string;
+  status: 'completed' | 'queued' | 'running' | 'failed' | 'cancelled' | 'unknown';
+  startedAt: string;
+  finishedAt: string | null;
+  sourceUrl: string | null;
+  insights?: number;
 }
 
 // ── Insights ─────────────────────────────────────────────────────────────────

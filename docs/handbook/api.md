@@ -101,11 +101,42 @@ API разделен на публичный слой и internal слой.
 Каждый public-запрос также пишется в `public_request_runs` с `api_area`, `operation_name`, `http_method`, `request_path`, `request_json`, `response_json`, `started_at` и `finished_at`.
 В ответе API возвращается `requestId`, чтобы можно было сопоставить ответ с audit-записью.
 
+`TranscriptHistoryItemResponse` дополнительно отдаёт derived-поля для UI:
+
+- `displayStatus` для человекочитаемого статуса (`completed`, `queued`, `running`, `failed`, `cancelled`)
+- `sourceLabel` для badge в sidebar/history
+- `language` и `durationSeconds` для компактного отображения карточек и таблиц
+
 Response models:
 
 - `TranscriptSummaryResponse`: transcript metadata + `transcriptText`
 - `PublicRequestRunResponse`: full audit record for a single public request
 - `TranscriptHistoryItemResponse`: compact history item for the left sidebar
+
+## Research API
+
+Базовый путь: `/api/research`
+
+| Method | Path | Назначение |
+| --- | --- | --- |
+| GET | `/` | список research topics, можно фильтровать по `requestedByUserId` |
+| POST | `/` | создать research topic |
+| GET | `/{topicId}` | получить topic |
+| PUT | `/{topicId}` | обновить topic |
+| DELETE | `/{topicId}` | удалить topic |
+| GET | `/{topicId}/briefing` | получить latest briefing |
+| GET | `/{topicId}/briefings` | история briefings |
+| GET | `/{topicId}/history` | alias для истории briefings |
+| POST | `/{topicId}/briefings` | создать briefing record |
+
+Research topics and briefings are user-scoped through `requestedByUserId`, because auth is not wired yet.
+
+Primary response models:
+
+- `ResearchListResponse`
+- `ResearchTopicResponse`
+- `ResearchBriefingResponse`
+- `ResearchBriefingHistoryItemResponse`
 
 ## Prompts API
 

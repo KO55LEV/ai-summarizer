@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Link as LinkIcon, X, Lock, CloudUpload, Gauge } from 'lucide-react';
 import {
   CloudFetchIcon,
@@ -14,19 +14,36 @@ import { analyzeVideo } from '../api';
 import type { TranscriptScheduleResponse } from '../types';
 
 interface MainContentProps {
-  onStartAnalysis?: (url: string) => void;
+  onStartAnalysis?: (url: string) => Promise<void> | void;
+  errorMessage?: string | null;
 }
 
-export default function MainContent({ onStartAnalysis }: MainContentProps) {
+export default function MainContent({ onStartAnalysis, errorMessage }: MainContentProps) {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TranscriptScheduleResponse | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   const handleAnalyze = async () => {
     if (!youtubeUrl.trim()) return;
     if (onStartAnalysis) {
-      onStartAnalysis(youtubeUrl.trim());
+      setError(null);
+      setResult(null);
+      setIsLoading(true);
+      Promise.resolve(onStartAnalysis(youtubeUrl.trim()))
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Something went wrong');
+        })
+        .finally(() => {
+          if (mountedRef.current) {
+            setIsLoading(false);
+          }
+        });
       return;
     }
     setError(null);
@@ -110,9 +127,9 @@ export default function MainContent({ onStartAnalysis }: MainContentProps) {
         </div>
 
         {/* Error */}
-        {error && (
+        {(error || errorMessage) && (
           <div className="bg-danger/10 border border-danger/30 text-danger rounded-lg px-4 py-2.5 mb-4 text-[13px]">
-            {error}
+            {error || errorMessage}
           </div>
         )}
 

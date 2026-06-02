@@ -1,11 +1,23 @@
 import type { VideoRecord } from '../types';
-import { getMockRecentVideos } from '../mocks/api/recentVideos';
+import type { HistoryItem } from './types';
+import { getHistory } from './history';
+
+function historyItemToVideoRecord(item: HistoryItem): VideoRecord {
+  return {
+    title: item.title,
+    channel: item.channel,
+    duration: item.duration,
+    language: item.language,
+    quality: '1080p',
+    views: '—',
+    age: item.date,
+    url: item.url || item.sourceUrl || '',
+    thumbnail: item.thumbnail,
+    source: item.source,
+  };
+}
 
 export async function getRecentVideos(): Promise<VideoRecord[]> {
-  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
-    return getMockRecentVideos();
-  }
-  const res = await fetch('/api/recent-videos');
-  if (!res.ok) throw new Error('Failed to fetch recent videos');
-  return res.json() as Promise<VideoRecord[]>;
+  const items = await getHistory({ limit: 3 });
+  return items.map(historyItemToVideoRecord);
 }

@@ -13,6 +13,17 @@ export interface VideoRecord {
   source: string;
 }
 
+export interface VideoMetadata {
+  title: string;
+  channel: string;
+  views: string;
+  age: string;
+  duration: string;
+  language: string;
+  quality: string;
+  thumbnail: string;
+}
+
 export interface WorkflowResponse {
   id: string;
   requestedByUserId: string | null;
@@ -34,15 +45,37 @@ export interface WorkflowResponse {
   updatedAt: string;
 }
 
+export interface WorkflowStepResponse {
+  id: string;
+  workflowId: string;
+  stepOrder: number;
+  stepKey: string;
+  stepType: string;
+  jobId: string | null;
+  status: string;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TranscriptResponse {
   id: string;
   sourceUrl: string | null;
+  sourceFilePath: string | null;
   language: string;
+  languageProbability: number;
   durationSeconds: number;
   segmentCount: number;
   wordCount: number;
   characterCount: number;
+  transcriptFilePath: string;
   transcriptText: string;
+  cleanText: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,4 +91,5 @@ export interface AnalyzeRequest {
   youtubeUrl: string;
   language?: string;
   preferNativeTranscript?: boolean;
+  requestedByUserId?: string | null;
 }

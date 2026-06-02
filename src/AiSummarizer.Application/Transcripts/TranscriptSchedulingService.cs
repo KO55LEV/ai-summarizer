@@ -91,6 +91,7 @@ public sealed class TranscriptSchedulingService(
             transcript.WordCount,
             transcript.CharacterCount,
             transcript.TranscriptText,
+            transcript.TranscriptText,
             transcript.CreatedAt,
             transcript.UpdatedAt);
 

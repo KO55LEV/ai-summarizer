@@ -44,3 +44,14 @@ Transcribe audio:
 ```bash
 curl -X POST http://127.0.0.1:8000/transcribe -F "file=@/path/to/audio.m4a" -o transcript.json
 ```
+
+
+
+curl -i -X POST http://localhost:5000/api/transcripts/youtube/schedule \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "requestedByUserId": "617a8af2-bae2-43a6-938f-7c384e3061ee",
+    "youtubeUrl": "https://www.youtube.com/watch?v=2umezqgYxJ4",
+    "language": "ru",
+    "preferNativeTranscript": true
+  }'

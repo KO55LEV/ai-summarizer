@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, BookOpen, Zap, Globe, Clock } from 'lucide-react';
 import type { ResearchTopic, ResearchListData } from '../../api/types';
 import { getResearchList } from '../../api/research';
+import { getCurrentUserId } from '../../config/currentUser';
 
 const FREQ_COLORS: Record<string, string> = {
   hourly: 'var(--color-info)',
@@ -35,7 +36,7 @@ export function ResearchPage({ onTopicSelect, onCreateNew }: ResearchPageProps) 
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
 
   useEffect(() => {
-    getResearchList().then((d) => { setData(d); setLoading(false); });
+    getResearchList(getCurrentUserId()).then((d) => { setData(d); setLoading(false); });
   }, []);
 
   const filtered = (data?.topics ?? []).filter((t) => {

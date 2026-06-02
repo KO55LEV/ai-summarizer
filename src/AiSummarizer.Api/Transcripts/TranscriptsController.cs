@@ -3,6 +3,7 @@ using AiSummarizer.Application.PublicRequests;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
+using AiSummarizer.Domain.Transcripts;
 using AiSummarizer.Domain.PublicRequests;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -131,6 +132,26 @@ public sealed class TranscriptsController(
         }
     }
 
+    private static TranscriptSummaryResponse Map(Transcript transcript)
+        => new(
+            transcript.Id,
+            transcript.JobId,
+            transcript.SourceId,
+            transcript.SourceJobId,
+            transcript.SourceUrl,
+            transcript.SourceFilePath,
+            transcript.TranscriptFilePath,
+            transcript.Language,
+            transcript.LanguageProbability,
+            transcript.DurationSeconds,
+            transcript.SegmentCount,
+            transcript.WordCount,
+            transcript.CharacterCount,
+            transcript.TranscriptText,
+            transcript.TranscriptText,
+            transcript.CreatedAt,
+            transcript.UpdatedAt);
+
     private static TranscriptSummaryResponse Map(TranscriptSummaryDto transcript)
         => new(
             transcript.Id,
@@ -147,6 +168,7 @@ public sealed class TranscriptsController(
             transcript.WordCount,
             transcript.CharacterCount,
             transcript.TranscriptText,
+            transcript.CleanText,
             transcript.CreatedAt,
             transcript.UpdatedAt);
 
@@ -239,7 +261,13 @@ public sealed class TranscriptsController(
             run.UpdatedAt);
 
     private static TranscriptHistoryItemResponse MapHistory(PublicRequestRun run)
-        => new(
+    {
+        var displayStatus = DeriveDisplayStatus(run);
+        var sourceLabel = DeriveSourceLabel(run);
+        var language = DeriveLanguage(run);
+        var durationSeconds = DeriveDurationSeconds(run);
+
+        return new(
             run.Id,
             run.SourceId,
             run.SourceProvider,
@@ -249,9 +277,142 @@ public sealed class TranscriptsController(
             run.WorkflowId,
             run.TranscriptId,
             run.Status,
+            displayStatus,
+            sourceLabel,
+            language,
+            durationSeconds,
             run.StartedAt,
             run.FinishedAt,
             run.CreatedAt);
+    }
+
+    private static string DeriveDisplayStatus(PublicRequestRun run)
+    {
+        var transcript = TryGetTranscript(run.Response);
+        if (transcript is not null)
+        {
+            return "completed";
+        }
+
+        var workflow = TryGetWorkflow(run.Response);
+        if (workflow is not null)
+        {
+            var workflowStatus = GetStringProperty(workflow.Value, "status");
+            return NormalizeStatus(workflowStatus);
+        }
+
+        return NormalizeStatus(run.Status);
+    }
+
+    private static string? DeriveSourceLabel(PublicRequestRun run)
+    {
+        var transcript = TryGetTranscript(run.Response);
+        if (transcript is not null)
+        {
+            var sourceFilePath = GetStringProperty(transcript.Value, "sourceFilePath");
+            return string.IsNullOrWhiteSpace(sourceFilePath) ? "YouTube captions" : "Whisper";
+        }
+
+        var workflow = TryGetWorkflow(run.Response);
+        if (workflow is not null)
+        {
+            var workflowStatus = GetStringProperty(workflow.Value, "status");
+            return NormalizeStatus(workflowStatus) switch
+            {
+                "completed" => "YouTube captions",
+                "running" => "Processing",
+                "queued" => "Queued",
+                "failed" => "Failed",
+                "cancelled" => "Cancelled",
+                _ => "Queued"
+            };
+        }
+
+        return null;
+    }
+
+    private static string? DeriveLanguage(PublicRequestRun run)
+    {
+        var transcript = TryGetTranscript(run.Response);
+        if (transcript is not null)
+        {
+            var language = GetStringProperty(transcript.Value, "language");
+            if (!string.IsNullOrWhiteSpace(language))
+            {
+                return language;
+            }
+        }
+
+        var requestLanguage = GetStringProperty(run.Request, "language");
+        return string.IsNullOrWhiteSpace(requestLanguage) ? null : requestLanguage;
+    }
+
+    private static decimal? DeriveDurationSeconds(PublicRequestRun run)
+    {
+        var transcript = TryGetTranscript(run.Response);
+        if (transcript is null)
+        {
+            return null;
+        }
+
+        return GetDecimalProperty(transcript.Value, "durationSeconds");
+    }
+
+    private static string NormalizeStatus(string? value)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            "running" => "running",
+            "queued" => "queued",
+            "failed" => "failed",
+            "cancelled" => "cancelled",
+            "succeeded" => "completed",
+            "completed" => "completed",
+            _ => "unknown"
+        };
+
+    private static JsonElement? TryGetTranscript(JsonElement? response)
+    {
+        if (response is not { ValueKind: JsonValueKind.Object } responseObject)
+        {
+            return null;
+        }
+
+        return responseObject.TryGetProperty("transcript", out var transcript) && transcript.ValueKind == JsonValueKind.Object
+            ? transcript
+            : null;
+    }
+
+    private static JsonElement? TryGetWorkflow(JsonElement? response)
+    {
+        if (response is not { ValueKind: JsonValueKind.Object } responseObject)
+        {
+            return null;
+        }
+
+        return responseObject.TryGetProperty("workflow", out var workflow) && workflow.ValueKind == JsonValueKind.Object
+            ? workflow
+            : null;
+    }
+
+    private static string? GetStringProperty(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var property) && property.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined
+            ? property.GetString()
+            : null;
+
+    private static decimal? GetDecimalProperty(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number when property.TryGetDecimal(out var value) => value,
+            JsonValueKind.String when decimal.TryParse(property.GetString(), out var parsed) => parsed,
+            _ => null
+        };
+    }
 
     private static bool IsYouTubeUrl(string? value)
     {

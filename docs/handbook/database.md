@@ -122,6 +122,63 @@
 - `prompt_archive`
 - `prompt_runs`
 
+### Research
+
+- `research_topics`
+- `research_topic_sources`
+- `research_topic_tags`
+- `research_topic_outputs`
+- `research_briefings`
+- `research_briefing_sections`
+- `research_briefing_sources`
+
+`research_topics` stores the user-scoped research definition:
+
+- `requested_by_user_id`
+- `name`
+- `description`
+- `frequency`
+- `status`
+- `delivery_time`
+- `last_run_at`
+- `next_run_at`
+- `last_briefing_preview`
+
+`research_topics.frequency`:
+
+- `hourly`
+- `daily`
+- `weekly`
+- `monthly`
+
+`research_topics.status`:
+
+- `active`
+- `paused`
+- `draft`
+
+`research_briefing_sections.sentiment`:
+
+- `positive`
+- `neutral`
+- `negative`
+
+`research_briefings` stores generated history records for a topic:
+
+- `research_topic_id`
+- `requested_by_user_id`
+- `briefing_version`
+- `generated_at`
+- `period_label`
+- `read_time_minutes`
+- `word_count`
+- `summary`
+- `preview_text`
+
+`research_briefing_sections` stores briefing sections with `items_jsonb` as an array of bullet text items.
+
+`research_briefing_sources` stores the cited source list for each briefing.
+
 ## Что хранится в prompts
 
 `prompts` содержит текущую версию шаблона:
@@ -181,6 +238,14 @@
 - `user_roles.role_id` -> `roles.id`
 - `prompt_archive.prompt_id` -> `prompts.id`
 - `prompt_runs.prompt_id` -> `prompts.id`
+- `research_topics.requested_by_user_id` -> `users.id`
+- `research_briefings.requested_by_user_id` -> `users.id`
+- `research_topic_sources.research_topic_id` -> `research_topics.id`
+- `research_topic_tags.research_topic_id` -> `research_topics.id`
+- `research_topic_outputs.research_topic_id` -> `research_topics.id`
+- `research_briefings.research_topic_id` -> `research_topics.id`
+- `research_briefing_sections.research_briefing_id` -> `research_briefings.id`
+- `research_briefing_sources.research_briefing_id` -> `research_briefings.id`
 
 ## Seeds
 
@@ -191,5 +256,6 @@ Seed-файлы используются для bootstrap и ручной про
 - youtube job fixtures
 - workflow fixtures
 - prompt fixtures
+- research fixtures
 
 `db/seeds/0008_seed_roles_and_admin_user.sql` создает базовые роли и назначает test user в `admin`.

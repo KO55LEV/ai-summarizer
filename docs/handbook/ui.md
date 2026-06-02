@@ -51,6 +51,9 @@ ui/src/
       InsightsPage.tsx
       ExportsPage.tsx
       HistoryPage.tsx
+      ResearchPage.tsx         ← research topic list and filters
+      ResearchCreatePage.tsx   ← research topic create studio
+      ResearchBriefingPage.tsx  ← briefing viewer and history
       SettingsPage.tsx
       ProfilePage.tsx
   hooks/
@@ -109,6 +112,7 @@ Props:
 | `recentVideos` | `VideoRecord[]` | list loaded from API |
 
 The sidebar also shows a user card (avatar, name, plan badge, monthly usage bar) with a click handler to the Profile page.
+Recent items are normalized from `/api/transcripts/history` into `VideoRecord` so the sidebar and transcript page use the same source of truth.
 
 ## Mock API layer
 
@@ -120,7 +124,7 @@ The app runs entirely against mock data when `VITE_USE_MOCK_API=true` (set in `u
 Component
   └─ calls api/history.ts → getHistory()
        ├─ VITE_USE_MOCK_API=true  → mocks/api/history.ts → mocks/data/history.json
-       └─ VITE_USE_MOCK_API=false → fetch('/api/history')
+       └─ VITE_USE_MOCK_API=false → fetch('/api/transcripts/history')
 ```
 
 ### API functions
@@ -139,7 +143,7 @@ All types are defined in `api/types.ts`.
 ### Switching to real API
 
 1. Set `VITE_USE_MOCK_API=false` in `ui/.env`
-2. Implement the corresponding REST endpoints in the backend (`/api/dashboard`, `/api/history`, etc.)
+2. Implement the corresponding REST endpoints in the backend (`/api/dashboard`, `/api/transcripts/history`, etc.)
 3. No changes are needed in page components or the API function files
 
 ### Mock data files
@@ -169,9 +173,23 @@ Four format cards (TXT / JSON / PDF / SRT). Export history table with hover-reve
 
 ### HistoryPage
 
-Search + filter toolbar. Columnar table with thumbnails, source badges (Whisper / YT Captions), insight count, date, hover actions. Clicking a row calls `onVideoOpen(VideoRecord)` which navigates to `TranscriptView`. Data from `getHistory()`.
+Search + status filter toolbar. Columnar table with thumbnails, source badges, lifecycle status, date, and hover actions. Clicking a completed row calls `onVideoOpen(VideoRecord)` which navigates to `TranscriptView`. Data from `getHistory()`.
 
 Props: `onVideoOpen?: (v: VideoRecord) => void`
+
+### Research pages
+
+The Research flow is split into three views:
+
+- `ResearchPage` for list/filter/status overview
+- `ResearchCreatePage` for topic setup and output selection
+- `ResearchBriefingPage` for generated briefing history and source review
+
+The frontend keeps the display model separate from the API contract:
+
+- backend returns raw topic/briefing records
+- `api/research.ts` maps them into dashboard-friendly strings and cards
+- create actions always attach `requestedByUserId` from the demo/current user id
 
 ### SettingsPage
 

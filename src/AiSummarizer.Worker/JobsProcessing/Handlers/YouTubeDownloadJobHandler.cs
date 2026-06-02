@@ -203,6 +203,11 @@ public sealed class YouTubeDownloadJobHandler(
         {
             ReleaseDownloadSlot();
         }
+
+        return JobHandlerResult.DeadLetter(
+            "youtube_download_failed",
+            "YouTube download failed after all attempts.",
+            null);
     }
 
     private static async Task<YouTubeMetadata> FetchMetadataAsync(string executable, string url, CancellationToken cancellationToken)

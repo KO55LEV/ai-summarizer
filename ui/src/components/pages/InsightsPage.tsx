@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { JSX } from 'react';
 import {
   Sparkles,
   Star,
@@ -98,7 +99,7 @@ export default function InsightsPage() {
                   </div>
                   <div>
                     <div className="text-[12px] font-semibold text-text-primary">{video.title}</div>
-                    <div className="text-[10px] text-text-muted">{video.channel} · {video.ago}</div>
+                    <div className="text-[10px] text-text-muted">{video.channel} · {video.age}</div>
                   </div>
                 </div>
                 {/* Insight chips */}

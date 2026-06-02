@@ -64,6 +64,40 @@ Jobs исполняются worker-процессом.
 - `youtube.summary` для summary-oriented orchestration
 - `youtube.transcript` для transcript scheduling и reuse
 
+### Диаграмма
+
+Для визуального просмотра открой [workflows-visual.html](/Volumes/Data/Devs/Projects/AiSummarizer/docs/handbook/workflows-visual.html).
+
+```mermaid
+flowchart TD
+    A[User or API request] --> B[POST /api/transcripts/youtube/schedule]
+    B --> C[TranscriptSchedulingService]
+    C --> D[Upsert media_source]
+    D --> E{Existing transcript?}
+    E -- yes --> F[Return status = completed]
+    E -- no --> G{Active workflow already exists?}
+    G -- yes --> H[Return existing workflow as queued]
+    G -- no --> I[Create workflow youtube.transcript]
+    I --> J[Worker claims workflow]
+    J --> K[native_transcript_check]
+    K --> L{preferNativeTranscript?}
+    L -- no --> M[Skip native check]
+    L -- yes --> N[Run yt-dlp --write-subs --write-auto-subs]
+    N --> O{Native subtitles found?}
+    O -- yes --> P[Queue transcript.import from native subtitles]
+    O -- no --> Q[Download video]
+    M --> Q
+    Q --> R[Extract audio]
+    R --> S[Whisper transcribe]
+    S --> T[Import transcript]
+    P --> U[Workflow succeeded]
+    T --> U
+
+    J -. persists .-> V[(jobs table)]
+    J -. persists .-> W[(workflow_steps)]
+    J -. persists .-> X[(workflow_events)]
+```
+
 ### Шаги
 
 | Step key | Step type | Назначение |
@@ -84,6 +118,16 @@ Jobs исполняются worker-процессом.
 - `55%` - transcribing audio
 - `80%` - importing transcript
 - `100%` - completed
+
+### Что проверять в БД
+
+Если workflow идет не так, обычно смотрим:
+
+- `workflows.status`
+- `workflows.current_step_key`
+- `workflow_steps.status` и `workflow_steps.output_json`
+- `workflow_events` для таймлайна
+- `jobs.status`, `jobs.progress_percent`, `jobs.progress_message`
 
 ## Events
 

@@ -1,5 +1,4 @@
 import {
-  Settings,
   User,
   Bell,
   Shield,
@@ -8,10 +7,10 @@ import {
   Trash2,
   ChevronRight,
   Check,
-  Moon,
   Keyboard,
 } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 type Section = 'account' | 'notifications' | 'language' | 'privacy' | 'billing' | 'shortcuts';
 
@@ -35,7 +34,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-function Row({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
+function Row({ label, sub, children }: { label: string; sub?: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between py-3.5 border-b border-border last:border-0">
       <div>

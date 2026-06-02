@@ -2,11 +2,13 @@ using AiSummarizer.Application.Users;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.MediaSources;
+using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.PublicRequests;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Infrastructure.Persistence;
 using AiSummarizer.Infrastructure.MediaSources;
+using AiSummarizer.Infrastructure.Research;
 using AiSummarizer.Infrastructure.Jobs;
 using AiSummarizer.Infrastructure.Prompts;
 using AiSummarizer.Infrastructure.PublicRequests;
@@ -32,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IPublicRequestRunsRepository, PublicRequestRunsRepository>();
         services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
         services.AddScoped<ITranscriptSchedulingService, TranscriptSchedulingService>();
+        services.AddScoped<IResearchRepository, ResearchRepository>();
         services.AddScoped<IPromptsRepository, PromptsRepository>();
         services.AddScoped<IWorkflowsRepository, WorkflowsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
@@ -39,6 +42,7 @@ public static class DependencyInjection
         services.AddHttpClient<GoogleIdentityVerifier>();
         services.AddHttpClient<FacebookIdentityVerifier>();
         services.AddScoped<IExternalIdentityVerifier, ExternalIdentityVerifier>();
+        services.AddScoped<IResearchService, ResearchService>();
         services.AddScoped<IPromptsService, PromptsService>();
         return services;
     }

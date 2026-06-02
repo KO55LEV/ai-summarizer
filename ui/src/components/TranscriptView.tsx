@@ -8,7 +8,6 @@ import {
   Globe,
   Edit3,
   ChevronDown,
-  ToggleRight,
 } from 'lucide-react';
 import type { ProcessingState } from '../types/pipeline';
 

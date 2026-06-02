@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { PipelineStep, LogEntry, ProcessingState } from '../types/pipeline';
+import type { PipelineStep, ProcessingState } from '../types/pipeline';
 import { PIPELINE_STEPS } from '../types/pipeline';
 
 const FAKE_VIDEO = {

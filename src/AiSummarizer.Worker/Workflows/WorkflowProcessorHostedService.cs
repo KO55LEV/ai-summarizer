@@ -113,7 +113,7 @@ public sealed class WorkflowProcessorHostedService(
         var currentStep = await GetLatestStepAsync(workflow.Id, cancellationToken);
         if (currentStep is null)
         {
-            await StartWorkflowAsync(workflow, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
+            await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
             return;
         }
 
@@ -169,10 +169,10 @@ public sealed class WorkflowProcessorHostedService(
                 return;
             }
 
-        await StartWorkflowAsync(workflow, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
+        await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
     }
 
-    private async Task StartWorkflowAsync(Workflow workflow, MediaSourceIdentity sourceIdentity, string sourceUrl, string preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, CancellationToken cancellationToken)
+    private async Task StartWorkflowAsync(Workflow workflow, MediaSource mediaSource, MediaSourceIdentity sourceIdentity, string sourceUrl, string preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var step = new WorkflowStep

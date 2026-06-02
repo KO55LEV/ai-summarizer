@@ -23,6 +23,7 @@ public sealed record TranscriptSummaryResponse(
     int WordCount,
     int CharacterCount,
     string TranscriptText,
+    string CleanText,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
@@ -66,6 +67,10 @@ public sealed record TranscriptHistoryItemResponse(
     Guid? WorkflowId,
     Guid? TranscriptId,
     string Status,
+    string DisplayStatus,
+    string? SourceLabel,
+    string? Language,
+    decimal? DurationSeconds,
     DateTimeOffset StartedAt,
     DateTimeOffset? FinishedAt,
     DateTimeOffset CreatedAt);

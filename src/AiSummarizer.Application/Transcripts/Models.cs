@@ -18,6 +18,7 @@ public sealed record TranscriptSummaryDto(
     int WordCount,
     int CharacterCount,
     string TranscriptText,
+    string CleanText,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 

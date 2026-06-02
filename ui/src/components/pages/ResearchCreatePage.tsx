@@ -1,33 +1,52 @@
-import { useState } from 'react';
-import { ArrowLeft, Plus, X, Globe, Newspaper, BookOpen, MessageSquare, TrendingUp, Twitter } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  Globe,
+  Newspaper,
+  BookOpen,
+  MessageSquare,
+  TrendingUp,
+  Twitter,
+  Sparkles,
+  Wand2,
+  FileCode2,
+  Volume2,
+  LayoutTemplate,
+  Languages,
+  ShieldCheck,
+  Clock3,
+  ArrowRight,
+  CheckCircle2,
+} from 'lucide-react';
+import { createResearchTopic } from '../../api/research';
+import { getCurrentUserId } from '../../config/currentUser';
 
 const SOURCE_OPTIONS = [
-  { id: 'web', label: 'Web Search', icon: <Globe size={16} />, description: 'General web crawl via search engines' },
-  { id: 'news', label: 'News', icon: <Newspaper size={16} />, description: 'Major news publications & RSS feeds' },
-  { id: 'arXiv', label: 'arXiv', icon: <BookOpen size={16} />, description: 'Academic pre-print research papers' },
-  { id: 'reddit', label: 'Reddit', icon: <MessageSquare size={16} />, description: 'Community discussions & trending posts' },
-  { id: 'financial-data', label: 'Financial Data', icon: <TrendingUp size={16} />, description: 'Market data, earnings & analyst reports' },
-  { id: 'twitter', label: 'Twitter / X', icon: <Twitter size={16} />, description: 'Real-time social sentiment & announcements' },
+  { id: 'web', label: 'Web Search', icon: <Globe size={16} />, description: 'Search the open web for recent signals and context.' },
+  { id: 'news', label: 'News', icon: <Newspaper size={16} />, description: 'Major publications, press releases, and breaking coverage.' },
+  { id: 'arXiv', label: 'arXiv', icon: <BookOpen size={16} />, description: 'Academic pre-prints and research papers.' },
+  { id: 'reddit', label: 'Reddit', icon: <MessageSquare size={16} />, description: 'Community discussion, pain points, and early reactions.' },
+  { id: 'financial-data', label: 'Financial Data', icon: <TrendingUp size={16} />, description: 'Market data, earnings, and company filings.' },
+  { id: 'twitter', label: 'Twitter / X', icon: <Twitter size={16} />, description: 'Fast-moving announcements and social sentiment.' },
 ];
 
-const FREQ_OPTIONS: { value: string; label: string; description: string }[] = [
-  { value: 'hourly', label: 'Hourly', description: 'New briefing every hour' },
-  { value: 'daily', label: 'Daily', description: 'One briefing per day' },
-  { value: 'weekly', label: 'Weekly', description: 'One briefing per week' },
-  { value: 'monthly', label: 'Monthly', description: 'One briefing per month' },
+const FREQ_OPTIONS: { value: 'hourly' | 'daily' | 'weekly' | 'monthly'; label: string; description: string }[] = [
+  { value: 'hourly', label: 'Hourly', description: 'Best for fast-moving topics and alerts.' },
+  { value: 'daily', label: 'Daily', description: 'Balanced default for ongoing monitoring.' },
+  { value: 'weekly', label: 'Weekly', description: 'Good for deeper synthesis and less noise.' },
+  { value: 'monthly', label: 'Monthly', description: 'High-level trend review and long horizon.' },
 ];
 
-const FREQ_COLORS: Record<string, string> = {
-  hourly: 'var(--color-info, #4dc8e8)',
-  daily: 'var(--color-accent)',
-  weekly: '#a78bfa',
-  monthly: '#f59e0b',
-};
-
-const DELIVERY_TIMES = [
-  '06:00', '07:00', '08:00', '09:00', '10:00',
-  '12:00', '15:00', '18:00', '20:00', '22:00',
+const OUTPUT_OPTIONS = [
+  { id: 'briefing', label: 'HTML briefing', icon: <LayoutTemplate size={15} />, description: 'A polished web-ready report with sections, links, and callouts.' },
+  { id: 'voice', label: 'Voice summary', icon: <Volume2 size={15} />, description: 'A concise spoken version for client delivery or internal review.' },
+  { id: 'structured', label: 'Structured insights', icon: <FileCode2 size={15} />, description: 'Machine-friendly output for downstream automation and storage.' },
 ];
+
+const DELIVERY_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '15:00', '18:00', '20:00', '22:00'];
 
 interface ResearchCreatePageProps {
   onBack: () => void;
@@ -37,28 +56,33 @@ export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [sources, setSources] = useState<string[]>(['web', 'news']);
-  const [frequency, setFrequency] = useState('daily');
+  const [frequency, setFrequency] = useState<'hourly' | 'daily' | 'weekly' | 'monthly'>('daily');
   const [deliveryTime, setDeliveryTime] = useState('08:00');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [outputs, setOutputs] = useState<string[]>(['briefing', 'structured']);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const toggleSource = (id: string) => {
-    setSources((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
+    setSources(prev => (prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]));
+  };
+
+  const toggleOutput = (id: string) => {
+    setOutputs(prev => (prev.includes(id) ? prev.filter(o => o !== id) : [...prev, id]));
   };
 
   const addTag = () => {
-    const t = tagInput.trim().replace(/^#+/, '');
-    if (t && !tags.includes(t)) {
-      setTags((prev) => [...prev, t]);
+    const value = tagInput.trim().replace(/^#+/, '');
+    if (value && !tags.includes(value)) {
+      setTags(prev => [...prev, value]);
     }
     setTagInput('');
   };
 
-  const removeTag = (t: string) => setTags((prev) => prev.filter((x) => x !== t));
+  const removeTag = (tag: string) => setTags(prev => prev.filter(x => x !== tag));
 
-  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       addTag();
@@ -67,251 +91,409 @@ export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
 
   const isValid = name.trim().length > 0 && sources.length > 0;
 
+  const handleCreate = async () => {
+    if (!isValid || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await createResearchTopic({
+        requestedByUserId: getCurrentUserId(),
+        name: name.trim(),
+        description: description.trim() || undefined,
+        frequency,
+        deliveryTime,
+        sources,
+        tags,
+        outputs,
+      });
+      onBack();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Failed to create topic');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const preview = useMemo(() => {
+    const sourceLabels = sources.map(id => SOURCE_OPTIONS.find(s => s.id === id)?.label ?? id);
+    const outputLabels = outputs.map(id => OUTPUT_OPTIONS.find(o => o.id === id)?.label ?? id);
+
+    return {
+      title: name.trim() || 'Untitled research topic',
+      description: description.trim() || 'Describe the thesis, market, or signal you want to track.',
+      sources: sourceLabels,
+      outputs: outputLabels,
+      tags: tags.length > 0 ? tags : ['ai', 'research', 'monitoring'],
+      cadenceCopy:
+        frequency === 'hourly'
+          ? 'High-frequency monitoring'
+          : frequency === 'daily'
+            ? 'Daily synthesis'
+            : frequency === 'weekly'
+              ? 'Weekly deep dive'
+              : 'Monthly trend report',
+      deliveryCopy: `Delivery at ${deliveryTime}`,
+    };
+  }, [description, deliveryTime, frequency, name, outputs, sources, tags]);
+
   return (
-    <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+    <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)]">
+      <div className="mx-auto max-w-[1280px] px-6 py-6 lg:px-8">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-muted)]">
+              <Sparkles size={12} className="text-[var(--color-accent)]" />
+              Research Studio
+            </div>
+            <h1 className="text-[28px] font-semibold tracking-tight text-[var(--color-text-primary)]">
+              New research topic
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">
+              Define what to watch, how often to watch it, and what the system should produce:
+              briefing HTML, structured output, or a voice-ready summary.
+            </p>
+          </div>
+
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-sm"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-card-hover)] hover:text-[var(--color-text-primary)]"
           >
             <ArrowLeft size={15} />
-            Research
+            Back to research
           </button>
-          <span style={{ color: 'var(--color-border)' }}>·</span>
-          <span className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            New Research Topic
-          </span>
         </div>
-      </div>
 
-      <div className="max-w-2xl flex flex-col gap-5">
-        {/* Name */}
-        <FormCard title="Topic Name">
-          <input
-            type="text"
-            placeholder="e.g. AI & Machine Learning Weekly"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
-            style={{
-              background: 'var(--color-bg-hover)',
-              color: 'var(--color-text-primary)',
-              border: `1px solid ${name.trim() ? 'var(--color-accent)' : 'var(--color-border)'}`,
-            }}
-          />
-        </FormCard>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_380px]">
+          <div className="space-y-5">
+            <PanelCard title="Topic">
+              <div className="space-y-4">
+                <Field label="Topic name" helper="Give it a clear operational name, not a generic label.">
+                  <input
+                    type="text"
+                    placeholder="e.g. AI Agents Weekly, Rival Product Watch, Market Shift Radar"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)]"
+                  />
+                </Field>
 
-        {/* Description */}
-        <FormCard title="Description" subtitle="Optional — helps the AI focus its research">
-          <textarea
-            placeholder="Describe what you want to research…"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none resize-none"
-            style={{
-              background: 'var(--color-bg-hover)',
-              color: 'var(--color-text-primary)',
-              border: '1px solid var(--color-border)',
-            }}
-          />
-        </FormCard>
+                <Field label="Intent" helper="What should this topic optimize for?">
+                  <textarea
+                    placeholder="Track breaking research, product launches, and credible commentary around foundation models."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    className="w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-4 py-3 text-sm leading-relaxed text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)]"
+                  />
+                </Field>
+              </div>
+            </PanelCard>
 
-        {/* Sources */}
-        <FormCard title="Sources" subtitle={`${sources.length} selected`}>
-          <div className="grid grid-cols-2 gap-2">
-            {SOURCE_OPTIONS.map((s) => {
-              const active = sources.includes(s.id);
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => toggleSource(s.id)}
-                  className="flex items-start gap-3 p-3 rounded-lg text-left transition-all"
-                  style={{
-                    background: active ? `var(--color-accent)11` : 'var(--color-bg-hover)',
-                    border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                  }}
-                >
-                  <span style={{ color: active ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
-                    {s.icon}
-                  </span>
-                  <div>
-                    <div
-                      className="text-xs font-medium"
-                      style={{ color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}
+            <div className="grid gap-5 xl:grid-cols-2">
+              <PanelCard title="Sources" subtitle={`${sources.length} selected`}>
+                <div className="grid gap-2">
+                  {SOURCE_OPTIONS.map((source) => {
+                    const active = sources.includes(source.id);
+                    return (
+                      <button
+                        key={source.id}
+                        onClick={() => toggleSource(source.id)}
+                        className="flex items-start gap-3 rounded-xl border p-3 text-left transition-all"
+                        style={{
+                          background: active ? 'var(--color-accent)11' : 'var(--color-bg-hover)',
+                          borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                        }}
+                      >
+                        <span className="mt-0.5" style={{ color: active ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+                          {source.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium" style={{ color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>
+                            {source.label}
+                          </div>
+                          <div className="mt-0.5 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                            {source.description}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </PanelCard>
+
+              <PanelCard title="Cadence" subtitle="How often should it run?">
+                <div className="grid gap-2">
+                  {FREQ_OPTIONS.map((item) => {
+                    const active = frequency === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        onClick={() => setFrequency(item.value)}
+                        className="rounded-xl border p-3 text-left transition-all"
+                        style={{
+                          background: active ? 'var(--color-accent)11' : 'var(--color-bg-hover)',
+                          borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold" style={{ color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>
+                              {item.label}
+                            </div>
+                            <div className="mt-0.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                              {item.description}
+                            </div>
+                          </div>
+                          {active && <CheckCircle2 size={16} className="text-[var(--color-accent)]" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </PanelCard>
+            </div>
+
+            <PanelCard title="Output formats" subtitle="What should the system produce?">
+              <div className="grid gap-2 xl:grid-cols-3">
+                {OUTPUT_OPTIONS.map((output) => {
+                  const active = outputs.includes(output.id);
+                  return (
+                    <button
+                      key={output.id}
+                      onClick={() => toggleOutput(output.id)}
+                      className="flex h-full flex-col gap-3 rounded-xl border p-4 text-left transition-all"
+                      style={{
+                        background: active ? 'var(--color-accent)11' : 'var(--color-bg-hover)',
+                        borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                      }}
                     >
-                      {s.label}
-                    </div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                      {s.description}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </FormCard>
+                      <div className="flex items-center justify-between">
+                        <span className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] p-2" style={{ color: active ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+                          {output.icon}
+                        </span>
+                        {active ? <CheckCircle2 size={16} className="text-[var(--color-accent)]" /> : null}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--color-text-primary)]">{output.label}</div>
+                        <div className="mt-1 text-xs leading-relaxed text-[var(--color-text-muted)]">
+                          {output.description}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </PanelCard>
 
-        {/* Frequency */}
-        <FormCard title="Frequency">
-          <div className="grid grid-cols-4 gap-2">
-            {FREQ_OPTIONS.map((f) => {
-              const active = frequency === f.value;
-              return (
+            <div className="grid gap-5 xl:grid-cols-2">
+              <PanelCard title="Delivery">
+                <Field label="Delivery time" helper="When should the briefing land?">
+                  <select
+                    value={deliveryTime}
+                    onChange={(e) => setDeliveryTime(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)]"
+                  >
+                    {DELIVERY_TIMES.map((time) => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </Field>
+              </PanelCard>
+
+              <PanelCard title="Tags">
+                <Field label="Keywords" helper="Press Enter or comma to add keywords.">
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]"
+                      >
+                        {tag}
+                        <button onClick={() => removeTag(tag)} className="opacity-60 transition-opacity hover:opacity-100">
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                    {tags.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                        No tags yet. Add topics like `AI`, `policy`, `competitors`, `earnings`.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add a tag…"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagKeyDown}
+                      className="flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)]"
+                    />
+                    <button
+                      onClick={addTag}
+                      disabled={!tagInput.trim()}
+                      className="inline-flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-3 text-[var(--color-text-secondary)] transition-opacity hover:bg-[var(--color-bg-card-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                </Field>
+              </PanelCard>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-5">
+              <div className="text-xs text-[var(--color-text-muted)]">
+                This topic can later feed HTML briefs, structured data, and voice summaries.
+              </div>
+              <div className="flex gap-3">
                 <button
-                  key={f.value}
-                  onClick={() => setFrequency(f.value)}
-                  className="flex flex-col items-center p-3 rounded-lg transition-all"
+                  onClick={onBack}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-5 py-3 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-card-hover)] hover:text-[var(--color-text-primary)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!isValid || isSubmitting}
+                  onClick={handleCreate}
+                  className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-black transition-opacity"
                   style={{
-                    background: active ? `${FREQ_COLORS[f.value]}22` : 'var(--color-bg-hover)',
-                    border: `1px solid ${active ? FREQ_COLORS[f.value] : 'var(--color-border)'}`,
+                    background: 'var(--color-accent)',
+                    opacity: isValid && !isSubmitting ? 1 : 0.45,
+                    cursor: isValid && !isSubmitting ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: active ? FREQ_COLORS[f.value] : 'var(--color-text-secondary)' }}
-                  >
-                    {f.label}
-                  </span>
-                  <span className="text-xs mt-0.5 text-center" style={{ color: 'var(--color-text-muted)' }}>
-                    {f.description}
-                  </span>
+                  {isSubmitting ? 'Creating...' : 'Create topic'}
+                  <ArrowRight size={15} />
                 </button>
-              );
-            })}
+              </div>
+            </div>
+            {error && (
+              <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
           </div>
-        </FormCard>
 
-        {/* Delivery time */}
-        <FormCard title="Delivery Time" subtitle="When to send the briefing">
-          <select
-            value={deliveryTime}
-            onChange={(e) => setDeliveryTime(e.target.value)}
-            className="px-3 py-2 rounded-lg text-sm outline-none"
-            style={{
-              background: 'var(--color-bg-hover)',
-              color: 'var(--color-text-primary)',
-              border: '1px solid var(--color-border)',
-            }}
-          >
-            {DELIVERY_TIMES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </FormCard>
+          <aside className="lg:sticky lg:top-6 h-fit">
+            <div className="space-y-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5 shadow-[0_0_0_1px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center gap-2">
+                <Wand2 size={16} className="text-[var(--color-accent)]" />
+                <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Live preview</h2>
+              </div>
 
-        {/* Tags */}
-        <FormCard title="Tags" subtitle="Press Enter or comma to add">
-          <div className="flex flex-wrap gap-2 mb-2">
-            {tags.map((tag) => (
-              <span
-                key={tag}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs"
-                style={{
-                  background: `var(--color-accent)22`,
-                  color: 'var(--color-accent)',
-                }}
-              >
-                {tag}
-                <button
-                  onClick={() => removeTag(tag)}
-                  className="opacity-60 hover:opacity-100 transition-opacity"
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Add a tag…"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={handleTagKeyDown}
-              className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-              style={{
-                background: 'var(--color-bg-hover)',
-                color: 'var(--color-text-primary)',
-                border: '1px solid var(--color-border)',
-              }}
-            />
-            <button
-              onClick={addTag}
-              disabled={!tagInput.trim()}
-              className="px-3 py-2 rounded-lg text-sm transition-opacity"
-              style={{
-                background: 'var(--color-bg-card)',
-                color: 'var(--color-text-secondary)',
-                border: '1px solid var(--color-border)',
-                opacity: tagInput.trim() ? 1 : 0.4,
-              }}
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-        </FormCard>
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-muted)]">Topic</div>
+                <div className="mt-1 text-base font-semibold text-[var(--color-text-primary)]">{preview.title}</div>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">{preview.description}</p>
+              </div>
 
-        {/* Actions */}
-        <div
-          className="flex justify-end gap-3 pt-2 pb-6"
-          style={{ borderTop: '1px solid var(--color-border)' }}
-        >
-          <button
-            onClick={onBack}
-            className="px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
-            style={{
-              background: 'var(--color-bg-card)',
-              color: 'var(--color-text-secondary)',
-              border: '1px solid var(--color-border)',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            disabled={!isValid}
-            onClick={onBack}
-            className="px-5 py-2.5 rounded-lg text-sm font-medium transition-opacity"
-            style={{
-              background: 'var(--color-accent)',
-              color: 'black',
-              opacity: isValid ? 1 : 0.5,
-              cursor: isValid ? 'pointer' : 'not-allowed',
-            }}
-          >
-            Create Research Topic
-          </button>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                <MiniStat icon={<Clock3 size={14} />} label="Cadence" value={preview.cadenceCopy} />
+                <MiniStat icon={<ShieldCheck size={14} />} label="Sources" value={preview.sources.join(' · ')} />
+                <MiniStat icon={<Volume2 size={14} />} label="Outputs" value={preview.outputs.join(' · ')} />
+              </div>
+
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Languages size={14} className="text-[var(--color-accent)]" />
+                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">What happens next</div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    'Collect source signals',
+                    'Extract the relevant facts',
+                    'Synthesize into briefing sections',
+                    'Render HTML / structured output',
+                    'Optional voice generation',
+                  ].map((step, index) => (
+                    <div key={step} className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)]/15 text-[11px] font-semibold text-[var(--color-accent)]">
+                        {index + 1}
+                      </div>
+                      <div className="text-sm text-[var(--color-text-secondary)]">{step}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+                <div className="mb-2 text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)]">Keywords</div>
+                <div className="flex flex-wrap gap-2">
+                  {preview.tags.map(tag => (
+                    <span key={tag} className="rounded-lg bg-[var(--color-bg-card)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </main>
   );
 }
 
-function FormCard({
+function PanelCard({
   title,
   subtitle,
   children,
 }: {
   title: string;
   subtitle?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="rounded-xl p-5" style={{ background: 'var(--color-bg-card)' }}>
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-          {title}
-        </h3>
-        {subtitle && (
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {subtitle}
-          </p>
-        )}
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-5">
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
       </div>
       {children}
+    </section>
+  );
+}
+
+function Field({
+  label,
+  helper,
+  children,
+}: {
+  label: string;
+  helper?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-2 flex items-end justify-between gap-3">
+        <div className="text-sm font-medium text-[var(--color-text-primary)]">{label}</div>
+        {helper && <div className="text-xs text-[var(--color-text-muted)]">{helper}</div>}
+      </div>
+      {children}
+    </label>
+  );
+}
+
+function MiniStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+        <span className="text-[var(--color-accent)]">{icon}</span>
+        {label}
+      </div>
+      <div className="text-sm leading-relaxed text-[var(--color-text-primary)]">{value}</div>
     </div>
   );
 }

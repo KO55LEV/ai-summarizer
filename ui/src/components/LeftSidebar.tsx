@@ -68,23 +68,34 @@ export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideo
           <span className="text-xs text-text-muted font-medium">Recent videos</span>
           <button onClick={onViewAll} className="text-xs text-accent hover:text-accent-hover cursor-pointer font-medium">View all</button>
         </div>
-        <div className="space-y-1">
-          {recentVideos.map((video, i) => (
-            <div
-              key={i}
-              onClick={() => onVideoSelect(i)}
-              className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-bg-card cursor-pointer transition-colors"
-            >
-              <div className="w-5 h-5 rounded bg-youtube/20 flex items-center justify-center flex-shrink-0">
-                <Play size={9} className="text-youtube" fill="currentColor" />
+        {recentVideos.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border px-3 py-4 text-[11px] text-text-muted">
+            No recent videos yet.
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {recentVideos.map((video, i) => (
+              <div
+                key={`${video.url}-${i}`}
+                onClick={() => onVideoSelect(i)}
+                className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-bg-card cursor-pointer transition-colors"
+              >
+                <div className="w-5 h-5 rounded bg-youtube/20 flex items-center justify-center flex-shrink-0">
+                  <Play size={9} className="text-youtube" fill="currentColor" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] text-text-primary truncate leading-tight">{video.title}</div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[11px] text-text-muted leading-tight">{video.age}</span>
+                    <span className="text-[10px] font-medium px-1 py-0 rounded bg-bg-input text-text-muted truncate max-w-[96px]">
+                      {video.source}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12px] text-text-primary truncate leading-tight">{video.title}</div>
-                <div className="text-[11px] text-text-muted leading-tight">{video.age}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* User / Pro Badge */}
