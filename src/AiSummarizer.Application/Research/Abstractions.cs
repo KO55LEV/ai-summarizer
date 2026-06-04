@@ -2,6 +2,45 @@ using System.Data.Common;
 
 namespace AiSummarizer.Application.Research;
 
+public interface ISearchProvider
+{
+    string ProviderName { get; }
+    Task<IReadOnlyList<SearchResult>> SearchAsync(Guid? jobId, Guid? searchProviderKeyId, string query, int maxResults, string? apiKey = null, CancellationToken cancellationToken = default);
+}
+
+public interface ISearchProviderRepository
+{
+    Task<IReadOnlyList<SearchProviderKeyDto>> ListKeysAsync(CancellationToken cancellationToken);
+    Task<SearchProviderKeyDto?> GetKeyAsync(Guid id, CancellationToken cancellationToken);
+    Task<SearchProviderKeyDto> CreateKeyAsync(SearchProviderKeyDto key, CancellationToken cancellationToken);
+    Task<SearchProviderKeyDto?> UpdateKeyAsync(Guid id, SearchProviderKeyDto key, CancellationToken cancellationToken);
+    Task DeleteKeyAsync(Guid id, CancellationToken cancellationToken);
+    Task<SearchProviderUsageDto> GetUsageAsync(Guid id, CancellationToken cancellationToken);
+    Task LogRequestAsync(string provider, Guid? searchProviderKeyId, Guid? jobId, string requestPayload, int responseStatus, CancellationToken cancellationToken);
+}
+
+public sealed record SearchProviderKeyDto(
+    Guid Id,
+    string Provider,
+    string ApiKey,
+    int QuotaPerMonth,
+    bool IsActive,
+    string? Note);
+
+public sealed record SearchProviderUsageDto(
+    Guid Id,
+    string Provider,
+    int QuotaPerMonth,
+    int Used,
+    DateTimeOffset CycleStart,
+    DateTimeOffset CycleEnd);
+
+public sealed record SearchProviderQuotaDto(
+    int MaxQuota,
+    int Used,
+    DateTimeOffset CycleStart,
+    DateTimeOffset CycleEnd);
+
 public interface IResearchRepository
 {
     Task<T> ExecuteInTransactionAsync<T>(Func<IResearchRepository, DbTransaction, Task<T>> action, CancellationToken cancellationToken);

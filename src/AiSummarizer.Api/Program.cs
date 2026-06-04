@@ -20,7 +20,8 @@ builder.Services.Configure<UsersOptions>(builder.Configuration.GetSection("Users
 builder.Services.Configure<InternalApiOptions>(builder.Configuration.GetSection("InternalApi"));
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("Postgres")
-    ?? throw new InvalidOperationException("Connection string 'Postgres' is missing."));
+    ?? throw new InvalidOperationException("Connection string 'Postgres' is missing."),
+    builder.Configuration);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<UsersOptions>>().Value);
 builder.Services.AddScoped<IUsersService, UsersService>();
 builder.Services.AddScoped<IJobsService, JobsService>();

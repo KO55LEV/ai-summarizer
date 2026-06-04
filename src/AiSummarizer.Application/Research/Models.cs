@@ -1,5 +1,11 @@
 namespace AiSummarizer.Application.Research;
 
+public sealed record SearchResult(
+    string Url,
+    string Title,
+    string Content,
+    string RawResponse);
+
 public sealed record ResearchTopicDto(
     Guid Id,
     Guid? RequestedByUserId,

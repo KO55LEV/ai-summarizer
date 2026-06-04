@@ -19,7 +19,8 @@ builder.Services.Configure<WhisperTranscribeOptions>(builder.Configuration.GetSe
 builder.Services.Configure<WorkflowOptions>(builder.Configuration.GetSection("Workflows"));
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("Postgres")
-    ?? throw new InvalidOperationException("Connection string 'Postgres' is missing."));
+    ?? throw new InvalidOperationException("Connection string 'Postgres' is missing."),
+    builder.Configuration);
 builder.Services.AddSingleton<IJobHandlerRegistry, JobHandlerRegistry>();
 builder.Services.AddSingleton<IJobHandler, YouTubeDownloadJobHandler>();
 builder.Services.AddSingleton<IJobHandler, MediaExtractAudioJobHandler>();

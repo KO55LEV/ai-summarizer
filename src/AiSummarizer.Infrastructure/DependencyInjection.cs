@@ -9,6 +9,7 @@ using AiSummarizer.Application.Workflows;
 using AiSummarizer.Infrastructure.Persistence;
 using AiSummarizer.Infrastructure.MediaSources;
 using AiSummarizer.Infrastructure.Research;
+using AiSummarizer.Infrastructure.Reasoning;
 using AiSummarizer.Infrastructure.Jobs;
 using AiSummarizer.Infrastructure.Prompts;
 using AiSummarizer.Infrastructure.PublicRequests;
@@ -18,13 +19,14 @@ using AiSummarizer.Infrastructure.Users;
 using AiSummarizer.Infrastructure.Users.ExternalAuth;
 using AiSummarizer.Infrastructure.Users.Security;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 
 namespace AiSummarizer.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, IConfiguration configuration)
     {
         services.AddSingleton(NpgsqlDataSource.Create(connectionString));
         services.AddSingleton<ISqlScriptLoader, FileSqlScriptLoader>();
@@ -35,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
         services.AddScoped<ITranscriptSchedulingService, TranscriptSchedulingService>();
         services.AddScoped<IResearchRepository, ResearchRepository>();
+        services.AddScoped<ISearchProviderRepository, SearchProvidersRepository>();
         services.AddScoped<IPromptsRepository, PromptsRepository>();
         services.AddScoped<IWorkflowsRepository, WorkflowsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
@@ -44,6 +47,12 @@ public static class DependencyInjection
         services.AddScoped<IExternalIdentityVerifier, ExternalIdentityVerifier>();
         services.AddScoped<IResearchService, ResearchService>();
         services.AddScoped<IPromptsService, PromptsService>();
+        services.AddHttpClient<ISearchProvider, TavilySearchProvider>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AiSummarizer/1.0");
+        });
+        services.AddReasoningAI(configuration);
         return services;
     }
 }
