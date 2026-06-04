@@ -10,9 +10,9 @@ public sealed class TavilySearchProvider(HttpClient httpClient, IConfiguration c
 {
     public string ProviderName => "Tavily";
 
-    public async Task<IReadOnlyList<SearchResult>> SearchAsync(Guid? jobId, Guid? searchProviderKeyId, string query, int maxResults, string? apiKey = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SearchResult>> SearchAsync(SearchProviderSearchRequest request, CancellationToken cancellationToken = default)
     {
-        var activeApiKey = apiKey ?? configuration["Tavily:ApiKey"];
+        var activeApiKey = request.ApiKey ?? configuration["Tavily:ApiKey"];
         if (string.IsNullOrWhiteSpace(activeApiKey))
         {
             throw new InvalidOperationException("Tavily API key is missing. Set Tavily:ApiKey or provide it per request.");
@@ -21,21 +21,32 @@ public sealed class TavilySearchProvider(HttpClient httpClient, IConfiguration c
         var requestBody = new
         {
             api_key = activeApiKey,
-            query = query,
-            search_depth = "advanced",
-            include_images = false,
-            include_answer = false,
-            max_results = maxResults
+            query = request.Query,
+            topic = request.Topic,
+            time_range = request.TimeRange,
+            start_date = request.StartDate?.ToString("yyyy-MM-dd"),
+            end_date = request.EndDate?.ToString("yyyy-MM-dd"),
+            search_depth = request.SearchDepth,
+            include_domains = request.IncludeDomains,
+            exclude_domains = request.ExcludeDomains,
+            include_images = request.IncludeImages,
+            include_image_descriptions = request.IncludeImageDescriptions,
+            include_answer = request.IncludeAnswer,
+            include_raw_content = request.IncludeRawContent,
+            include_favicon = request.IncludeFavicon,
+            country = request.Country,
+            auto_parameters = request.AutoParameters,
+            max_results = request.MaxResults
         };
 
         var response = await httpClient.PostAsJsonAsync("https://api.tavily.com/search", requestBody, cancellationToken);
         var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        logger.LogInformation("[Tavily] response received. StatusCode={StatusCode}, KeyId={KeyId}", response.StatusCode, searchProviderKeyId);
+        logger.LogInformation("[Tavily] response received. StatusCode={StatusCode}, KeyId={KeyId}", response.StatusCode, request.SearchProviderKeyId);
 
         if (searchProviderRepository is not null)
         {
-            await searchProviderRepository.LogRequestAsync(ProviderName, searchProviderKeyId, jobId, JsonSerializer.Serialize(requestBody), (int)response.StatusCode, cancellationToken);
+            await searchProviderRepository.LogRequestAsync(ProviderName, request.SearchProviderKeyId, request.JobId, JsonSerializer.Serialize(requestBody), (int)response.StatusCode, cancellationToken);
         }
 
         response.EnsureSuccessStatusCode();

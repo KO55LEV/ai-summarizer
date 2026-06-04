@@ -42,6 +42,12 @@ docker compose up -d --build
 
 - `ConnectionStrings__Postgres`
 - `InternalApi__ApiKey`
+- `Tavily__ApiKey`
+- `ReasoningAI__OpenRouter__ApiKey`
+- `ReasoningAI__GoogleVertex__ProjectId`
+- `ReasoningAI__GoogleVertex__CredentialsPath`
+- `ReasoningAI__InceptionLabs__ApiKey`
+- `ReasoningAI__Ollama__BaseUrl`
 - `Users__*`
 - `Worker__*`
 - `Workflows__*`
@@ -58,6 +64,30 @@ POSTGRES_PASSWORD=postgres
 
 ConnectionStrings__Postgres=Host=localhost;Port=5432;Database=AiSummarizer;Username=postgres;Password=postgres
 InternalApi__ApiKey=change-me
+Tavily__ApiKey=
+Tavily__BaseUrl=https://api.tavily.com
+
+ReasoningAI__OpenRouter__ApiKey=
+ReasoningAI__OpenRouter__BaseUrl=https://openrouter.ai/api/v1
+ReasoningAI__OpenRouter__DefaultModel=openai/gpt-4.1-mini
+ReasoningAI__OpenRouter__TimeoutSeconds=60
+
+ReasoningAI__GoogleVertex__ProjectId=
+ReasoningAI__GoogleVertex__Location=us-central1
+ReasoningAI__GoogleVertex__CredentialsPath=
+ReasoningAI__GoogleVertex__DefaultModel=gemini-2.5-pro
+ReasoningAI__GoogleVertex__TimeoutSeconds=60
+
+ReasoningAI__InceptionLabs__ApiKey=
+ReasoningAI__InceptionLabs__BaseUrl=https://api.inceptionlabs.ai
+ReasoningAI__InceptionLabs__DefaultModel=mercury
+ReasoningAI__InceptionLabs__TimeoutSeconds=60
+
+ReasoningAI__Ollama__BaseUrl=http://localhost:11434
+ReasoningAI__Ollama__DefaultModel=llama3.1
+ReasoningAI__Ollama__TimeoutSeconds=60
+ReasoningAI__Ollama__DefaultTemperature=0.7
+ReasoningAI__Ollama__DefaultContextWindow=8192
 
 Users__SessionLifetimeDays=30
 Users__RefreshTokenLifetimeDays=30

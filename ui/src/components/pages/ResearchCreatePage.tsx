@@ -10,6 +10,7 @@ import {
   MessageSquare,
   TrendingUp,
   Twitter,
+  Youtube,
   Sparkles,
   Wand2,
   FileCode2,
@@ -27,10 +28,11 @@ import { getCurrentUserId } from '../../config/currentUser';
 const SOURCE_OPTIONS = [
   { id: 'web', label: 'Web Search', icon: <Globe size={16} />, description: 'Search the open web for recent signals and context.' },
   { id: 'news', label: 'News', icon: <Newspaper size={16} />, description: 'Major publications, press releases, and breaking coverage.' },
-  { id: 'arXiv', label: 'arXiv', icon: <BookOpen size={16} />, description: 'Academic pre-prints and research papers.' },
+  { id: 'archive', label: 'Archive', icon: <BookOpen size={16} />, description: 'Historical pages, archived copies, and older references.' },
   { id: 'reddit', label: 'Reddit', icon: <MessageSquare size={16} />, description: 'Community discussion, pain points, and early reactions.' },
-  { id: 'financial-data', label: 'Financial Data', icon: <TrendingUp size={16} />, description: 'Market data, earnings, and company filings.' },
+  { id: 'financial', label: 'Financial Data', icon: <TrendingUp size={16} />, description: 'Market data, earnings, and company filings.' },
   { id: 'twitter', label: 'Twitter / X', icon: <Twitter size={16} />, description: 'Fast-moving announcements and social sentiment.' },
+  { id: 'youtube', label: 'YouTube', icon: <Youtube size={16} />, description: 'Talks, commentary, interviews, and video analysis.' },
 ];
 
 const FREQ_OPTIONS: { value: 'hourly' | 'daily' | 'weekly' | 'monthly'; label: string; description: string }[] = [

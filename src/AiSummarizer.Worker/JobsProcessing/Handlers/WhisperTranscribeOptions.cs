@@ -7,5 +7,5 @@ public sealed class WhisperTranscribeOptions
     public int MaxAttempts { get; set; } = 3;
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(30);
     public int RequestTimeoutSeconds { get; set; } = 7200;
-    public string? Language { get; set; } = "en";
+    public string? Language { get; set; }
 }

@@ -58,6 +58,8 @@ AiSummarizer/
 - параметры Postgres
 - connection strings
 - internal API keys
+- search provider API keys
+- reasoning provider keys and model defaults
 - JWT signing keys
 - настройки worker
 - настройки Whisper
@@ -72,6 +74,24 @@ POSTGRES_PASSWORD=postgres
 
 ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=AiSummarizer;Username=postgres;Password=postgres
 InternalApiKey=change-me
+Tavily__ApiKey=
+Tavily__BaseUrl=https://api.tavily.com
+
+ReasoningAI__OpenRouter__ApiKey=
+ReasoningAI__OpenRouter__BaseUrl=https://openrouter.ai/api/v1
+ReasoningAI__OpenRouter__DefaultModel=openai/gpt-4.1-mini
+
+ReasoningAI__GoogleVertex__ProjectId=
+ReasoningAI__GoogleVertex__Location=us-central1
+ReasoningAI__GoogleVertex__CredentialsPath=
+ReasoningAI__GoogleVertex__DefaultModel=gemini-2.5-pro
+
+ReasoningAI__InceptionLabs__ApiKey=
+ReasoningAI__InceptionLabs__BaseUrl=https://api.inceptionlabs.ai
+ReasoningAI__InceptionLabs__DefaultModel=mercury
+
+ReasoningAI__Ollama__BaseUrl=http://localhost:11434
+ReasoningAI__Ollama__DefaultModel=llama3.1
 
 Worker__WorkerId=worker-1
 Worker__PollIntervalMilliseconds=1000

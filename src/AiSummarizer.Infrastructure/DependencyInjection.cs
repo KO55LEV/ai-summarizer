@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<ITranscriptSchedulingService, TranscriptSchedulingService>();
         services.AddScoped<IResearchRepository, ResearchRepository>();
         services.AddScoped<ISearchProviderRepository, SearchProvidersRepository>();
+        services.AddOptions<ResearchSearchSourceOptions>().Bind(configuration.GetSection("ResearchSearchSources"));
         services.AddScoped<IPromptsRepository, PromptsRepository>();
         services.AddScoped<IWorkflowsRepository, WorkflowsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
@@ -52,6 +53,15 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AiSummarizer/1.0");
         });
+        services.AddScoped<WebSearchAdapter>();
+        services.AddScoped<NewsSearchAdapter>();
+        services.AddScoped<ArchiveSearchAdapter>();
+        services.AddScoped<RedditSearchAdapter>();
+        services.AddScoped<FinancialSearchAdapter>();
+        services.AddScoped<TwitterSearchAdapter>();
+        services.AddScoped<YouTubeSearchAdapter>();
+        services.AddScoped<IResearchSearchSourceRegistry, ResearchSearchSourceRegistry>();
+        services.AddScoped<ISearchQueryPlanner, ResearchQueryPlanner>();
         services.AddReasoningAI(configuration);
         return services;
     }

@@ -12,7 +12,7 @@ from faster_whisper import WhisperModel
 MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-DEFAULT_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "en").strip() or "en"
+DEFAULT_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "").strip() or None
 
 app = FastAPI()
 model = WhisperModel(

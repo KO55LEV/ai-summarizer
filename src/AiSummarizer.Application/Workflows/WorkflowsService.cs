@@ -13,6 +13,7 @@ public sealed class WorkflowsService(
     {
         var identity = MediaSourceIdentityParser.ParseYouTube(command.YoutubeUrl);
         var now = DateTimeOffset.UtcNow;
+        var language = NormalizeNullable(command.Language);
         var mediaSource = await mediaSourcesRepository.UpsertMediaSourceAsync(new MediaSource
         {
             Id = Guid.NewGuid(),
@@ -43,7 +44,7 @@ public sealed class WorkflowsService(
                 sourceProvider = mediaSource.SourceProvider,
                 sourceKind = mediaSource.SourceKind,
                 sourceExternalId = mediaSource.ExternalSourceId,
-                language = string.IsNullOrWhiteSpace(command.Language) ? "en" : command.Language.Trim(),
+                language,
                 preferNativeTranscript = command.PreferNativeTranscript
             }),
             Result = null,
@@ -126,4 +127,7 @@ public sealed class WorkflowsService(
             workflowEvent.Message,
             workflowEvent.Context,
             workflowEvent.CreatedAt);
+
+    private static string? NormalizeNullable(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

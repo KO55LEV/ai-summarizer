@@ -85,7 +85,7 @@ public sealed class WorkflowProcessorHostedService(
 
         var input = workflow.Input;
         var sourceId = workflow.SourceId ?? ReadGuid(input, "sourceId");
-        var preferredLanguage = ReadString(input, "language") ?? whisperTranscribeOptions.Value.Language ?? "en";
+        var preferredLanguage = ReadString(input, "language") ?? whisperTranscribeOptions.Value.Language;
         var preferNativeTranscript = ReadBool(input, "preferNativeTranscript", true);
         var workflowRootDirectory = GetWorkflowRootDirectory(workflowOptions.OutputDirectory, workflow.Id);
 
@@ -172,7 +172,7 @@ public sealed class WorkflowProcessorHostedService(
         await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
     }
 
-    private async Task StartWorkflowAsync(Workflow workflow, MediaSource mediaSource, MediaSourceIdentity sourceIdentity, string sourceUrl, string preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, CancellationToken cancellationToken)
+    private async Task StartWorkflowAsync(Workflow workflow, MediaSource mediaSource, MediaSourceIdentity sourceIdentity, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var step = new WorkflowStep
@@ -304,7 +304,7 @@ public sealed class WorkflowProcessorHostedService(
         await CreateDownloadJobAsync(workflow, completedStep, sourceUrl, preferredLanguage, workflowRootDirectory, Environment.MachineName + "-workflow", TimeSpan.FromSeconds(Math.Max(30, options.Value.LeaseSeconds)), cancellationToken);
     }
 
-    private async Task HandleSucceededStepAsync(Workflow workflow, WorkflowStep currentStep, Job job, string sourceUrl, string preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task HandleSucceededStepAsync(Workflow workflow, WorkflowStep currentStep, Job job, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         var stepOutput = currentStep.Output ?? job.Result;
         var now = DateTimeOffset.UtcNow;
@@ -344,7 +344,7 @@ public sealed class WorkflowProcessorHostedService(
         }
     }
 
-    private async Task CreateDownloadJobAsync(Workflow workflow, WorkflowStep previousStep, string sourceUrl, string preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task CreateDownloadJobAsync(Workflow workflow, WorkflowStep previousStep, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var stepOutputDirectory = GetStepOutputDirectory(workflowRootDirectory, "download");
@@ -409,7 +409,7 @@ public sealed class WorkflowProcessorHostedService(
         }, cancellationToken);
     }
 
-    private async Task CreateExtractAudioJobAsync(Workflow workflow, WorkflowStep previousStep, string? videoFilePath, string sourceUrl, string preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task CreateExtractAudioJobAsync(Workflow workflow, WorkflowStep previousStep, string? videoFilePath, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(videoFilePath))
         {
@@ -481,7 +481,7 @@ public sealed class WorkflowProcessorHostedService(
         }, cancellationToken);
     }
 
-    private async Task CreateTranscribeJobAsync(Workflow workflow, WorkflowStep previousStep, string? audioFilePath, string sourceUrl, string preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task CreateTranscribeJobAsync(Workflow workflow, WorkflowStep previousStep, string? audioFilePath, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(audioFilePath))
         {
@@ -553,7 +553,7 @@ public sealed class WorkflowProcessorHostedService(
         }, cancellationToken);
     }
 
-    private async Task CreateImportTranscriptJobAsync(Workflow workflow, WorkflowStep previousStep, string? transcriptFilePath, string? sourceFilePath, string sourceUrl, string preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task CreateImportTranscriptJobAsync(Workflow workflow, WorkflowStep previousStep, string? transcriptFilePath, string? sourceFilePath, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(transcriptFilePath))
         {
@@ -679,7 +679,7 @@ public sealed class WorkflowProcessorHostedService(
         return steps.Count == 0 ? null : steps[^1];
     }
 
-    private async Task<NativeTranscriptResult> TryBuildNativeTranscriptAsync(Guid workflowId, string sourceUrl, string preferredLanguage, string workflowRootDirectory, CancellationToken cancellationToken)
+    private async Task<NativeTranscriptResult> TryBuildNativeTranscriptAsync(Guid workflowId, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, CancellationToken cancellationToken)
     {
         var attemptDir = GetStepOutputDirectory(workflowRootDirectory, "native-transcripts");
         Directory.CreateDirectory(attemptDir);

@@ -5,7 +5,34 @@ namespace AiSummarizer.Application.Research;
 public interface ISearchProvider
 {
     string ProviderName { get; }
-    Task<IReadOnlyList<SearchResult>> SearchAsync(Guid? jobId, Guid? searchProviderKeyId, string query, int maxResults, string? apiKey = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SearchResult>> SearchAsync(SearchProviderSearchRequest request, CancellationToken cancellationToken = default);
+}
+
+public sealed record SearchProviderSearchRequest(
+    Guid? JobId,
+    Guid? SearchProviderKeyId,
+    string Query,
+    int MaxResults,
+    string? ApiKey = null,
+    string? Topic = null,
+    string? TimeRange = null,
+    DateOnly? StartDate = null,
+    DateOnly? EndDate = null,
+    IReadOnlyList<string>? IncludeDomains = null,
+    IReadOnlyList<string>? ExcludeDomains = null,
+    bool IncludeAnswer = false,
+    bool IncludeRawContent = false,
+    bool IncludeImages = false,
+    bool IncludeImageDescriptions = false,
+    bool IncludeFavicon = false,
+    string? Country = null,
+    bool AutoParameters = false,
+    string SearchDepth = "advanced");
+
+public interface ISearchProviderFactory
+{
+    ISearchProvider GetProvider(string providerName);
+    IReadOnlyList<string> ListProviderNames();
 }
 
 public interface ISearchProviderRepository
@@ -40,6 +67,11 @@ public sealed record SearchProviderQuotaDto(
     int Used,
     DateTimeOffset CycleStart,
     DateTimeOffset CycleEnd);
+
+public interface ISearchQueryPlanner
+{
+    IReadOnlyList<ResearchSearchQuery> BuildQueries(string topic, IReadOnlyList<string> sourceKeys, string frequency);
+}
 
 public interface IResearchRepository
 {

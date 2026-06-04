@@ -7,6 +7,10 @@ namespace AiSummarizer.Api.Research;
 [Route("api/research")]
 public sealed class ResearchController(IResearchService researchService) : ControllerBase
 {
+    [HttpGet("search-sources")]
+    public IActionResult GetSearchSources([FromServices] AiSummarizer.Application.Research.IResearchSearchSourceRegistry registry)
+        => Ok(registry.List());
+
     [HttpGet]
     public async Task<ActionResult<ResearchListResponse>> GetList(
         [FromQuery] Guid? requestedByUserId = null,

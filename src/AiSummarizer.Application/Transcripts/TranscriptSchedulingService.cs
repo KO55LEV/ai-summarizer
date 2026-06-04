@@ -15,7 +15,7 @@ public sealed class TranscriptSchedulingService(
     public async Task<TranscriptScheduleResultDto> ScheduleYoutubeTranscriptAsync(ScheduleYoutubeTranscriptCommand command, CancellationToken cancellationToken)
     {
         var identity = MediaSourceIdentityParser.ParseYouTube(command.YoutubeUrl);
-        var language = NormalizeNullable(command.Language) ?? "en";
+        var language = NormalizeNullable(command.Language);
         var now = DateTimeOffset.UtcNow;
 
         var mediaSource = await mediaSourcesRepository.UpsertMediaSourceAsync(new MediaSource
