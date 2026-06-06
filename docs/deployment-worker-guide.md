@@ -60,6 +60,7 @@ AiSummarizer/
 - internal API keys
 - search provider API keys
 - email provider API keys
+- transcription provider defaults
 - reasoning provider keys and model defaults
 - JWT signing keys
 - настройки worker
@@ -84,6 +85,8 @@ Email__DefaultFromName=AiSummarizer
 Email__Brevo__ApiKey=
 Email__Brevo__BaseUrl=https://api.brevo.com
 Email__Brevo__TimeoutSeconds=60
+Email__FileDump__FolderPath=/data/email-outbox
+Transcribe__Provider=Whisper
 
 ReasoningAI__OpenRouter__ApiKey=
 ReasoningAI__OpenRouter__BaseUrl=https://openrouter.ai/api/v1
@@ -111,6 +114,13 @@ Workflows__OutputDirectory=/data/downloads/workflows
 Jobs__YouTubeDownload__YtDlpExecutable=yt-dlp
 Jobs__YouTubeDownload__MaxAttempts=3
 Jobs__YouTubeDownload__RetryDelay=00:00:30
+Jobs__OpenRouterTranscribe__ApiKey=
+Jobs__OpenRouterTranscribe__BaseUrl=https://openrouter.ai/api/v1
+Jobs__OpenRouterTranscribe__TranscribePath=/audio/transcriptions
+Jobs__OpenRouterTranscribe__Model=whisper-1
+Jobs__OpenRouterTranscribe__MaxAttempts=3
+Jobs__OpenRouterTranscribe__RetryDelay=00:00:30
+Jobs__OpenRouterTranscribe__RequestTimeoutSeconds=7200
 ```
 
 Workflow steps should derive their step folders from `Workflows__OutputDirectory` and the current `workflowId`. For example:
@@ -135,6 +145,8 @@ Workflow steps should derive their step folders from `Workflows__OutputDirectory
 - worker можно масштабировать горизонтально
 - `whisper-service` можно обновлять отдельно
 - long-running job не ломает остальную систему
+
+Если используешь `Email__Provider=File` для локального дампа писем, смонтируй папку `Email__FileDump__FolderPath` в volume, чтобы письма сохранялись вне контейнера.
 
 ## Как worker выполняет долгие задачи
 
@@ -187,7 +199,7 @@ Worker не должен выполнять все в одном глобаль�
 - права на запись в output directory
 - доступ к `/tmp`, если нужен временный storage
 
-Если worker вызывает `whisper-service` по HTTP, то Python и `faster-whisper` в worker не нужны. Это правильно: Whisper живет отдельно.
+Если worker вызывает `whisper-service` по HTTP, то Python и `faster-whisper` в worker не нужны. Это правильно: Whisper живет отдельно. Если позже переключишь transcription provider, ключи останутся в `.env`, а выбор будет храниться в `upsettings`.
 
 ## Рекомендация по VPS
 

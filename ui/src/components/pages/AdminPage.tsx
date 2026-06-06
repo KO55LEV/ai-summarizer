@@ -7,6 +7,7 @@ import {
   CircleAlert,
   CircleCheck,
   CircleDashed,
+  Clock3,
   Database,
   Filter,
   KeyRound,
@@ -18,7 +19,10 @@ import {
   Server,
   Shield,
   Sparkles,
+  Settings2,
   Trash2,
+  UserCog,
+  Users,
   Zap,
 } from 'lucide-react';
 import type {
@@ -49,13 +53,44 @@ import {
   listSearchProviders,
   updateSearchProvider,
 } from '../../api/searchProviders';
+import type {
+  AdminSettingsResponse,
+  UpdateAdminSettingsInput,
+} from '../../api/adminSettings';
+import {
+  getAdminSettings,
+  updateAdminSettings,
+} from '../../api/adminSettings';
+import type {
+  AdminRoleResponse,
+  AdminUserResponse,
+  UpdateAdminUserInput,
+} from '../../api/adminUsers';
+import {
+  getAdminRoles,
+  getAdminUser,
+  listAdminUsers,
+  updateAdminUser,
+} from '../../api/adminUsers';
 
-type AdminSection = 'prompts' | 'search-providers';
+type AdminSection = 'users' | 'prompts' | 'search-providers' | 'runtime-settings';
 type PromptTab = 'editor' | 'runs' | 'archive' | 'usage';
 type ProviderTab = 'editor' | 'usage';
 
 interface AdminPageProps {
+  initialSection: AdminSection;
+  onSectionChange: (section: AdminSection) => void;
   onBackToApp: () => void;
+}
+
+interface AdminUserFormState {
+  email: string;
+  displayName: string;
+  avatarUrl: string;
+  locale: string;
+  timeZone: string;
+  status: string;
+  roles: string[];
 }
 
 interface PromptFormState {
@@ -78,6 +113,13 @@ interface ProviderFormState {
   isActive: boolean;
 }
 
+interface RuntimeSettingsFormState {
+  emailProvider: string;
+  emailFromEmail: string;
+  emailFromName: string;
+  transcribeProvider: string;
+}
+
 const EMPTY_PROMPT_FORM: PromptFormState = {
   promptKey: 'admin.new.prompt',
   title: 'New prompt',
@@ -96,6 +138,23 @@ const EMPTY_PROVIDER_FORM: ProviderFormState = {
   quotaPerMonth: '50000',
   note: '',
   isActive: true,
+};
+
+const EMPTY_RUNTIME_SETTINGS_FORM: RuntimeSettingsFormState = {
+  emailProvider: 'Brevo',
+  emailFromEmail: 'no-reply@example.com',
+  emailFromName: 'AiSummarizer',
+  transcribeProvider: 'Whisper',
+};
+
+const EMPTY_USER_FORM: AdminUserFormState = {
+  email: '',
+  displayName: '',
+  avatarUrl: '',
+  locale: '',
+  timeZone: '',
+  status: 'active',
+  roles: [],
 };
 
 function normalizeMaybe(value: string): string | null {
@@ -148,6 +207,27 @@ function providerToForm(provider: SearchProviderResponse): ProviderFormState {
     quotaPerMonth: String(provider.quotaPerMonth),
     note: provider.note ?? '',
     isActive: provider.isActive,
+  };
+}
+
+function userToForm(user: AdminUserResponse): AdminUserFormState {
+  return {
+    email: user.email,
+    displayName: user.displayName ?? '',
+    avatarUrl: user.avatarUrl ?? '',
+    locale: user.locale ?? '',
+    timeZone: user.timeZone ?? '',
+    status: user.status,
+    roles: [...user.roles],
+  };
+}
+
+function settingsToForm(settings: AdminSettingsResponse): RuntimeSettingsFormState {
+  return {
+    emailProvider: settings.email.provider,
+    emailFromEmail: settings.email.defaultFromEmail,
+    emailFromName: settings.email.defaultFromName ?? '',
+    transcribeProvider: settings.transcribe.provider,
   };
 }
 
@@ -299,8 +379,24 @@ function PageSkeleton() {
   );
 }
 
-export default function AdminPage({ onBackToApp }: AdminPageProps) {
-  const [section, setSection] = useState<AdminSection>('prompts');
+export default function AdminPage({ initialSection, onSectionChange, onBackToApp }: AdminPageProps) {
+  const [section, setSection] = useState<AdminSection>(initialSection);
+
+  useEffect(() => {
+    setSection(initialSection);
+  }, [initialSection]);
+
+  const [users, setUsers] = useState<AdminUserResponse[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userForm, setUserForm] = useState<AdminUserFormState>(EMPTY_USER_FORM);
+  const [userRoles, setUserRoles] = useState<AdminRoleResponse[]>([]);
+  const [userLoading, setUserLoading] = useState(true);
+  const [userDetailLoading, setUserDetailLoading] = useState(false);
+  const [userSaving, setUserSaving] = useState(false);
+  const [userError, setUserError] = useState<string | null>(null);
+  const [userSearch, setUserSearch] = useState('');
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deleted'>('all');
+  const [userMode, setUserMode] = useState<'view' | 'new'>('view');
 
   const [prompts, setPrompts] = useState<PromptResponse[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
@@ -330,6 +426,42 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
   const [providerStatusFilter, setProviderStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [providerMode, setProviderMode] = useState<'view' | 'new'>('view');
 
+  const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettingsFormState>(EMPTY_RUNTIME_SETTINGS_FORM);
+  const [runtimeSettingsLoading, setRuntimeSettingsLoading] = useState(true);
+  const [runtimeSettingsSaving, setRuntimeSettingsSaving] = useState(false);
+  const [runtimeSettingsError, setRuntimeSettingsError] = useState<string | null>(null);
+
+  const changeSection = (nextSection: AdminSection) => {
+    setSection(nextSection);
+    onSectionChange(nextSection);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const [items, roles] = await Promise.all([listAdminUsers(''), getAdminRoles()]);
+        if (!mounted) return;
+
+        setUsers(items);
+        setUserRoles(roles);
+        if (items.length > 0) {
+          setSelectedUserId(items[0].id);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setUserError(err instanceof Error ? err.message : 'Failed to load users');
+      } finally {
+        if (mounted) setUserLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -350,6 +482,27 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
         setPromptError(err instanceof Error ? err.message : 'Failed to load prompts');
       } finally {
         if (mounted) setPromptLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const settings = await getAdminSettings();
+        if (!mounted) return;
+        setRuntimeSettings(settingsToForm(settings));
+      } catch (err) {
+        if (!mounted) return;
+        setRuntimeSettingsError(err instanceof Error ? err.message : 'Failed to load runtime settings');
+      } finally {
+        if (mounted) setRuntimeSettingsLoading(false);
       }
     })();
 
@@ -459,6 +612,34 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
     };
   }, [providerMode, selectedProviderId]);
 
+  useEffect(() => {
+    if (userMode === 'new') {
+      setUserForm(EMPTY_USER_FORM);
+      return;
+    }
+
+    if (!selectedUserId) return;
+    let cancelled = false;
+    setUserError(null);
+    setUserDetailLoading(true);
+    getAdminUser(selectedUserId)
+      .then((item) => {
+        if (cancelled) return;
+        setUserForm(userToForm(item));
+        setUsers((current) => current.map((user) => (user.id === item.id ? item : user)));
+      })
+      .catch((err) => {
+        if (!cancelled) setUserError(err instanceof Error ? err.message : 'Failed to load user details');
+      })
+      .finally(() => {
+        if (!cancelled) setUserDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userMode, selectedUserId]);
+
   const selectedPrompt = selectedPromptId ? prompts.find((item) => item.id === selectedPromptId) ?? null : null;
   const selectedProvider = selectedProviderId ? providers.find((item) => item.id === selectedProviderId) ?? null : null;
 
@@ -478,6 +659,21 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
     return matchesSearch && matchesStatus;
   });
 
+  const filteredUsers = users.filter((user) => {
+    const haystack = [
+      user.email,
+      user.displayName ?? '',
+      user.locale ?? '',
+      user.timeZone ?? '',
+      user.roles.join(' '),
+      user.status,
+    ].join(' ').toLowerCase();
+    const matchesSearch = haystack.includes(userSearch.toLowerCase());
+    const matchesStatus =
+      userStatusFilter === 'all' ? true : user.status === userStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   const promptStats = {
     total: prompts.length,
     active: prompts.filter((item) => item.isActive).length,
@@ -491,6 +687,15 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
     inactive: providers.filter((item) => !item.isActive).length,
     quota: providers.reduce((sum, item) => sum + item.quotaPerMonth, 0),
   };
+
+  const userStats = {
+    total: users.length,
+    active: users.filter((item) => item.status === 'active').length,
+    disabled: users.filter((item) => item.status === 'disabled').length,
+    deleted: users.filter((item) => item.status === 'deleted').length,
+  };
+
+  const selectedUser = selectedUserId ? users.find((item) => item.id === selectedUserId) ?? null : null;
 
   const reloadPrompts = async (focusId?: string) => {
     const items = await listPrompts(100, 0);
@@ -515,6 +720,20 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
     } else {
       setProviderMode('new');
       setProviderForm(EMPTY_PROVIDER_FORM);
+    }
+  };
+
+  const reloadUsers = async (focusId?: string) => {
+    setUserError(null);
+    const items = await listAdminUsers(userSearch.trim());
+    setUsers(items);
+    if (focusId && items.some((item) => item.id === focusId)) {
+      setSelectedUserId(focusId);
+    } else if (items.length > 0) {
+      setSelectedUserId(items[0].id);
+    } else {
+      setUserMode('new');
+      setUserForm(EMPTY_USER_FORM);
     }
   };
 
@@ -572,6 +791,38 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
       setPromptError(err instanceof Error ? err.message : 'Failed to delete prompt');
     } finally {
       setPromptSaving(false);
+    }
+  };
+
+  const saveUser = async () => {
+    if (!selectedUserId && userMode !== 'new') return;
+
+    setUserSaving(true);
+    setUserError(null);
+
+    const payload: UpdateAdminUserInput = {
+      email: userForm.email.trim(),
+      displayName: normalizeMaybe(userForm.displayName),
+      avatarUrl: normalizeMaybe(userForm.avatarUrl),
+      locale: normalizeMaybe(userForm.locale),
+      timeZone: normalizeMaybe(userForm.timeZone),
+      status: userForm.status.trim().toLowerCase(),
+      roles: userForm.roles,
+    };
+
+    try {
+      if (userMode === 'new') {
+        throw new Error('User creation is not enabled yet.');
+      }
+
+      const updated = await updateAdminUser(selectedUserId!, payload);
+      setUserForm(userToForm(updated));
+      setUserMode('view');
+      await reloadUsers(updated.id);
+    } catch (err) {
+      setUserError(err instanceof Error ? err.message : 'Failed to save user');
+    } finally {
+      setUserSaving(false);
     }
   };
 
@@ -635,7 +886,295 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
     }
   };
 
-  if (promptLoading || providerLoading) return <PageSkeleton />;
+  const saveRuntimeSettings = async () => {
+    setRuntimeSettingsSaving(true);
+    setRuntimeSettingsError(null);
+
+    const payload: UpdateAdminSettingsInput = {
+      email: {
+        provider: runtimeSettings.emailProvider.trim(),
+        defaultFromEmail: runtimeSettings.emailFromEmail.trim(),
+        defaultFromName: normalizeMaybe(runtimeSettings.emailFromName),
+      },
+      transcribe: {
+        provider: runtimeSettings.transcribeProvider.trim(),
+      },
+    };
+
+    try {
+      const updated = await updateAdminSettings(payload);
+      setRuntimeSettings(settingsToForm(updated));
+    } catch (err) {
+      setRuntimeSettingsError(err instanceof Error ? err.message : 'Failed to save runtime settings');
+    } finally {
+      setRuntimeSettingsSaving(false);
+    }
+  };
+
+  if (userLoading || promptLoading || providerLoading || runtimeSettingsLoading) return <PageSkeleton />;
+
+  const renderUserPanel = () => {
+    const toggleRole = (roleKey: string) => {
+      setUserForm((current) => {
+        const roles = current.roles.includes(roleKey)
+          ? current.roles.filter((item) => item !== roleKey)
+          : [...current.roles, roleKey];
+        return { ...current, roles };
+      });
+    };
+
+    const userInitials = (user: AdminUserResponse | null) => {
+      if (!user) return 'U';
+      const source = user.displayName?.trim() || user.email;
+      const parts = source.split(/[\s@._-]+/).filter(Boolean);
+      return (parts.slice(0, 2).map((part) => part[0]).join('') || 'U').toUpperCase();
+    };
+
+    return (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-text-primary">Users</h2>
+                <p className="text-[11px] text-text-muted">Search users, edit profile fields, and manage roles.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void reloadUsers(selectedUserId ?? undefined).catch((err) => {
+                  setUserError(err instanceof Error ? err.message : 'Failed to refresh users');
+                })}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-input px-3.5 py-2 text-[12px] font-semibold text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="Search by email, name, locale, role..."
+                  className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Filter size={13} className="text-text-muted" />
+                {(['all', 'active', 'disabled', 'deleted'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setUserStatusFilter(value)}
+                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
+                      userStatusFilter === value
+                        ? 'bg-accent text-bg-primary'
+                        : 'border border-border bg-bg-input text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(100vh-310px)] overflow-y-auto p-3">
+            {filteredUsers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                <div className="text-[13px] font-medium text-text-primary">No users match your filters.</div>
+                <div className="mt-1 text-[11px] text-text-muted">Try a different search term or status filter.</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredUsers.map((user) => {
+                  const isSelected = user.id === selectedUserId && userMode !== 'new';
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => {
+                        setUserMode('view');
+                        setSelectedUserId(user.id);
+                      }}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]'
+                          : 'border-border bg-bg-input/40 hover:border-border/80 hover:bg-bg-input'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-bg-card text-[12px] font-bold text-accent">
+                          {userInitials(user)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-[12px] font-semibold text-text-primary">{user.displayName ?? user.email}</div>
+                              <div className="mt-0.5 truncate text-[11px] text-text-muted">{user.email}</div>
+                            </div>
+                            <Badge tone={user.status === 'active' ? 'accent' : 'muted'}>{user.status}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {user.roles.slice(0, 3).map((role) => (
+                              <Badge key={role}>{role}</Badge>
+                            ))}
+                            {user.roles.length === 0 && <Badge tone="muted">No roles</Badge>}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="min-h-[760px] rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[16px] font-semibold text-text-primary">
+                    {selectedUser ? selectedUser.displayName ?? selectedUser.email : 'Select a user'}
+                  </h2>
+                  {selectedUser && <Badge tone={selectedUser.status === 'active' ? 'accent' : 'muted'}>{selectedUser.status}</Badge>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                  {selectedUser ? (
+                    <>
+                      <span>{selectedUser.email}</span>
+                      <span>•</span>
+                      <span>Updated {formatDateTime(selectedUser.updatedAt)}</span>
+                    </>
+                  ) : (
+                    <span>No user selected.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveUser}
+                  disabled={userSaving || !selectedUser}
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {userSaving ? <RefreshCw size={14} className="animate-spin" /> : <CircleCheck size={14} />}
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <StatCard label="Users" value={String(userStats.total)} icon={<Users size={14} />} />
+              <StatCard label="Active" value={String(userStats.active)} icon={<CircleCheck size={14} />} accent />
+              <StatCard label="Disabled" value={String(userStats.disabled)} icon={<CircleDashed size={14} />} />
+              <StatCard label="Deleted" value={String(userStats.deleted)} icon={<Trash2 size={14} />} />
+            </div>
+          </div>
+
+          <div className="p-5">
+            {userDetailLoading && selectedUser ? (
+              <div className="grid gap-4">
+                <div className="h-28 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+                <div className="h-64 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+              </div>
+            ) : selectedUser ? (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <Field label="Email">
+                    <Input value={userForm.email} onChange={(value) => setUserForm((cur) => ({ ...cur, email: value }))} placeholder="name@example.com" />
+                  </Field>
+                  <Field label="Display name">
+                    <Input value={userForm.displayName} onChange={(value) => setUserForm((cur) => ({ ...cur, displayName: value }))} placeholder="User name" />
+                  </Field>
+                  <Field label="Avatar URL" helper="Optional">
+                    <Input value={userForm.avatarUrl} onChange={(value) => setUserForm((cur) => ({ ...cur, avatarUrl: value }))} placeholder="https://..." />
+                  </Field>
+                  <Field label="Status">
+                    <select
+                      value={userForm.status}
+                      onChange={(e) => setUserForm((cur) => ({ ...cur, status: e.target.value }))}
+                      className="w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors focus:border-accent/60 focus:bg-bg-card"
+                    >
+                      <option value="active">active</option>
+                      <option value="disabled">disabled</option>
+                      <option value="deleted">deleted</option>
+                    </select>
+                  </Field>
+                  <Field label="Locale" helper="Optional">
+                    <Input value={userForm.locale} onChange={(value) => setUserForm((cur) => ({ ...cur, locale: value }))} placeholder="en-US" />
+                  </Field>
+                  <Field label="Time zone" helper="Optional">
+                    <Input value={userForm.timeZone} onChange={(value) => setUserForm((cur) => ({ ...cur, timeZone: value }))} placeholder="Europe/London" />
+                  </Field>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-bg-input/30 p-4">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                    <UserCog size={14} className="text-accent" />
+                    Roles
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {userRoles.map((role) => {
+                      const selected = userForm.roles.includes(role.roleKey);
+                      return (
+                        <button
+                          key={role.roleKey}
+                          type="button"
+                          onClick={() => toggleRole(role.roleKey)}
+                          className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                            selected
+                              ? 'border-accent/40 bg-accent/15 text-accent'
+                              : 'border-border bg-bg-card text-text-secondary hover:text-text-primary hover:bg-bg-input'
+                          }`}
+                          title={role.description ?? role.displayName}
+                        >
+                          {role.displayName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  {[
+                    { label: 'Sessions', value: String(selectedUser.sessionCount), icon: <Server size={14} /> },
+                    { label: 'Last login', value: selectedUser.lastLoginAt ? formatDateTime(selectedUser.lastLoginAt) : '—', icon: <Clock3 size={14} /> },
+                    { label: 'Email verified', value: selectedUser.emailVerifiedAt ? formatDateTime(selectedUser.emailVerifiedAt) : '—', icon: <Shield size={14} /> },
+                    { label: 'Initials', value: userInitials(selectedUser), icon: <Users size={14} />, accent: true },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className={`rounded-2xl border p-4 ${item.accent ? 'border-accent/20 bg-accent/10' : 'border-border bg-bg-card/85'}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{item.label}</div>
+                        <div className={item.accent ? 'text-accent' : 'text-text-muted'}>{item.icon}</div>
+                      </div>
+                      <div className="mt-4 break-words text-[13px] font-semibold leading-5 text-text-primary">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-border bg-bg-input/40 p-4 text-[11px] text-text-muted">
+                  Created {formatDateTime(selectedUser.createdAt)} · Updated {formatDateTime(selectedUser.updatedAt)}
+                </div>
+              </div>
+            ) : (
+              <EmptyState icon={<Users size={18} />} title="No user selected" description="Choose a user from the list to edit profile data and roles." />
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
 
   const renderPromptPanel = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -1173,24 +1712,187 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
     </div>
   );
 
-  const currentTitle = section === 'prompts' ? 'Prompt management' : 'Search provider management';
-  const currentDescription =
-    section === 'prompts'
-      ? 'Scan, edit, archive, and delete prompt templates.'
-      : 'Add, review, and remove search-provider keys.';
+  const renderRuntimeSettingsPanel = () => (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+        <div className="border-b border-border px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[15px] font-semibold text-text-primary">Runtime settings</h2>
+              <p className="text-[11px] text-text-muted">Choose active providers. Secrets stay in .env.</p>
+            </div>
+            <button
+              type="button"
+              onClick={saveRuntimeSettings}
+              disabled={runtimeSettingsSaving}
+              className="inline-flex items-center gap-2 rounded-xl bg-accent px-3.5 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {runtimeSettingsSaving ? <RefreshCw size={14} className="animate-spin" /> : <CircleCheck size={14} />}
+              Save
+            </button>
+          </div>
+          <div className="mt-3 rounded-2xl border border-dashed border-border bg-bg-input/40 p-3 text-[11px] text-text-muted">
+            Admin settings are persisted in <span className="text-text-primary">upsettings</span>. API keys remain in environment variables.
+          </div>
+        </div>
 
-  const currentHeaderStats = section === 'prompts'
+        <div className="p-3 space-y-2">
+          {[
+            { label: 'Email provider', value: runtimeSettings.emailProvider, subtitle: 'Brevo and File dump are available; others can be added later.' },
+            { label: 'Transcribe provider', value: runtimeSettings.transcribeProvider, subtitle: 'Whisper is live; OpenRouter is routed via a separate job type.' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-border bg-bg-input/40 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{item.label}</div>
+              <div className="mt-1 text-[13px] font-semibold text-text-primary">{item.value}</div>
+              <div className="mt-1 text-[11px] text-text-muted">{item.subtitle}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="min-h-[760px] rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+        <div className="border-b border-border px-5 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[16px] font-semibold text-text-primary">Provider routing</h2>
+                <Badge tone="accent">Live</Badge>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                <span>Change the active provider without redeploying.</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={saveRuntimeSettings}
+                disabled={runtimeSettingsSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {runtimeSettingsSaving ? <RefreshCw size={14} className="animate-spin" /> : <CircleCheck size={14} />}
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {runtimeSettingsError && (
+            <div className="flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+              <CircleAlert size={16} className="mt-0.5 shrink-0" />
+              <div>{runtimeSettingsError}</div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Field label="Email provider">
+              <select
+                value={runtimeSettings.emailProvider}
+                onChange={(e) => setRuntimeSettings((cur) => ({ ...cur, emailProvider: e.target.value }))}
+                className="w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors focus:border-accent/60 focus:bg-bg-card"
+              >
+                <option value="Brevo">Brevo</option>
+                <option value="File">File dump</option>
+                <option value="Resend">Resend</option>
+                <option value="MailerSend">MailerSend</option>
+                <option value="Postmark">Postmark</option>
+                <option value="SendGrid">SendGrid</option>
+                <option value="Ses">Amazon SES</option>
+              </select>
+            </Field>
+
+            <Field label="Transcribe provider">
+              <select
+                value={runtimeSettings.transcribeProvider}
+                onChange={(e) => setRuntimeSettings((cur) => ({ ...cur, transcribeProvider: e.target.value }))}
+                className="w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors focus:border-accent/60 focus:bg-bg-card"
+              >
+                <option value="Whisper">Whisper</option>
+                <option value="OpenRouter">OpenRouter</option>
+              </select>
+            </Field>
+            <Field label="Default from email">
+              <Input value={runtimeSettings.emailFromEmail} onChange={(value) => setRuntimeSettings((cur) => ({ ...cur, emailFromEmail: value }))} placeholder="no-reply@example.com" />
+            </Field>
+            <Field label="Default from name">
+              <Input value={runtimeSettings.emailFromName} onChange={(value) => setRuntimeSettings((cur) => ({ ...cur, emailFromName: value }))} placeholder="AiSummarizer" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                <KeyRound size={14} className="text-accent" />
+                Environment keys
+              </div>
+              <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                <div><span className="text-text-primary">Email__Brevo__ApiKey</span> stays in `.env`.</div>
+                <div><span className="text-text-primary">Email__FileDump__FolderPath</span> stores dumped emails in `.env`-configured folder.</div>
+                <div><span className="text-text-primary">Jobs__WhisperTranscribe__*</span> stays in `.env`.</div>
+                <div><span className="text-text-primary">Jobs__OpenRouterTranscribe__*</span> stays in `.env` for future external transcription.</div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                <Shield size={14} className="text-accent" />
+                Routing behavior
+              </div>
+              <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                <div>Email sender resolves provider at send time.</div>
+                <div>Workflow processor resolves transcription provider at queue time.</div>
+                <div>Switching provider takes effect on the next request or workflow step.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+
+  const currentTitle =
+    section === 'users'
+      ? 'User management'
+      : section === 'prompts'
+        ? 'Prompt management'
+        : section === 'search-providers'
+        ? 'Search provider management'
+        : 'Runtime settings';
+  const currentDescription =
+    section === 'users'
+      ? 'Search users, inspect access, and edit profile data and roles.'
+      : section === 'prompts'
+        ? 'Scan, edit, archive, and delete prompt templates.'
+        : section === 'search-providers'
+        ? 'Add, review, and remove search-provider keys.'
+        : 'Choose active email and transcription providers.';
+
+  const currentHeaderStats = section === 'users'
+    ? [
+        { label: 'Total', value: String(userStats.total), icon: <Users size={14} /> },
+        { label: 'Active', value: String(userStats.active), icon: <CircleCheck size={14} />, accent: true },
+        { label: 'Disabled', value: String(userStats.disabled), icon: <CircleDashed size={14} /> },
+        { label: 'Deleted', value: String(userStats.deleted), icon: <Trash2 size={14} /> },
+      ]
+    : section === 'prompts'
     ? [
         { label: 'Total', value: String(promptStats.total), icon: <Layers3 size={14} /> },
         { label: 'Active', value: String(promptStats.active), icon: <CircleCheck size={14} />, accent: true },
         { label: 'Inactive', value: String(promptStats.inactive), icon: <CircleDashed size={14} /> },
         { label: 'Archive', value: String(promptStats.archives), icon: <Archive size={14} /> },
       ]
-    : [
+    : section === 'search-providers'
+      ? [
         { label: 'Total', value: String(providerStats.total), icon: <Server size={14} /> },
         { label: 'Active', value: String(providerStats.active), icon: <CircleCheck size={14} />, accent: true },
         { label: 'Inactive', value: String(providerStats.inactive), icon: <CircleDashed size={14} /> },
         { label: 'Quota', value: formatQuota(providerStats.quota), icon: <KeyRound size={14} /> },
+      ]
+      : [
+        { label: 'Email', value: runtimeSettings.emailProvider, icon: <Server size={14} /> },
+        { label: 'From', value: runtimeSettings.emailFromEmail, icon: <KeyRound size={14} />, accent: true },
+        { label: 'Transcribe', value: runtimeSettings.transcribeProvider, icon: <Sparkles size={14} /> },
+        { label: 'State', value: 'Live', icon: <CircleCheck size={14} /> },
       ];
 
   return (
@@ -1213,7 +1915,17 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
             <div className="grid gap-2">
               <button
                 type="button"
-                onClick={() => setSection('prompts')}
+                onClick={() => changeSection('users')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'users' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <Users size={16} />
+                Users
+              </button>
+              <button
+                type="button"
+                onClick={() => changeSection('prompts')}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
                   section === 'prompts' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
                 }`}
@@ -1223,13 +1935,23 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setSection('search-providers')}
+                onClick={() => changeSection('search-providers')}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
                   section === 'search-providers' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
                 }`}
               >
                 <Server size={16} />
                 Search providers
+              </button>
+              <button
+                type="button"
+                onClick={() => changeSection('runtime-settings')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'runtime-settings' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <Settings2 size={16} />
+                Runtime settings
               </button>
             </div>
           </div>
@@ -1247,11 +1969,23 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
                       { label: 'Execution trail', value: 'Runs and payloads', icon: <Activity size={14} /> },
                       { label: 'Version history', value: 'Archived revisions', icon: <Archive size={14} /> },
                     ]
-                  : [
-                      { label: 'Search keys', value: 'Manage API keys', icon: <KeyRound size={14} /> },
-                      { label: 'Usage tracking', value: 'Monthly quota view', icon: <Database size={14} /> },
-                      { label: 'Admin actions', value: 'Create / edit / delete', icon: <Shield size={14} /> },
-                    ]).map((item) => (
+                  : section === 'users'
+                    ? [
+                        { label: 'User profiles', value: 'Edit profile data', icon: <Users size={14} /> },
+                        { label: 'Role assignments', value: 'Multi-role access', icon: <UserCog size={14} /> },
+                        { label: 'Session insight', value: 'Login and activity state', icon: <Server size={14} /> },
+                      ]
+                  : section === 'search-providers'
+                    ? [
+                        { label: 'Search keys', value: 'Manage API keys', icon: <KeyRound size={14} /> },
+                        { label: 'Usage tracking', value: 'Monthly quota view', icon: <Database size={14} /> },
+                        { label: 'Admin actions', value: 'Create / edit / delete', icon: <Shield size={14} /> },
+                      ]
+                    : [
+                        { label: 'Runtime providers', value: 'Email and transcription', icon: <Settings2 size={14} /> },
+                        { label: 'Secrets', value: 'Kept in .env', icon: <KeyRound size={14} /> },
+                        { label: 'Switching', value: 'Takes effect immediately', icon: <Zap size={14} /> },
+                      ]).map((item) => (
                   <div key={item.label} className="flex items-center gap-2.5 rounded-lg bg-bg-input/60 px-3 py-2">
                     <div className="text-accent">{item.icon}</div>
                     <div className="min-w-0">
@@ -1295,7 +2029,17 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
               </div>
             </div>
 
-            {section === 'prompts' ? (
+            {section === 'users' ? (
+              <>
+                {userError && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>{userError}</div>
+                  </div>
+                )}
+                {renderUserPanel()}
+              </>
+            ) : section === 'prompts' ? (
               <>
                 {promptError && (
                   <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
@@ -1305,7 +2049,7 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
                 )}
                 {renderPromptPanel()}
               </>
-            ) : (
+            ) : section === 'search-providers' ? (
               <>
                 {providerError && (
                   <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
@@ -1314,6 +2058,16 @@ export default function AdminPage({ onBackToApp }: AdminPageProps) {
                   </div>
                 )}
                 {renderProviderPanel()}
+              </>
+            ) : (
+              <>
+                {runtimeSettingsError && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>{runtimeSettingsError}</div>
+                  </div>
+                )}
+                {renderRuntimeSettingsPanel()}
               </>
             )}
           </div>

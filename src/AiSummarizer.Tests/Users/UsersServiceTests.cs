@@ -1,4 +1,6 @@
+using System.Text.Json;
 using System.Data.Common;
+using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Users;
 using AiSummarizer.Domain.Users;
 using Xunit;
@@ -14,7 +16,8 @@ public sealed class UsersServiceTests
         var passwordHasher = new FakePasswordHasher();
         var refreshTokens = new FakeRefreshTokenService();
         var verifier = new FakeExternalIdentityVerifier();
-        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+        var jobs = new FakeJobsService();
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier, jobs);
 
         var result = await service.RegisterAsync(new RegisterUserCommand("User@Example.com", "Password123!", "Alice"), CancellationToken.None);
 
@@ -26,6 +29,9 @@ public sealed class UsersServiceTests
         Assert.Equal("hashed:Password123!", repo.CreatedIdentities.Single().PasswordHash);
         Assert.Equal("refresh-1", result.Session.RefreshToken);
         Assert.Equal(repo.Sessions.Single().Id.ToString(), result.Session.AccessToken);
+        Assert.Single(jobs.CreatedJobs);
+        Assert.Equal("email.welcome", jobs.CreatedJobs.Single().JobType);
+        Assert.Equal("user@example.com", jobs.CreatedJobs.Single().Payload.GetProperty("email").GetString());
     }
 
     [Fact]
@@ -35,7 +41,7 @@ public sealed class UsersServiceTests
         var passwordHasher = new FakePasswordHasher();
         var refreshTokens = new FakeRefreshTokenService();
         var verifier = new FakeExternalIdentityVerifier();
-        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier, new FakeJobsService());
 
         var user = repo.SeedUser("user@example.com");
         repo.SeedIdentity(new AuthIdentity
@@ -63,7 +69,7 @@ public sealed class UsersServiceTests
         var passwordHasher = new FakePasswordHasher();
         var refreshTokens = new FakeRefreshTokenService();
         var verifier = new FakeExternalIdentityVerifier();
-        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier, new FakeJobsService());
 
         var user = repo.SeedUser("user@example.com");
         var session = repo.SeedSession(user.Id, refreshTokens.Hash("refresh-existing"));
@@ -88,7 +94,7 @@ public sealed class UsersServiceTests
         {
             Result = new ExternalIdentityProfile(provider, subject, email, "Display Name", "https://avatar", true)
         };
-        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier, new FakeJobsService());
 
         var result = provider == AuthProvider.Google
             ? await service.LoginWithGoogleAsync(new ExternalLoginCommand("external-token"), CancellationToken.None)
@@ -110,7 +116,7 @@ public sealed class UsersServiceTests
         {
             Result = new ExternalIdentityProfile(AuthProvider.Google, "google-subject", "user@example.com", "Display Name", "https://avatar", true)
         };
-        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier, new FakeJobsService());
 
         var user = repo.SeedUser("user@example.com");
         repo.SeedIdentity(new AuthIdentity
@@ -143,7 +149,7 @@ public sealed class UsersServiceTests
         {
             Result = new ExternalIdentityProfile(AuthProvider.Google, "google-subject", "user@example.com", "Display Name", "https://avatar", false)
         };
-        var service = CreateService(repo, passwordHasher, refreshTokens, verifier);
+        var service = CreateService(repo, passwordHasher, refreshTokens, verifier, new FakeJobsService());
 
         await Assert.ThrowsAsync<UserUnauthorizedException>(() => service.LoginWithGoogleAsync(new ExternalLoginCommand("external-token"), CancellationToken.None));
         Assert.Empty(repo.CreatedUsers);
@@ -154,7 +160,7 @@ public sealed class UsersServiceTests
     public async Task LogoutAsync_revokes_session()
     {
         var repo = new FakeUsersRepository();
-        var service = CreateService(repo, new FakePasswordHasher(), new FakeRefreshTokenService(), new FakeExternalIdentityVerifier());
+        var service = CreateService(repo, new FakePasswordHasher(), new FakeRefreshTokenService(), new FakeExternalIdentityVerifier(), new FakeJobsService());
         var user = repo.SeedUser("user@example.com");
         var session = repo.SeedSession(user.Id, "hash:refresh-1");
 
@@ -168,12 +174,14 @@ public sealed class UsersServiceTests
         FakeUsersRepository repo,
         FakePasswordHasher passwordHasher,
         FakeRefreshTokenService refreshTokens,
-        FakeExternalIdentityVerifier verifier)
+        FakeExternalIdentityVerifier verifier,
+        FakeJobsService jobs)
         => new(
             repo,
             passwordHasher,
             refreshTokens,
             verifier,
+            jobs,
             new UsersOptions
             {
                 SessionLifetimeDays = 30,
@@ -324,6 +332,50 @@ public sealed class UsersServiceTests
             _sessions.Add(session);
             return session;
         }
+    }
+
+    private sealed class FakeJobsService : IJobsService
+    {
+        private readonly List<CreateJobCommand> _createdJobs = new();
+
+        public IReadOnlyList<CreateJobCommand> CreatedJobs => _createdJobs;
+
+        public Task<CreateJobResult> CreateJobAsync(CreateJobCommand command, CancellationToken cancellationToken)
+        {
+            _createdJobs.Add(command);
+            return Task.FromResult(new CreateJobResult(new JobDto(
+                Guid.NewGuid(),
+                command.ParentJobId,
+                command.RequestedByUserId,
+                command.JobType,
+                command.Priority,
+                "queued",
+                command.Payload,
+                null,
+                null,
+                null,
+                null,
+                0,
+                command.MaxAttempts,
+                DateTimeOffset.UtcNow,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow)));
+        }
+
+        public Task<JobDto> GetJobAsync(Guid jobId, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<JobDto>> ListActiveJobsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<JobDto>> ListHistoryJobsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<JobLogDto>> ListLogsAsync(Guid jobId, int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     private sealed class FakePasswordHasher : ISecurePasswordHasher

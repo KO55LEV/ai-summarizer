@@ -11,6 +11,7 @@ using AiSummarizer.Application.PublicRequests;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Infrastructure.Email;
 using AiSummarizer.Infrastructure.Persistence;
+using AiSummarizer.Infrastructure.Settings;
 using AiSummarizer.Infrastructure.State;
 using AiSummarizer.Infrastructure.MediaSources;
 using AiSummarizer.Infrastructure.Research;
@@ -62,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<IProjectsService, ProjectsService>();
         services.AddScoped<INotesService, NotesService>();
         services.AddScoped<IPromptsService, PromptsService>();
+        services.AddScoped<IAdminUsersService, AdminUsersService>();
+        services.AddAdminSettings(configuration);
         services.AddEmailing(configuration);
         services.AddHttpClient<ISearchProvider, TavilySearchProvider>(client =>
         {

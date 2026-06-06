@@ -48,6 +48,29 @@ public sealed class UsersRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             cmd.Parameters.AddWithValue("email", email);
         }, transaction, cancellationToken);
 
+    public Task<IReadOnlyList<string>> ListRoleKeysByUserIdAsync(Guid userId, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QueryStringsAsync("Users/ListUserRoleKeys.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("user_id", userId);
+        }, transaction, cancellationToken);
+
+    public Task<IReadOnlyList<AdminUserDto>> ListAdminUsersAsync(string? search, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QueryListAsync<AdminUserDto>("AdminUsers/ListAdminUsers.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("search", (object?)search?.Trim() ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("limit", 1000);
+            cmd.Parameters.AddWithValue("offset", 0);
+        }, transaction, cancellationToken);
+
+    public Task<AdminUserDto?> GetAdminUserByIdAsync(Guid userId, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync<AdminUserDto>("AdminUsers/GetAdminUserById.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("user_id", userId);
+        }, transaction, cancellationToken);
+
+    public Task<IReadOnlyList<AdminRoleDto>> ListRolesAsync(DbTransaction? transaction, CancellationToken cancellationToken)
+        => QueryListAsync<AdminRoleDto>("AdminUsers/ListRoles.sql", cmd => { }, transaction, cancellationToken);
+
     public Task<AuthIdentity?> GetAuthIdentityByProviderSubjectAsync(AuthProvider provider, string providerSubject, DbTransaction? transaction, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync<AuthIdentity>("Users/GetAuthIdentityByProviderSubject.sql", cmd =>
         {
@@ -115,6 +138,34 @@ public sealed class UsersRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             cmd.Parameters.AddWithValue("last_login_at", lastLoginAt.UtcDateTime);
         }, transaction, cancellationToken);
 
+    public Task UpdateUserProfileAsync(Guid userId, string email, string? displayName, string? avatarUrl, string? locale, string? timeZone, string status, DateTimeOffset updatedAt, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("AdminUsers/UpdateUserProfile.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("user_id", userId);
+            cmd.Parameters.AddWithValue("email", email);
+            cmd.Parameters.AddWithValue("display_name", (object?)displayName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("avatar_url", (object?)avatarUrl ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("locale", (object?)locale ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("time_zone", (object?)timeZone ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("status", status);
+            cmd.Parameters.AddWithValue("updated_at", updatedAt.UtcDateTime);
+        }, transaction, cancellationToken);
+
+    public Task UpdateAuthIdentityEmailsAsync(Guid userId, string email, DateTimeOffset updatedAt, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("AdminUsers/UpdateAuthIdentityEmails.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("user_id", userId);
+            cmd.Parameters.AddWithValue("email", email);
+            cmd.Parameters.AddWithValue("updated_at", updatedAt.UtcDateTime);
+        }, transaction, cancellationToken);
+
+    public Task ReplaceUserRolesAsync(Guid userId, IReadOnlyList<string> roleKeys, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("AdminUsers/ReplaceUserRoles.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("user_id", userId);
+            cmd.Parameters.AddWithValue("role_keys", roleKeys.ToArray());
+        }, transaction, cancellationToken);
+
     public Task UpdateAuthIdentityLastUsedAsync(Guid authIdentityId, DateTimeOffset lastUsedAt, DbTransaction? transaction, CancellationToken cancellationToken)
         => ExecuteNonQueryAsync("Users/UpdateAuthIdentityLastUsed.sql", cmd =>
         {
@@ -179,6 +230,64 @@ public sealed class UsersRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
         return value ?? throw new InvalidOperationException($"No rows returned for {sqlPath}.");
     }
 
+    private async Task<IReadOnlyList<T>> QueryListAsync<T>(string sqlPath, Action<NpgsqlCommand> configure, DbTransaction? transaction, CancellationToken cancellationToken) where T : class
+    {
+        if (transaction is null)
+        {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(sqlScriptLoader.Load(sqlPath), connection);
+            configure(command);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var items = new List<T>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                items.Add(Map<T>(reader));
+            }
+
+            return items;
+        }
+
+        await using var scopedCommand = CreateCommand(sqlPath, transaction);
+        configure(scopedCommand);
+        await using var scopedReader = await scopedCommand.ExecuteReaderAsync(cancellationToken);
+        var scopedItems = new List<T>();
+        while (await scopedReader.ReadAsync(cancellationToken))
+        {
+            scopedItems.Add(Map<T>(scopedReader));
+        }
+
+        return scopedItems;
+    }
+
+    private async Task<IReadOnlyList<string>> QueryStringsAsync(string sqlPath, Action<NpgsqlCommand> configure, DbTransaction? transaction, CancellationToken cancellationToken)
+    {
+        if (transaction is null)
+        {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(sqlScriptLoader.Load(sqlPath), connection);
+            configure(command);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var items = new List<string>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                items.Add(reader.GetString(0));
+            }
+
+            return items;
+        }
+
+        await using var scopedCommand = CreateCommand(sqlPath, transaction);
+        configure(scopedCommand);
+        await using var scopedReader = await scopedCommand.ExecuteReaderAsync(cancellationToken);
+        var scopedItems = new List<string>();
+        while (await scopedReader.ReadAsync(cancellationToken))
+        {
+            scopedItems.Add(scopedReader.GetString(0));
+        }
+
+        return scopedItems;
+    }
+
     private async Task ExecuteNonQueryAsync(string sqlPath, Action<NpgsqlCommand> configure, DbTransaction? transaction, CancellationToken cancellationToken)
     {
         if (transaction is null)
@@ -221,6 +330,8 @@ public sealed class UsersRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             nameof(User) => (MapUser(reader) as T)!,
             nameof(AuthIdentity) => (MapAuthIdentity(reader) as T)!,
             nameof(Session) => (MapSession(reader) as T)!,
+            nameof(AdminUserDto) => (MapAdminUser(reader) as T)!,
+            nameof(AdminRoleDto) => (MapAdminRole(reader) as T)!,
             _ => throw new NotSupportedException(typeof(T).Name)
         };
 
@@ -273,4 +384,26 @@ public sealed class UsersRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             CreatedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
             UpdatedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at"))
         };
+
+    private static AdminUserDto MapAdminUser(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetString(reader.GetOrdinal("email")),
+            reader.IsDBNull(reader.GetOrdinal("display_name")) ? null : reader.GetString(reader.GetOrdinal("display_name")),
+            reader.IsDBNull(reader.GetOrdinal("avatar_url")) ? null : reader.GetString(reader.GetOrdinal("avatar_url")),
+            reader.IsDBNull(reader.GetOrdinal("locale")) ? null : reader.GetString(reader.GetOrdinal("locale")),
+            reader.IsDBNull(reader.GetOrdinal("time_zone")) ? null : reader.GetString(reader.GetOrdinal("time_zone")),
+            reader.GetString(reader.GetOrdinal("status")),
+            reader.GetFieldValue<string[]>(reader.GetOrdinal("roles")),
+            reader.GetInt32(reader.GetOrdinal("session_count")),
+            reader.IsDBNull(reader.GetOrdinal("last_login_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("last_login_at")),
+            reader.IsDBNull(reader.GetOrdinal("email_verified_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("email_verified_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static AdminRoleDto MapAdminRole(NpgsqlDataReader reader)
+        => new(
+            reader.GetString(reader.GetOrdinal("role_key")),
+            reader.GetString(reader.GetOrdinal("display_name")),
+            reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")));
 }

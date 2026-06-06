@@ -13,6 +13,7 @@ public sealed record UserResponse(
     string? Locale,
     string? TimeZone,
     string Status,
+    IReadOnlyList<string> Roles,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 public sealed record AuthResponse(UserResponse User, SessionResponse Session);

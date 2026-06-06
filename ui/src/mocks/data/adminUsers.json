@@ -1,0 +1,57 @@
+{
+  "users": [
+    {
+      "id": "mock-user-1",
+      "email": "admin@example.com",
+      "displayName": "Admin User",
+      "avatarUrl": null,
+      "locale": "en-US",
+      "timeZone": "Europe/London",
+      "status": "active",
+      "roles": ["admin", "user"],
+      "sessionCount": 2,
+      "lastLoginAt": "2026-06-05T11:30:00.000Z",
+      "emailVerifiedAt": "2026-05-21T08:15:00.000Z",
+      "createdAt": "2026-05-20T08:15:00.000Z",
+      "updatedAt": "2026-06-05T11:30:00.000Z"
+    },
+    {
+      "id": "mock-user-2",
+      "email": "alex@example.com",
+      "displayName": "Alex Mercer",
+      "avatarUrl": null,
+      "locale": "en-GB",
+      "timeZone": "Europe/London",
+      "status": "active",
+      "roles": ["user", "editor"],
+      "sessionCount": 1,
+      "lastLoginAt": "2026-06-04T15:20:00.000Z",
+      "emailVerifiedAt": "2026-05-29T12:00:00.000Z",
+      "createdAt": "2026-05-29T12:00:00.000Z",
+      "updatedAt": "2026-06-04T15:20:00.000Z"
+    },
+    {
+      "id": "mock-user-3",
+      "email": "support@example.com",
+      "displayName": "Support Agent",
+      "avatarUrl": null,
+      "locale": "en-US",
+      "timeZone": "America/New_York",
+      "status": "disabled",
+      "roles": ["support", "user"],
+      "sessionCount": 0,
+      "lastLoginAt": null,
+      "emailVerifiedAt": "2026-05-10T09:10:00.000Z",
+      "createdAt": "2026-05-10T09:10:00.000Z",
+      "updatedAt": "2026-05-18T09:10:00.000Z"
+    }
+  ],
+  "roles": [
+    { "roleKey": "admin", "displayName": "Admin", "description": "Full access to the system." },
+    { "roleKey": "user", "displayName": "User", "description": "Standard application access." },
+    { "roleKey": "moderator", "displayName": "Moderator", "description": "Can review and moderate content." },
+    { "roleKey": "editor", "displayName": "Editor", "description": "Can create and edit content." },
+    { "roleKey": "support", "displayName": "Support", "description": "Can assist users and handle operational issues." },
+    { "roleKey": "viewer", "displayName": "Viewer", "description": "Read-only access." }
+  ]
+}

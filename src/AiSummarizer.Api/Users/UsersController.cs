@@ -77,6 +77,7 @@ public sealed class UsersController(IUsersService usersService) : ControllerBase
             user.Locale,
             user.TimeZone,
             user.Status,
+            user.Roles,
             user.CreatedAt,
             user.UpdatedAt);
 }

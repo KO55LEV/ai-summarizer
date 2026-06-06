@@ -10,8 +10,8 @@ public static class EmailServiceCollectionExtensions
 {
     public static IServiceCollection AddEmailing(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.SectionName));
         services.AddOptions<BrevoEmailOptions>().Bind(configuration.GetSection(BrevoEmailOptions.SectionName));
+        services.AddOptions<EmailFileDumpOptions>().Bind(configuration.GetSection(EmailFileDumpOptions.SectionName));
 
         services.AddHttpClient<BrevoEmailSender>((sp, client) =>
         {
@@ -20,6 +20,7 @@ public static class EmailServiceCollectionExtensions
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
         });
 
+        services.AddSingleton<FileEmailSender>();
         services.AddScoped<IEmailSender, EmailSender>();
         return services;
     }

@@ -44,6 +44,7 @@ docker compose up -d --build
 - `InternalApi__ApiKey`
 - `Tavily__ApiKey`
 - `Email__*`
+- `Transcribe__*`
 - `ReasoningAI__OpenRouter__ApiKey`
 - `ReasoningAI__GoogleVertex__ProjectId`
 - `ReasoningAI__GoogleVertex__CredentialsPath`
@@ -55,6 +56,11 @@ docker compose up -d --build
 - `Jobs__YouTubeDownload__*`
 - `Jobs__MediaExtractAudio__*`
 - `Jobs__WhisperTranscribe__*`
+
+Email provider choices:
+
+- `Email__Provider=Brevo` sends through Brevo
+- `Email__Provider=File` dumps messages into `Email__FileDump__FolderPath`
 
 Примеры:
 
@@ -74,6 +80,8 @@ Email__DefaultFromName=AiSummarizer
 Email__Brevo__ApiKey=
 Email__Brevo__BaseUrl=https://api.brevo.com
 Email__Brevo__TimeoutSeconds=60
+Email__FileDump__FolderPath=./data/email-outbox
+Transcribe__Provider=Whisper
 
 ReasoningAI__OpenRouter__ApiKey=
 ReasoningAI__OpenRouter__BaseUrl=https://openrouter.ai/api/v1
@@ -128,6 +136,13 @@ Jobs__WhisperTranscribe__MaxAttempts=3
 Jobs__WhisperTranscribe__RetryDelay=00:00:30
 Jobs__WhisperTranscribe__RequestTimeoutSeconds=7200
 Jobs__WhisperTranscribe__Language=en
+Jobs__OpenRouterTranscribe__ApiKey=
+Jobs__OpenRouterTranscribe__BaseUrl=https://openrouter.ai/api/v1
+Jobs__OpenRouterTranscribe__TranscribePath=/audio/transcriptions
+Jobs__OpenRouterTranscribe__Model=whisper-1
+Jobs__OpenRouterTranscribe__MaxAttempts=3
+Jobs__OpenRouterTranscribe__RetryDelay=00:00:30
+Jobs__OpenRouterTranscribe__RequestTimeoutSeconds=7200
 ```
 
 ## Seed workflow

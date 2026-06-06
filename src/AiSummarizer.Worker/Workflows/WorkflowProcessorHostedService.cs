@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Jobs;
+using AiSummarizer.Application.Settings;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.MediaSources;
 using AiSummarizer.Domain.Jobs;
@@ -17,6 +18,7 @@ public sealed class WorkflowProcessorHostedService(
     IMediaSourcesRepository mediaSourcesRepository,
     IWorkflowsRepository workflowsRepository,
     IJobsRepository jobsRepository,
+    IAdminSettingsService adminSettingsService,
     IOptions<WorkflowOptions> options,
     IOptions<YouTubeDownloadOptions> youtubeDownloadOptions,
     IOptions<WhisperTranscribeOptions> whisperTranscribeOptions,
@@ -109,11 +111,13 @@ public sealed class WorkflowProcessorHostedService(
             mediaSource.CanonicalUrl,
             mediaSource.OriginalUrl);
         var sourceUrl = mediaSource.CanonicalUrl;
+        var runtimeSettings = await adminSettingsService.GetAsync(cancellationToken);
+        var transcribeProvider = runtimeSettings.Transcribe.Provider;
 
         var currentStep = await GetLatestStepAsync(workflow.Id, cancellationToken);
         if (currentStep is null)
         {
-            await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
+            await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, transcribeProvider, cancellationToken);
             return;
         }
 
@@ -146,7 +150,7 @@ public sealed class WorkflowProcessorHostedService(
 
             if (job.Status is JobStatus.Succeeded)
             {
-                await HandleSucceededStepAsync(workflow, currentStep, job, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, workerId, leaseDuration, cancellationToken);
+                await HandleSucceededStepAsync(workflow, currentStep, job, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, transcribeProvider, workerId, leaseDuration, cancellationToken);
                 return;
             }
 
@@ -169,10 +173,10 @@ public sealed class WorkflowProcessorHostedService(
                 return;
             }
 
-        await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, cancellationToken);
+        await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, transcribeProvider, cancellationToken);
     }
 
-    private async Task StartWorkflowAsync(Workflow workflow, MediaSource mediaSource, MediaSourceIdentity sourceIdentity, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, CancellationToken cancellationToken)
+    private async Task StartWorkflowAsync(Workflow workflow, MediaSource mediaSource, MediaSourceIdentity sourceIdentity, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, string transcribeProvider, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var step = new WorkflowStep
@@ -304,7 +308,7 @@ public sealed class WorkflowProcessorHostedService(
         await CreateDownloadJobAsync(workflow, completedStep, sourceUrl, preferredLanguage, workflowRootDirectory, Environment.MachineName + "-workflow", TimeSpan.FromSeconds(Math.Max(30, options.Value.LeaseSeconds)), cancellationToken);
     }
 
-    private async Task HandleSucceededStepAsync(Workflow workflow, WorkflowStep currentStep, Job job, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task HandleSucceededStepAsync(Workflow workflow, WorkflowStep currentStep, Job job, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, string transcribeProvider, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         var stepOutput = currentStep.Output ?? job.Result;
         var now = DateTimeOffset.UtcNow;
@@ -333,7 +337,7 @@ public sealed class WorkflowProcessorHostedService(
                 await CreateImportTranscriptJobAsync(workflow, completedStep, GetString(job.Result, "transcriptFilePath"), GetString(job.Result, "sourceFilePath"), sourceUrl, preferredLanguage, workflowRootDirectory, workerId, leaseDuration, cancellationToken);
                 return;
             case "extract_audio":
-                await CreateTranscribeJobAsync(workflow, completedStep, GetString(job.Result, "outputFilePath"), sourceUrl, preferredLanguage, workflowRootDirectory, workerId, leaseDuration, cancellationToken);
+                await CreateTranscribeJobAsync(workflow, completedStep, GetString(job.Result, "outputFilePath"), sourceUrl, preferredLanguage, workflowRootDirectory, transcribeProvider, workerId, leaseDuration, cancellationToken);
                 return;
             case "download_video":
                 await CreateExtractAudioJobAsync(workflow, completedStep, GetString(job.Result, "outputFilePath"), sourceUrl, preferredLanguage, workflowRootDirectory, workerId, leaseDuration, cancellationToken);
@@ -481,7 +485,7 @@ public sealed class WorkflowProcessorHostedService(
         }, cancellationToken);
     }
 
-    private async Task CreateTranscribeJobAsync(Workflow workflow, WorkflowStep previousStep, string? audioFilePath, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    private async Task CreateTranscribeJobAsync(Workflow workflow, WorkflowStep previousStep, string? audioFilePath, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string transcribeProvider, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(audioFilePath))
         {
@@ -498,12 +502,18 @@ public sealed class WorkflowProcessorHostedService(
             outputDirectory = stepOutputDirectory,
             language = preferredLanguage
         });
+        var jobType = TryResolveTranscribeJobType(transcribeProvider);
+        if (jobType is null)
+        {
+            await FailWorkflowAsync(workflow, "unsupported_transcribe_provider", $"Unsupported transcribe provider: {transcribeProvider}", cancellationToken);
+            return;
+        }
         var job = await jobsRepository.CreateJobAsync(new Job
         {
             Id = Guid.NewGuid(),
             RequestedByUserId = workflow.RequestedByUserId,
             ParentJobId = null,
-            JobType = "whisper.transcribe",
+            JobType = jobType,
             Priority = 0,
             Payload = payload,
             Result = null,
@@ -548,10 +558,18 @@ public sealed class WorkflowProcessorHostedService(
         {
             await repository.CreateWorkflowStepAsync(step, transaction, cancellationToken);
             await repository.UpdateWorkflowAsync(workflow, transaction, cancellationToken);
-            await repository.AddWorkflowEventAsync(workflow.Id, step.StepKey, "info", "Queued Whisper transcription job.", JsonSerializer.SerializeToElement(new { jobId = job.Id, audioFilePath, sourceUrl }), transaction, cancellationToken);
+            await repository.AddWorkflowEventAsync(workflow.Id, step.StepKey, "info", $"Queued {jobType} transcription job.", JsonSerializer.SerializeToElement(new { jobId = job.Id, audioFilePath, sourceUrl, jobType }), transaction, cancellationToken);
             return 0;
         }, cancellationToken);
     }
+
+    private static string? TryResolveTranscribeJobType(string transcribeProvider)
+        => transcribeProvider.Trim().ToLowerInvariant() switch
+        {
+            "whisper" => "whisper.transcribe",
+            "openrouter" => "openrouter.transcribe",
+            _ => null
+        };
 
     private async Task CreateImportTranscriptJobAsync(Workflow workflow, WorkflowStep previousStep, string? transcriptFilePath, string? sourceFilePath, string sourceUrl, string? preferredLanguage, string workflowRootDirectory, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {

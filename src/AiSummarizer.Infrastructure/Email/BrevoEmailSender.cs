@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AiSummarizer.Application.Emails;
+using AiSummarizer.Application.Settings;
 using AiSummarizer.Infrastructure.Email.Models;
 using Microsoft.Extensions.Options;
 
@@ -9,10 +10,9 @@ namespace AiSummarizer.Infrastructure.Email;
 
 public sealed class BrevoEmailSender(
     HttpClient httpClient,
-    IOptions<BrevoEmailOptions> options,
-    IOptions<EmailOptions> emailOptions)
+    IOptions<BrevoEmailOptions> options)
 {
-    public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
+    public async Task<EmailSendResult> SendAsync(EmailMessage message, EmailRuntimeSettingsDto emailSettings, CancellationToken cancellationToken)
     {
         var apiKey = options.Value.ApiKey.Trim();
         if (apiKey.Length == 0)
@@ -30,7 +30,7 @@ public sealed class BrevoEmailSender(
             throw new ArgumentException("An email body is required.", nameof(message));
         }
 
-        var sender = ResolveSender(message);
+        var sender = ResolveSender(message, emailSettings);
         var payload = new BrevoSendEmailRequest(
             Sender: new BrevoEmailAddress(sender.Email, sender.Name),
             To: message.To.Select(recipient => new BrevoEmailAddress(recipient.Email, recipient.Name)).ToArray(),
@@ -63,7 +63,7 @@ public sealed class BrevoEmailSender(
         return new EmailSendResult("Brevo", result.MessageId);
     }
 
-    private EmailAddress ResolveSender(EmailMessage message)
+    private static EmailAddress ResolveSender(EmailMessage message, EmailRuntimeSettingsDto emailSettings)
     {
         if (message.From is not null)
         {
@@ -75,7 +75,7 @@ public sealed class BrevoEmailSender(
             return message.From;
         }
 
-        var defaultFromEmail = emailOptions.Value.DefaultFromEmail.Trim();
+        var defaultFromEmail = emailSettings.DefaultFromEmail.Trim();
         if (defaultFromEmail.Length == 0)
         {
             throw new InvalidOperationException("Email:DefaultFromEmail is required when the message does not provide a sender.");
@@ -83,7 +83,7 @@ public sealed class BrevoEmailSender(
 
         return new EmailAddress(
             defaultFromEmail,
-            emailOptions.Value.DefaultFromName);
+            emailSettings.DefaultFromName);
     }
 
     private sealed record BrevoSendEmailResponse(

@@ -19,11 +19,16 @@ import { ResearchPage } from './components/pages/ResearchPage';
 import { ResearchBriefingPage } from './components/pages/ResearchBriefingPage';
 import { ResearchCreatePage } from './components/pages/ResearchCreatePage';
 import AdminPage from './components/pages/AdminPage';
+import LandingPage from './components/pages/LandingPage';
+import LoginPage from './components/pages/LoginPage';
+import { getCurrentUser, loginWithPassword, logoutUser, registerUser } from './api/auth';
+import { getAdminRoles } from './api/adminUsers';
 import { getRecentVideos } from './api/recentVideos';
 import { analyzeVideo, getTranscriptBySource, getWorkflowStatus } from './api';
 import { getResearchList } from './api/research';
 import { getYouTubePreview } from './api/youtube';
 import { getCurrentUserId } from './config/currentUser';
+import { clearAuthenticated, getStoredAuthState, isAuthenticated, setStoredAuthState } from './config/auth';
 import type { NavItem, VideoMetadata, VideoRecord, WorkflowResponse, TranscriptResponse } from './types';
 import type { LogEntry, ProcessingState, PipelineStep } from './types/pipeline';
 import type { ResearchTopic, HistoryItem } from './api/types';
@@ -338,7 +343,9 @@ function buildCompletedState(video: VideoRecord): ProcessingState {
 }
 
 type AppLocation =
-  | { kind: 'admin' }
+  | { kind: 'landing' }
+  | { kind: 'auth'; mode: 'login' | 'signup' }
+  | { kind: 'admin'; section: 'users' | 'prompts' | 'search-providers' | 'runtime-settings' }
   | {
       kind: 'app';
       nav: NavItem;
@@ -372,8 +379,25 @@ function normalizePathname(pathname: string): string {
 function getLocationFromPathname(pathname: string): AppLocation {
   const path = normalizePathname(pathname);
 
-  if (path === '/admin' || path.startsWith('/admin/')) {
-    return { kind: 'admin' };
+  if (path === '/login' || path === '/signup') {
+    return { kind: 'auth', mode: path === '/signup' ? 'signup' : 'login' };
+  }
+
+  if (path === '/admin') {
+    return { kind: 'admin', section: 'users' };
+  }
+
+  if (path.startsWith('/admin/')) {
+    const section = path.split('/')[2];
+    if (section === 'prompts' || section === 'search-providers' || section === 'runtime-settings' || section === 'users') {
+      return { kind: 'admin', section };
+    }
+
+    return { kind: 'admin', section: 'users' };
+  }
+
+  if (path === '/') {
+    return { kind: 'landing' };
   }
 
   const segments = path.split('/').filter(Boolean);
@@ -412,6 +436,9 @@ function getPathForNav(nav: NavItem): string {
 
 export default function App() {
   const [location, setLocation] = useState<AppLocation>(() => getLocationFromPathname(window.location.pathname));
+  const [authState, setAuthState] = useState(() => getStoredAuthState());
+  const [authenticated, setAuthenticated] = useState<boolean>(() => isAuthenticated());
+  const [authHydrating, setAuthHydrating] = useState<boolean>(() => Boolean(getStoredAuthState() && isAuthenticated()));
   const urlRef = useRef('');
   const [selectedVideo, setSelectedVideo] = useState<VideoRecord | null>(null);
   const [selectedHistoryTranscript, setSelectedHistoryTranscript] = useState<{
@@ -429,6 +456,9 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisVideoMeta, setAnalysisVideoMeta] = useState<VideoMetadata>(() => buildFallbackVideoMeta('https://www.youtube.com/watch?v=dQw4w9WgXcQ'));
   const [pollingWorkflowId, setPollingWorkflowId] = useState<string | null>(null);
+  const [adminAccess, setAdminAccess] = useState<boolean | null>(null);
+  const isAdminRole = Boolean(authState?.user.roles?.some((role) => role.toLowerCase() === 'admin'));
+  const isAdmin = isAdminRole || adminAccess === true;
 
   useEffect(() => {
     const handlePopState = () => {
@@ -438,6 +468,93 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    const storedAuth = getStoredAuthState();
+    if (!storedAuth || !isAuthenticated()) {
+      clearAuthenticated();
+      setAuthState(null);
+      setAuthenticated(false);
+      setAdminAccess(null);
+      setAuthHydrating(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAuthHydrating(true);
+    getCurrentUser(storedAuth.session.accessToken)
+      .then((user) => {
+        if (cancelled) return;
+        const nextAuth = {
+          ...storedAuth,
+          user: {
+            ...storedAuth.user,
+            ...user,
+            roles: Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : storedAuth.user.roles ?? [],
+          },
+        };
+        setStoredAuthState(nextAuth);
+        setAuthState(nextAuth);
+        setAuthenticated(true);
+        if (nextAuth.user.roles.some((role) => role.toLowerCase() === 'admin')) {
+          setAdminAccess(true);
+          return;
+        }
+
+        return getAdminRoles(storedAuth.session.accessToken)
+          .then(() => {
+            if (!cancelled) {
+              setAdminAccess(true);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setAdminAccess(false);
+            }
+          });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearAuthenticated();
+        setAuthState(null);
+        setAuthenticated(false);
+        setAdminAccess(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAuthHydrating(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const normalizedPath = normalizePathname(window.location.pathname);
+
+    if (authHydrating) {
+      return;
+    }
+
+    if (authenticated && (location.kind === 'landing' || location.kind === 'auth')) {
+      navigateToPath('/dashboard');
+      return;
+    }
+
+    if (authenticated && location.kind === 'admin' && normalizedPath === '/admin') {
+      navigateToPath('/admin/users');
+      return;
+    }
+
+    if (location.kind === 'admin' && (!authenticated || !isAdmin)) {
+      navigateToPath(authenticated ? '/dashboard' : '/');
+      return;
+    }
+
+    if (!authenticated && location.kind === 'app' && normalizedPath !== '/') {
+      navigateToPath('/');
+    }
+  }, [authenticated, authHydrating, isAdmin, location]);
 
   useEffect(() => {
     getRecentVideos().then(setSidebarVideos);
@@ -767,8 +884,80 @@ export default function App() {
     return null;
   };
 
+  const handleAuthSubmit = async (input: {
+    mode: 'login' | 'signup';
+    email: string;
+    password: string;
+    displayName: string;
+    confirmPassword: string;
+    agree: boolean;
+  }) => {
+    const response =
+      input.mode === 'signup'
+        ? await registerUser({
+            email: input.email,
+            password: input.password,
+            displayName: input.displayName.trim() || null,
+          })
+        : await loginWithPassword({
+            email: input.email,
+            password: input.password,
+          });
+
+    setStoredAuthState(response);
+    setAuthState(response);
+    setAuthenticated(true);
+    navigateToPath('/dashboard');
+  };
+
+  const handleLogout = async () => {
+    const accessToken = authState?.session.accessToken ?? null;
+    try {
+      await logoutUser(accessToken);
+    } finally {
+      clearAuthenticated();
+      setAuthState(null);
+      setAuthenticated(false);
+      setAdminAccess(null);
+      navigateToPath('/');
+    }
+  };
+
+  if (location.kind === 'admin' && (authHydrating || !authenticated || !isAdmin)) {
+    return null;
+  }
+
+  if (location.kind === 'landing') {
+    return (
+      <LandingPage
+        onGetStarted={() => {
+          navigateToPath('/signup');
+        }}
+        onLogIn={() => navigateToPath('/login')}
+        onHome={() => navigateToPath('/')}
+      />
+    );
+  }
+
+  if (location.kind === 'auth') {
+    return (
+      <LoginPage
+        mode={location.mode}
+        onSubmit={handleAuthSubmit}
+        onSwitchMode={() => navigateToPath(location.mode === 'login' ? '/signup' : '/login')}
+        onHome={() => navigateToPath('/')}
+      />
+    );
+  }
+
   if (location.kind === 'admin') {
-    return <AdminPage onBackToApp={() => navigateToPath('/')} />;
+    return (
+      <AdminPage
+        initialSection={location.section}
+        onSectionChange={(section) => navigateToPath(`/admin/${section}`)}
+        onBackToApp={() => navigateToPath('/dashboard')}
+      />
+    );
   }
 
   return (
@@ -779,7 +968,19 @@ export default function App() {
         onViewAll={handleViewAll}
         onVideoSelect={(idx) => handleVideoSelect(sidebarVideos[idx])}
         recentVideos={sidebarVideos}
-        onOpenAdmin={() => navigateToPath('/admin')}
+        onOpenAdmin={isAdmin ? () => navigateToPath('/admin/users') : undefined}
+        onLogout={handleLogout}
+        onHome={() => navigateToPath('/')}
+        userName={authState?.user.displayName ?? authState?.user.email}
+        userEmail={authState?.user.email}
+        isAdmin={isAdmin}
+        userInitials={(authState?.user.displayName ?? authState?.user.email ?? 'AI')
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((part) => part[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase()}
       />
       {renderCenter()}
       {renderRight()}

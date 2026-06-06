@@ -1,7 +1,9 @@
 using System.Net;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using AiSummarizer.Application.Emails;
+using AiSummarizer.Application.Settings;
 using AiSummarizer.Infrastructure.Email;
 using AiSummarizer.Infrastructure.Email.Models;
 using Microsoft.Extensions.Options;
@@ -26,7 +28,7 @@ public sealed class BrevoEmailSenderTests
         {
             ApiKey = "brevo-api-key",
             BaseUrl = "https://api.brevo.com"
-        }), Options.Create(new EmailOptions()));
+        }));
 
         var result = await sender.SendAsync(new EmailMessage(
             To: [new EmailAddress("recipient@example.com", "Recipient")],
@@ -35,6 +37,7 @@ public sealed class BrevoEmailSenderTests
             From: new EmailAddress("sender@example.com", "Sender"),
             ReplyTo: new EmailAddress("reply@example.com", "Reply"),
             Tags: ["welcome"]),
+            new EmailRuntimeSettingsDto("Brevo", "no-reply@example.com", "AiSummarizer"),
             CancellationToken.None);
 
         Assert.Equal("Brevo", result.Provider);
@@ -67,19 +70,14 @@ public sealed class BrevoEmailSenderTests
         {
             ApiKey = "brevo-api-key",
             BaseUrl = "https://api.brevo.com"
-        }), Options.Create(new EmailOptions
-        {
-            DefaultFromEmail = "no-reply@example.com",
-            DefaultFromName = "AiSummarizer"
         }));
         var emailSender = new EmailSender(
             brevoSender,
-            Options.Create(new EmailOptions
+            new FileEmailSender(Options.Create(new EmailFileDumpOptions
             {
-                Provider = EmailProvider.Brevo,
-                DefaultFromEmail = "no-reply@example.com",
-                DefaultFromName = "AiSummarizer"
-            }));
+                FolderPath = Path.Combine(Path.GetTempPath(), "ai-summarizer-email-tests")
+            })),
+            new FakeAdminSettingsService("Brevo"));
 
         var result = await emailSender.SendAsync(new EmailMessage(
             To: [new EmailAddress("recipient@example.com")],
@@ -95,6 +93,47 @@ public sealed class BrevoEmailSenderTests
         Assert.Equal("AiSummarizer", document.RootElement.GetProperty("sender").GetProperty("name").GetString());
     }
 
+    [Fact]
+    public async Task SendAsync_writes_email_to_file_when_file_provider_is_active()
+    {
+        var dumpRoot = Path.Combine(Path.GetTempPath(), "ai-summarizer-email-dump-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dumpRoot);
+
+        var emailSender = new EmailSender(
+            new BrevoEmailSender(
+                new HttpClient(new RecordingHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))
+                {
+                    BaseAddress = new Uri("https://api.brevo.com")
+                },
+                Options.Create(new BrevoEmailOptions
+                {
+                    ApiKey = "brevo-api-key",
+                    BaseUrl = "https://api.brevo.com"
+                })),
+            new FileEmailSender(Options.Create(new EmailFileDumpOptions
+            {
+                FolderPath = dumpRoot
+            })),
+            new FakeAdminSettingsService("File"));
+
+        var result = await emailSender.SendAsync(new EmailMessage(
+            To: [new EmailAddress("recipient@example.com", "Recipient")],
+            Subject: "Dump test",
+            HtmlBody: "<p>Dump me</p>"),
+            CancellationToken.None);
+
+        Assert.Equal("File", result.Provider);
+        Assert.EndsWith(".json", result.MessageId);
+        Assert.True(File.Exists(result.MessageId));
+
+        var dumped = await File.ReadAllTextAsync(result.MessageId);
+        using var document = JsonDocument.Parse(dumped);
+        Assert.Equal("File", document.RootElement.GetProperty("provider").GetString());
+        Assert.Equal("Dump test", document.RootElement.GetProperty("email").GetProperty("subject").GetString());
+        Assert.Equal("no-reply@example.com", document.RootElement.GetProperty("email").GetProperty("from").GetProperty("email").GetString());
+        Assert.Equal("AiSummarizer", document.RootElement.GetProperty("settings").GetProperty("defaultFromName").GetString());
+    }
+
     private sealed class RecordingHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }
@@ -106,5 +145,16 @@ public sealed class BrevoEmailSenderTests
             RequestBody = request.Content is null ? null : request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
             return Task.FromResult(responseFactory(request));
         }
+    }
+
+    private sealed class FakeAdminSettingsService(string emailProvider = "Brevo") : IAdminSettingsService
+    {
+        public Task<AdminSettingsDto> GetAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new AdminSettingsDto(
+                new EmailRuntimeSettingsDto(emailProvider, "no-reply@example.com", "AiSummarizer"),
+                new TranscribeRuntimeSettingsDto("Whisper")));
+
+        public Task<AdminSettingsDto> UpdateAsync(UpdateAdminSettingsCommand command, CancellationToken cancellationToken)
+            => throw new NotImplementedException();
     }
 }

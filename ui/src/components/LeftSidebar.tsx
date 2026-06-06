@@ -7,6 +7,7 @@ import {
   FolderKanban,
   StickyNote,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { NavItem, VideoRecord } from '../types';
@@ -24,11 +25,43 @@ interface LeftSidebarProps {
   onViewAll: () => void;
   onVideoSelect: (idx: number) => void;
   recentVideos: VideoRecord[];
-  onOpenAdmin: () => void;
+  onOpenAdmin?: () => void;
+  onLogout: () => void;
+  onHome: () => void;
+  isAdmin: boolean;
+  userName?: string;
+  userEmail?: string;
+  userInitials?: string;
 }
 
-export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideoSelect, recentVideos, onOpenAdmin }: LeftSidebarProps) {
+function deriveFallbackInitials(userName?: string, userEmail?: string): string {
+  const source = (userName?.trim() || userEmail?.trim() || 'AI').toUpperCase();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`;
+  }
+
+  return source.slice(0, 2);
+}
+
+export default function LeftSidebar({
+  activeNav,
+  onNavChange,
+  onViewAll,
+  onVideoSelect,
+  recentVideos,
+  onOpenAdmin,
+  onLogout,
+  onHome,
+  isAdmin,
+  userName,
+  userEmail,
+  userInitials,
+}: LeftSidebarProps) {
   const showSummarizerContext = activeNav === 'summarizer' || activeNav === 'transcript';
+  const displayName = userName?.trim() || 'Researcher Pro';
+  const displayEmail = userEmail?.trim() || 'researcher.pro@example.com';
+  const initials = (userInitials?.trim() || deriveFallbackInitials(userName, userEmail)).slice(0, 2);
   const navGroupsToRender: { title: string; items: NavEntry[] }[] = [
     {
       title: 'Core',
@@ -61,13 +94,17 @@ export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideo
     <aside className="w-[250px] flex-shrink-0 bg-bg-secondary border-r border-border flex flex-col h-screen sticky top-0">
       {/* Logo */}
       <div className="px-4 pt-4 pb-3">
-        <div className="flex items-center gap-3 rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(0,212,170,0.08),rgba(19,28,48,0.92))] px-4 py-4 shadow-[0_0_0_1px_rgba(0,212,170,0.05)]">
+        <button
+          type="button"
+          onClick={onHome}
+          className="flex w-full items-center gap-3 rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(0,212,170,0.08),rgba(19,28,48,0.92))] px-4 py-4 text-left shadow-[0_0_0_1px_rgba(0,212,170,0.05)]"
+        >
           <img src="/favicon.svg" alt="" className="h-10 w-10 flex-shrink-0 rounded-xl shadow-lg shadow-black/20" />
           <div className="min-w-0">
             <div className="text-[13px] font-semibold text-text-primary leading-tight">Ai Summarizer</div>
             <div className="text-[11px] text-text-muted leading-tight mt-0.5">Research, notes, and project workspaces</div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Nav */}
@@ -150,20 +187,23 @@ export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideo
       <div className="border-t border-border px-4 py-3.5">
         <button
           onClick={() => onNavChange('profile')}
-          className="w-full flex items-center gap-2.5 hover:bg-bg-card rounded-lg p-1.5 -mx-1.5 transition-colors cursor-pointer group"
+          className="w-full rounded-2xl border border-accent/70 bg-[linear-gradient(180deg,rgba(9,17,31,0.98),rgba(11,17,32,0.96))] p-3 text-left shadow-[0_0_0_1px_rgba(80,220,255,0.08)] transition-colors hover:border-accent/90 hover:bg-[linear-gradient(180deg,rgba(12,22,39,0.99),rgba(11,17,32,0.98))]"
         >
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent to-cyan-400 flex items-center justify-center text-xs font-bold text-bg-primary flex-shrink-0">
-            RS
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] text-text-primary font-medium flex items-center gap-2">
-              Researcher Pro
-              <span className="text-[9px] bg-pro-badge/20 text-pro-badge px-1.5 py-0.5 rounded font-bold tracking-wide">
-                PRO
-              </span>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#25d6e6] text-[15px] font-semibold text-bg-primary shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+              {initials}
             </div>
-            <div className="text-[11px] text-text-muted">Plan renews Jun 12, 2026</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <div className="truncate text-[14px] font-semibold text-text-primary">{displayName}</div>
+                <span className="rounded-md bg-pro-badge/20 px-1.5 py-0.5 text-[9px] font-bold tracking-[0.14em] text-pro-badge">
+                  PRO
+                </span>
+              </div>
+              <div className="mt-0.5 truncate text-[11px] text-text-muted">{displayEmail}</div>
+            </div>
           </div>
+          <div className="mt-2 text-[11px] text-text-muted">Plan renews Jun 12, 2026</div>
         </button>
         <div className="mt-2.5">
           <div className="text-[11px] text-text-muted mb-1">42 / 500 videos this month</div>
@@ -171,16 +211,29 @@ export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideo
             <div className="h-full bg-accent rounded-full" style={{ width: '8.4%' }} />
           </div>
         </div>
+        {isAdmin && onOpenAdmin && (
+          <button
+            type="button"
+            onClick={onOpenAdmin}
+            className="mt-3 flex w-full items-center justify-between rounded-lg border border-border bg-bg-input px-3 py-2.5 text-[12px] text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+          >
+            <span className="flex items-center gap-2">
+              <Shield size={14} className="text-accent" />
+              Admin
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.12em] text-text-muted">Open</span>
+          </button>
+        )}
         <button
           type="button"
-          onClick={onOpenAdmin}
-          className="mt-3 flex w-full items-center justify-between rounded-lg border border-border bg-bg-input px-3 py-2.5 text-[12px] text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+          onClick={onLogout}
+          className="mt-2 flex w-full items-center justify-between rounded-lg border border-border bg-bg-input px-3 py-2.5 text-[12px] text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
         >
           <span className="flex items-center gap-2">
-            <Shield size={14} className="text-accent" />
-            Admin
+            <LogOut size={14} className="text-accent" />
+            Logout
           </span>
-          <span className="text-[10px] uppercase tracking-[0.12em] text-text-muted">Open</span>
+          <span className="text-[10px] uppercase tracking-[0.12em] text-text-muted">End session</span>
         </button>
       </div>
     </aside>

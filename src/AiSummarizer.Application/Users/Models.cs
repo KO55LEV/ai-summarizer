@@ -10,6 +10,7 @@ public sealed record UserDto(
     string? Locale,
     string? TimeZone,
     string Status,
+    IReadOnlyList<string> Roles,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
@@ -44,3 +45,32 @@ public sealed record ExternalIdentityProfile(
     string? DisplayName,
     string? AvatarUrl,
     bool EmailVerified);
+
+public sealed record AdminRoleDto(
+    string RoleKey,
+    string DisplayName,
+    string? Description);
+
+public sealed record AdminUserDto(
+    Guid Id,
+    string Email,
+    string? DisplayName,
+    string? AvatarUrl,
+    string? Locale,
+    string? TimeZone,
+    string Status,
+    IReadOnlyList<string> Roles,
+    int SessionCount,
+    DateTimeOffset? LastLoginAt,
+    DateTimeOffset? EmailVerifiedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record UpdateAdminUserCommand(
+    string Email,
+    string? DisplayName,
+    string? AvatarUrl,
+    string? Locale,
+    string? TimeZone,
+    string Status,
+    IReadOnlyList<string> Roles);

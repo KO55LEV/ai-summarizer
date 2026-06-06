@@ -29,6 +29,22 @@ body {
   margin: 0;
 }
 
+input.auth-input,
+input.auth-input:-webkit-autofill,
+input.auth-input:-webkit-autofill:hover,
+input.auth-input:-webkit-autofill:focus,
+input.auth-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px rgba(19, 28, 48, 0.98) inset;
+  background-color: rgba(19, 28, 48, 0.98) !important;
+  -webkit-text-fill-color: #f1f5f9;
+  caret-color: #f1f5f9;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+input.auth-input::selection {
+  background: rgba(0, 212, 170, 0.3);
+}
+
 #root {
   min-height: 100vh;
 }
