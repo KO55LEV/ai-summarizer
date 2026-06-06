@@ -43,6 +43,7 @@ docker compose up -d --build
 - `ConnectionStrings__Postgres`
 - `InternalApi__ApiKey`
 - `Tavily__ApiKey`
+- `Email__*`
 - `ReasoningAI__OpenRouter__ApiKey`
 - `ReasoningAI__GoogleVertex__ProjectId`
 - `ReasoningAI__GoogleVertex__CredentialsPath`
@@ -66,6 +67,13 @@ ConnectionStrings__Postgres=Host=localhost;Port=5432;Database=AiSummarizer;Usern
 InternalApi__ApiKey=change-me
 Tavily__ApiKey=
 Tavily__BaseUrl=https://api.tavily.com
+
+Email__Provider=Brevo
+Email__DefaultFromEmail=no-reply@example.com
+Email__DefaultFromName=AiSummarizer
+Email__Brevo__ApiKey=
+Email__Brevo__BaseUrl=https://api.brevo.com
+Email__Brevo__TimeoutSeconds=60
 
 ReasoningAI__OpenRouter__ApiKey=
 ReasoningAI__OpenRouter__BaseUrl=https://openrouter.ai/api/v1
@@ -141,6 +149,17 @@ Jobs__WhisperTranscribe__Language=en
 - верный ли `X-Internal-Api-Key`
 - запущен ли `whisper-service`
 - создает ли worker logs и пишет ли progress в БД
+
+### Research synthesis JSON failures
+
+Если `research.topic.synthesize` падает на парсинге ответа:
+
+- проверь `research_synthesis_runs.response_json`
+- проверь `research_synthesis_runs.output_json`
+- проверь `prompt_runs.request_json` и `prompt_runs.response_json`, если синтез использует prompt audit
+- сравни ответ провайдера с ожидаемой JSON-схемой
+- при необходимости обнови prompt и bump `ResearchSynthesis__PromptVersion`
+- rerun synthesis для того же `research_topic_run_id`
 
 ## Деплой
 

@@ -1,16 +1,24 @@
 using AiSummarizer.Application.Users;
+using AiSummarizer.Application.State;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Research;
+using AiSummarizer.Application.Projects;
+using AiSummarizer.Application.Notes;
 using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.PublicRequests;
 using AiSummarizer.Application.Workflows;
+using AiSummarizer.Infrastructure.Email;
 using AiSummarizer.Infrastructure.Persistence;
+using AiSummarizer.Infrastructure.State;
 using AiSummarizer.Infrastructure.MediaSources;
 using AiSummarizer.Infrastructure.Research;
+using AiSummarizer.Infrastructure.Research.Models;
 using AiSummarizer.Infrastructure.Reasoning;
 using AiSummarizer.Infrastructure.Jobs;
+using AiSummarizer.Infrastructure.Projects;
+using AiSummarizer.Infrastructure.Notes;
 using AiSummarizer.Infrastructure.Prompts;
 using AiSummarizer.Infrastructure.PublicRequests;
 using AiSummarizer.Infrastructure.Transcripts;
@@ -37,8 +45,12 @@ public static class DependencyInjection
         services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
         services.AddScoped<ITranscriptSchedulingService, TranscriptSchedulingService>();
         services.AddScoped<IResearchRepository, ResearchRepository>();
+        services.AddScoped<IProjectsRepository, ProjectsRepository>();
+        services.AddScoped<INotesRepository, NotesRepository>();
+        services.AddScoped<IAppStateRepository, AppStateRepository>();
         services.AddScoped<ISearchProviderRepository, SearchProvidersRepository>();
         services.AddOptions<ResearchSearchSourceOptions>().Bind(configuration.GetSection("ResearchSearchSources"));
+        services.AddOptions<ResearchSynthesisOptions>().Bind(configuration.GetSection(ResearchSynthesisOptions.SectionName));
         services.AddScoped<IPromptsRepository, PromptsRepository>();
         services.AddScoped<IWorkflowsRepository, WorkflowsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
@@ -47,7 +59,10 @@ public static class DependencyInjection
         services.AddHttpClient<FacebookIdentityVerifier>();
         services.AddScoped<IExternalIdentityVerifier, ExternalIdentityVerifier>();
         services.AddScoped<IResearchService, ResearchService>();
+        services.AddScoped<IProjectsService, ProjectsService>();
+        services.AddScoped<INotesService, NotesService>();
         services.AddScoped<IPromptsService, PromptsService>();
+        services.AddEmailing(configuration);
         services.AddHttpClient<ISearchProvider, TavilySearchProvider>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);

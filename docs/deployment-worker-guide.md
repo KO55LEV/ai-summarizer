@@ -59,6 +59,7 @@ AiSummarizer/
 - connection strings
 - internal API keys
 - search provider API keys
+- email provider API keys
 - reasoning provider keys and model defaults
 - JWT signing keys
 - настройки worker
@@ -76,6 +77,13 @@ ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=AiSummarizer;Userna
 InternalApiKey=change-me
 Tavily__ApiKey=
 Tavily__BaseUrl=https://api.tavily.com
+
+Email__Provider=Brevo
+Email__DefaultFromEmail=no-reply@example.com
+Email__DefaultFromName=AiSummarizer
+Email__Brevo__ApiKey=
+Email__Brevo__BaseUrl=https://api.brevo.com
+Email__Brevo__TimeoutSeconds=60
 
 ReasoningAI__OpenRouter__ApiKey=
 ReasoningAI__OpenRouter__BaseUrl=https://openrouter.ai/api/v1

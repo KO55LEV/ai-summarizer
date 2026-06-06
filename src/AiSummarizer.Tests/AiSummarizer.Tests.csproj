@@ -13,5 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="..\AiSummarizer.Application\AiSummarizer.Application.csproj" />
     <ProjectReference Include="..\AiSummarizer.Domain\AiSummarizer.Domain.csproj" />
+    <ProjectReference Include="..\AiSummarizer.Infrastructure\AiSummarizer.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
