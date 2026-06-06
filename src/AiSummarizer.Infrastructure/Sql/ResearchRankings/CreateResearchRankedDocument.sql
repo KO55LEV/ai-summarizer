@@ -1,0 +1,39 @@
+insert into research_ranked_documents (
+    id,
+    research_ranking_run_id,
+    research_topic_run_id,
+    research_topic_id,
+    research_document_id,
+    source_key,
+    title,
+    canonical_url,
+    score,
+    freshness_score,
+    source_weight,
+    length_score,
+    rank_position,
+    is_selected,
+    reason_json,
+    created_at,
+    updated_at
+)
+values (
+    @id,
+    @research_ranking_run_id,
+    @research_topic_run_id,
+    @research_topic_id,
+    @research_document_id,
+    @source_key,
+    @title,
+    @canonical_url,
+    @score,
+    @freshness_score,
+    @source_weight,
+    @length_score,
+    @rank_position,
+    @is_selected,
+    @reason_json,
+    @created_at,
+    @updated_at
+)
+returning id;

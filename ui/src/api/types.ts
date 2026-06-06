@@ -163,6 +163,7 @@ export interface ProfileData {
 
 export interface ResearchTopic {
   id: string;
+  projectId: string | null;
   name: string;
   description: string;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
@@ -173,6 +174,7 @@ export interface ResearchTopic {
   lastRun: string;
   nextRun: string;
   lastBriefingPreview: string;
+  updatedAt: string;
 }
 
 export interface ResearchStats {

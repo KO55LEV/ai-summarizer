@@ -13,9 +13,11 @@ builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddCommandLine(args);
 
 builder.Services.Configure<WorkerOptions>(builder.Configuration.GetSection("Worker"));
+builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection("Telegram"));
 builder.Services.Configure<YouTubeDownloadOptions>(builder.Configuration.GetSection("Jobs:YouTubeDownload"));
 builder.Services.Configure<MediaExtractAudioOptions>(builder.Configuration.GetSection("Jobs:MediaExtractAudio"));
 builder.Services.Configure<WhisperTranscribeOptions>(builder.Configuration.GetSection("Jobs:WhisperTranscribe"));
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.Configure<WorkflowOptions>(builder.Configuration.GetSection("Workflows"));
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("Postgres")
@@ -26,6 +28,14 @@ builder.Services.AddSingleton<IJobHandler, YouTubeDownloadJobHandler>();
 builder.Services.AddSingleton<IJobHandler, MediaExtractAudioJobHandler>();
 builder.Services.AddSingleton<IJobHandler, WhisperTranscribeJobHandler>();
 builder.Services.AddSingleton<IJobHandler, TranscriptImportJobHandler>();
+builder.Services.AddSingleton<IJobHandler, ResearchTopicRunJobHandler>();
+builder.Services.AddSingleton<IJobHandler, ResearchTopicFetchJobHandler>();
+builder.Services.AddSingleton<IJobHandler, ResearchTopicNormalizeJobHandler>();
+builder.Services.AddSingleton<IJobHandler, ResearchTopicRankJobHandler>();
+builder.Services.AddSingleton<IJobHandler, ResearchTopicSynthesizeJobHandler>();
+builder.Services.AddSingleton<TelegramBotApiClient>();
+builder.Services.AddSingleton<IJobHandler, TelegramIngestJobHandler>();
+builder.Services.AddHostedService<TelegramPollingHostedService>();
 builder.Services.AddHostedService<JobsProcessorHostedService>();
 builder.Services.AddHostedService<WorkflowProcessorHostedService>();
 

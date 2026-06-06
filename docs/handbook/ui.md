@@ -44,6 +44,7 @@ ui/src/
     RightSidebar.tsx           ← right panel shown on Summarizer home
     ProcessingRightSidebar.tsx ← right panel shown during processing
     TranscriptRightSidebar.tsx ← right panel shown on completed transcript
+    AdminPage.tsx              ← admin console with prompts CRUD and inspection tabs
     AudioWaveform.tsx          ← animated waveform bar component
     icons.tsx                  ← custom 24×24 stroke-based SVG icon set
     pages/
@@ -71,6 +72,7 @@ ui/src/
 ```
 
 `App.tsx` holds `activeNav` state and routes it to the correct center panel via `renderCenter()` and right panel via `renderRight()`.
+There is also a top-level `/admin` route that renders `AdminPage` and its own left-side menu for prompt management.
 
 ### Summarizer page — three sub-states
 
@@ -136,6 +138,7 @@ Component
 | `api/insights.ts` | `getInsightsData()` | `InsightsData` |
 | `api/exports.ts` | `getExports()` | `ExportRecord[]` |
 | `api/profile.ts` | `getProfileData()` | `ProfileData` |
+| `api/prompts.ts` | `listPrompts()`, `createPrompt()`, `updatePrompt()`, `deletePrompt()` | `PromptResponse[]`, `PromptResponse` |
 | `api/recentVideos.ts` | `getRecentVideos()` | `VideoRecord[]` |
 
 All types are defined in `api/types.ts`.
@@ -156,6 +159,7 @@ All types are defined in `api/types.ts`.
 | `mocks/data/exports.json` | `ExportsPage` |
 | `mocks/data/profile.json` | `ProfilePage` |
 | `mocks/data/recentVideos.json` | `LeftSidebar` (via `App.tsx`) |
+| `mocks/data/prompts.json` | `AdminPage` |
 
 ## Pages
 
@@ -200,6 +204,17 @@ Left-nav sub-sections: Account, Notifications, Language & region, Privacy & data
 Avatar with initials, stats row (4 cards), subscription card with usage bar, language breakdown bars, recent activity list, quick settings links. Data from `getProfileData()`.
 
 Props: `onNavChange: (nav: NavItem) => void`
+
+### AdminPage
+
+Admin console available at `/admin`. Includes:
+
+- left-side admin menu with `Prompts`
+- searchable prompt library
+- prompt editor with create, update, and delete actions
+- `Runs`, `Archive`, and `Usage` inspection tabs
+
+The page uses `/api/prompts` plus `/api/prompts/{id}/archive`, `/runs`, and `/usage`.
 
 ## Processing simulation
 

@@ -10,6 +10,7 @@
 - [База данных](handbook/database.md)
 - [API](handbook/api.md)
 - [Jobs и workflow](handbook/workflows.md)
+- [Research search implementation plan](handbook/research-search-implementation-plan.md)
 - [Prompts и LLM-аудит](handbook/prompts.md)
 - [Пользователи, роли и безопасность](handbook/security.md)
 - [Операции и запуск](handbook/operations.md)

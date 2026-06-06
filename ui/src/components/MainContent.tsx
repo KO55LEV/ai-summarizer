@@ -206,10 +206,10 @@ export default function MainContent({ onStartAnalysis, errorMessage }: MainConte
           </div>
         </div>
 
-        {/* ── How YouTube Summarizer works ───────────────── */}
+        {/* ── How Ai Summarizer works ───────────────── */}
         <div className="bg-bg-card border border-border rounded-xl px-6 py-6 mb-4">
           <h3 className="text-[15px] font-bold text-text-primary text-center mb-6">
-            How YouTube Summarizer works
+            How Ai Summarizer works
           </h3>
 
           <div className="flex items-start justify-center gap-0">

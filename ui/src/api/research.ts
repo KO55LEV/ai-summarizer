@@ -5,6 +5,7 @@ import { getMockResearchList, getMockResearchBriefing } from '../mocks/api/resea
 interface ApiResearchTopic {
   id: string;
   requestedByUserId: string | null;
+  projectId: string | null;
   name: string;
   description: string | null;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
@@ -148,6 +149,7 @@ function formatReadTime(minutes: number): string {
 function mapTopic(topic: ApiResearchTopic): ResearchTopic {
   return {
     id: topic.id,
+    projectId: topic.projectId ?? null,
     name: topic.name,
     description: topic.description ?? '',
     frequency: topic.frequency,
@@ -158,6 +160,7 @@ function mapTopic(topic: ApiResearchTopic): ResearchTopic {
     lastRun: formatRelativeDate(topic.lastRunAt, topic.status),
     nextRun: formatRelativeDate(topic.nextRunAt, topic.status),
     lastBriefingPreview: topic.lastBriefingPreview ?? '',
+    updatedAt: topic.updatedAt ?? topic.lastRunAt ?? new Date().toISOString(),
   };
 }
 
@@ -214,6 +217,7 @@ export async function createResearchTopic(input: CreateResearchTopicInput): Prom
   if (import.meta.env.VITE_USE_MOCK_API === 'true') {
     return {
       id: `mock-${Date.now()}`,
+      projectId: null,
       name: input.name,
       description: input.description ?? '',
       frequency: input.frequency,
@@ -224,6 +228,7 @@ export async function createResearchTopic(input: CreateResearchTopicInput): Prom
       lastRun: '—',
       nextRun: input.deliveryTime ? `at ${input.deliveryTime}` : '—',
       lastBriefingPreview: '',
+      updatedAt: new Date().toISOString(),
     };
   }
 

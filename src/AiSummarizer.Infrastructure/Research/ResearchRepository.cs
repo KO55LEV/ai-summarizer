@@ -170,6 +170,193 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             cmd.Parameters.AddWithValue("updated_at", DateTimeOffset.UtcNow.UtcDateTime);
         }, transaction, cancellationToken);
 
+    public Task<Guid> CreateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchRuns/CreateResearchTopicRun.sql", cmd =>
+        {
+            BindTopicRun(cmd, run);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchRuns/UpdateResearchTopicRun.sql", cmd =>
+        {
+            BindTopicRun(cmd, run);
+        }, transaction, cancellationToken);
+
+    public Task<ResearchTopicRunDto?> GetTopicRunByIdAsync(Guid runId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("ResearchRuns/GetResearchTopicRunById.sql", cmd => cmd.Parameters.AddWithValue("run_id", runId), cancellationToken, MapTopicRun);
+
+    public Task<IReadOnlyList<ResearchTopicRunDto>> ListTopicRunsAsync(Guid topicId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchRuns/ListResearchTopicRuns.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("topic_id", topicId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
+        }, cancellationToken, MapTopicRun);
+
+    public Task<Guid> CreateTopicRunPhaseAsync(ResearchTopicRunPhaseRecord phase, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchRuns/CreateResearchTopicRunPhase.sql", cmd =>
+        {
+            BindTopicRunPhase(cmd, phase);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateTopicRunPhaseAsync(ResearchTopicRunPhaseRecord phase, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchRuns/UpdateResearchTopicRunPhase.sql", cmd =>
+        {
+            BindTopicRunPhase(cmd, phase);
+        }, transaction, cancellationToken);
+
+    public Task<ResearchTopicRunPhaseDto?> GetTopicRunPhaseAsync(Guid runId, string phaseKey, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("ResearchRuns/GetResearchTopicRunPhase.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("run_id", runId);
+            cmd.Parameters.AddWithValue("phase_key", phaseKey);
+        }, cancellationToken, MapTopicRunPhase);
+
+    public Task<IReadOnlyList<ResearchTopicRunPhaseDto>> ListTopicRunPhasesAsync(Guid runId, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchRuns/ListResearchTopicRunPhases.sql", cmd => cmd.Parameters.AddWithValue("run_id", runId), cancellationToken, MapTopicRunPhase);
+
+    public Task<Guid> CreateSearchRunAsync(ResearchSearchRunRecord searchRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchRuns/CreateResearchSearchRun.sql", cmd =>
+        {
+            BindSearchRun(cmd, searchRun);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateSearchRunAsync(ResearchSearchRunRecord searchRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchRuns/UpdateResearchSearchRun.sql", cmd =>
+        {
+            BindSearchRun(cmd, searchRun);
+        }, transaction, cancellationToken);
+
+    public Task<Guid> CreateSearchResultAsync(ResearchSearchResultRecord result, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchRuns/CreateResearchSearchResult.sql", cmd =>
+        {
+            BindSearchResult(cmd, result);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task<IReadOnlyList<ResearchSearchResultDto>> ListSearchResultsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchRuns/ListResearchSearchResults.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("research_topic_run_id", researchTopicRunId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
+        }, cancellationToken, MapSearchResult);
+
+    public Task<Guid> CreateContentRunAsync(ResearchContentRunRecord contentRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchContent/CreateResearchContentRun.sql", cmd =>
+        {
+            BindContentRun(cmd, contentRun);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateContentRunAsync(ResearchContentRunRecord contentRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchContent/UpdateResearchContentRun.sql", cmd =>
+        {
+            BindContentRun(cmd, contentRun);
+        }, transaction, cancellationToken);
+
+    public Task<ResearchContentRunDto?> GetContentRunByIdAsync(Guid contentRunId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("ResearchContent/GetResearchContentRunById.sql", cmd => cmd.Parameters.AddWithValue("content_run_id", contentRunId), cancellationToken, MapContentRun);
+
+    public Task<Guid> CreateContentItemAsync(ResearchContentItemRecord contentItem, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchContent/CreateResearchContentItem.sql", cmd =>
+        {
+            BindContentItem(cmd, contentItem);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateContentItemAsync(ResearchContentItemRecord contentItem, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchContent/UpdateResearchContentItem.sql", cmd =>
+        {
+            BindContentItem(cmd, contentItem);
+        }, transaction, cancellationToken);
+
+    public Task<IReadOnlyList<ResearchContentItemDto>> ListContentItemsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchContent/ListResearchContentItems.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("research_topic_run_id", researchTopicRunId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
+        }, cancellationToken, MapContentItem);
+
+    public Task<Guid> CreateDocumentAsync(ResearchDocumentRecord document, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchDocuments/CreateResearchDocument.sql", cmd =>
+        {
+            BindDocument(cmd, document);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task<Guid> CreateDocumentChunkAsync(ResearchDocumentChunkRecord chunk, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchDocuments/CreateResearchDocumentChunk.sql", cmd =>
+        {
+            BindDocumentChunk(cmd, chunk);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task<IReadOnlyList<ResearchDocumentDto>> ListDocumentsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchDocuments/ListResearchDocuments.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("research_topic_run_id", researchTopicRunId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
+        }, cancellationToken, MapDocument);
+
+    public Task<IReadOnlyList<ResearchDocumentChunkDto>> ListDocumentChunksAsync(Guid researchDocumentId, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchDocuments/ListResearchDocumentChunks.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("research_document_id", researchDocumentId);
+        }, cancellationToken, MapDocumentChunk);
+
+    public Task<Guid> CreateRankingRunAsync(ResearchRankingRunRecord rankingRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchRankings/CreateResearchRankingRun.sql", cmd =>
+        {
+            BindRankingRun(cmd, rankingRun);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateRankingRunAsync(ResearchRankingRunRecord rankingRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchRankings/UpdateResearchRankingRun.sql", cmd =>
+        {
+            BindRankingRun(cmd, rankingRun);
+        }, transaction, cancellationToken);
+
+    public Task<ResearchRankingRunDto?> GetRankingRunByIdAsync(Guid rankingRunId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("ResearchRankings/GetResearchRankingRunById.sql", cmd => cmd.Parameters.AddWithValue("ranking_run_id", rankingRunId), cancellationToken, MapRankingRun);
+
+    public Task<IReadOnlyList<ResearchRankingRunDto>> ListRankingRunsAsync(Guid researchTopicRunId, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchRankings/ListResearchRankingRuns.sql", cmd => cmd.Parameters.AddWithValue("research_topic_run_id", researchTopicRunId), cancellationToken, MapRankingRun);
+
+    public Task<Guid> CreateRankedDocumentAsync(ResearchRankedDocumentRecord rankedDocument, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchRankings/CreateResearchRankedDocument.sql", cmd =>
+        {
+            BindRankedDocument(cmd, rankedDocument);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task<IReadOnlyList<ResearchRankedDocumentDto>> ListRankedDocumentsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchRankings/ListResearchRankedDocuments.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("research_topic_run_id", researchTopicRunId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
+        }, cancellationToken, MapRankedDocument);
+
+    public Task<Guid> CreateSynthesisRunAsync(ResearchSynthesisRunRecord synthesisRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("ResearchSynthesis/CreateResearchSynthesisRun.sql", cmd =>
+        {
+            BindSynthesisRun(cmd, synthesisRun);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
+
+    public Task UpdateSynthesisRunAsync(ResearchSynthesisRunRecord synthesisRun, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("ResearchSynthesis/UpdateResearchSynthesisRun.sql", cmd =>
+        {
+            BindSynthesisRun(cmd, synthesisRun);
+        }, transaction, cancellationToken);
+
+    public Task<ResearchSynthesisRunDto?> GetSynthesisRunByIdAsync(Guid synthesisRunId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("ResearchSynthesis/GetResearchSynthesisRunById.sql", cmd => cmd.Parameters.AddWithValue("synthesis_run_id", synthesisRunId), cancellationToken, MapSynthesisRun);
+
+    public Task<IReadOnlyList<ResearchSynthesisRunDto>> ListSynthesisRunsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("ResearchSynthesis/ListResearchSynthesisRuns.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("research_topic_run_id", researchTopicRunId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
+        }, cancellationToken, MapSynthesisRun);
+
     private async Task<T?> QuerySingleOrDefaultAsync<T>(string sqlPath, Action<NpgsqlCommand> configure, CancellationToken cancellationToken, Func<NpgsqlDataReader, T> mapper)
     {
         if (_transaction is not null)
@@ -292,6 +479,277 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         return new NpgsqlCommand(sqlScriptLoader.Load(sqlPath), connection, transaction);
     }
 
+    private static void BindTopicRun(NpgsqlCommand command, ResearchTopicRunRecord run)
+    {
+        command.Parameters.AddWithValue("id", run.Id);
+        command.Parameters.AddWithValue("research_topic_id", run.ResearchTopicId);
+        command.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)run.RequestedByUserId ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("job_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)run.JobId ?? DBNull.Value
+        });
+        command.Parameters.AddWithValue("status", run.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("triggered_by", (object?)run.TriggeredBy ?? DBNull.Value);
+        command.Parameters.AddWithValue("started_at", (object?)run.StartedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished_at", (object?)run.FinishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("next_retry_at", (object?)run.NextRetryAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)run.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)run.ErrorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("summary_preview", (object?)run.SummaryPreview ?? DBNull.Value);
+        command.Parameters.AddWithValue("created_at", run.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", run.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindTopicRunPhase(NpgsqlCommand command, ResearchTopicRunPhaseRecord phase)
+    {
+        command.Parameters.AddWithValue("id", phase.Id);
+        command.Parameters.AddWithValue("research_topic_run_id", phase.ResearchTopicRunId);
+        command.Parameters.AddWithValue("phase_key", phase.PhaseKey);
+        command.Parameters.AddWithValue("status", phase.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("attempt_count", phase.AttemptCount);
+        command.Parameters.AddWithValue("started_at", (object?)phase.StartedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished_at", (object?)phase.FinishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)phase.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)phase.ErrorMessage ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("metrics_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(phase.MetricsJson) ? "{}" : phase.MetricsJson
+        });
+        command.Parameters.AddWithValue("created_at", phase.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", phase.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindSearchRun(NpgsqlCommand command, ResearchSearchRunRecord searchRun)
+    {
+        command.Parameters.AddWithValue("id", searchRun.Id);
+        command.Parameters.AddWithValue("research_topic_run_id", searchRun.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_run_phase_id", searchRun.ResearchTopicRunPhaseId);
+        command.Parameters.AddWithValue("research_topic_id", searchRun.ResearchTopicId);
+        command.Parameters.AddWithValue("source_key", searchRun.SourceKey);
+        command.Parameters.AddWithValue("planner_version", searchRun.PlannerVersion);
+        command.Parameters.AddWithValue("query_count", searchRun.QueryCount);
+        command.Parameters.AddWithValue("status", searchRun.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("started_at", (object?)searchRun.StartedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished_at", (object?)searchRun.FinishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)searchRun.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)searchRun.ErrorMessage ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("metrics_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(searchRun.MetricsJson) ? "{}" : searchRun.MetricsJson
+        });
+        command.Parameters.AddWithValue("created_at", searchRun.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", searchRun.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindSearchResult(NpgsqlCommand command, ResearchSearchResultRecord result)
+    {
+        command.Parameters.AddWithValue("id", result.Id);
+        command.Parameters.AddWithValue("research_search_run_id", result.ResearchSearchRunId);
+        command.Parameters.AddWithValue("research_topic_run_id", result.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_id", result.ResearchTopicId);
+        command.Parameters.AddWithValue("source_key", result.SourceKey);
+        command.Parameters.AddWithValue("query", result.Query);
+        command.Parameters.AddWithValue("title", result.Title);
+        command.Parameters.AddWithValue("url", result.Url);
+        command.Parameters.AddWithValue("canonical_url", (object?)result.CanonicalUrl ?? DBNull.Value);
+        command.Parameters.AddWithValue("snippet", (object?)result.Snippet ?? DBNull.Value);
+        command.Parameters.AddWithValue("score", result.Score);
+        command.Parameters.AddWithValue("published_at", (object?)result.PublishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("author_name", (object?)result.AuthorName ?? DBNull.Value);
+        command.Parameters.AddWithValue("domain", (object?)result.Domain ?? DBNull.Value);
+        command.Parameters.AddWithValue("language", (object?)result.Language ?? DBNull.Value);
+        command.Parameters.AddWithValue("result_rank", result.ResultRank);
+        command.Parameters.Add(new NpgsqlParameter("raw_result_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(result.RawResultJson) ? "{}" : result.RawResultJson
+        });
+        command.Parameters.AddWithValue("created_at", result.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", result.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindContentRun(NpgsqlCommand command, ResearchContentRunRecord contentRun)
+    {
+        command.Parameters.AddWithValue("id", contentRun.Id);
+        command.Parameters.AddWithValue("research_topic_run_id", contentRun.ResearchTopicRunId);
+        command.Parameters.Add(new NpgsqlParameter("research_topic_run_phase_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)contentRun.ResearchTopicRunPhaseId ?? DBNull.Value
+        });
+        command.Parameters.AddWithValue("research_topic_id", contentRun.ResearchTopicId);
+        command.Parameters.AddWithValue("status", contentRun.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("started_at", (object?)contentRun.StartedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished_at", (object?)contentRun.FinishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)contentRun.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)contentRun.ErrorMessage ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("metrics_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(contentRun.MetricsJson) ? "{}" : contentRun.MetricsJson
+        });
+        command.Parameters.AddWithValue("created_at", contentRun.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", contentRun.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindContentItem(NpgsqlCommand command, ResearchContentItemRecord contentItem)
+    {
+        command.Parameters.AddWithValue("id", contentItem.Id);
+        command.Parameters.AddWithValue("research_content_run_id", contentItem.ResearchContentRunId);
+        command.Parameters.AddWithValue("research_topic_run_id", contentItem.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_id", contentItem.ResearchTopicId);
+        command.Parameters.AddWithValue("source_key", contentItem.SourceKey);
+        command.Parameters.AddWithValue("source_url", contentItem.SourceUrl);
+        command.Parameters.AddWithValue("canonical_url", (object?)contentItem.CanonicalUrl ?? DBNull.Value);
+        command.Parameters.AddWithValue("title", contentItem.Title);
+        command.Parameters.AddWithValue("author_name", (object?)contentItem.AuthorName ?? DBNull.Value);
+        command.Parameters.AddWithValue("published_at", (object?)contentItem.PublishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("fetch_method", contentItem.FetchMethod);
+        command.Parameters.AddWithValue("content_type", contentItem.ContentType);
+        command.Parameters.AddWithValue("status", contentItem.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("content_hash", (object?)contentItem.ContentHash ?? DBNull.Value);
+        command.Parameters.AddWithValue("raw_text", (object?)contentItem.RawText ?? DBNull.Value);
+        command.Parameters.AddWithValue("raw_storage_path", (object?)contentItem.RawStoragePath ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("raw_metadata_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(contentItem.RawMetadataJson) ? "{}" : contentItem.RawMetadataJson
+        });
+        command.Parameters.AddWithValue("error_code", (object?)contentItem.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)contentItem.ErrorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("created_at", contentItem.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", contentItem.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindDocument(NpgsqlCommand command, ResearchDocumentRecord document)
+    {
+        command.Parameters.AddWithValue("id", document.Id);
+        command.Parameters.AddWithValue("research_content_item_id", document.ResearchContentItemId);
+        command.Parameters.AddWithValue("research_topic_run_id", document.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_id", document.ResearchTopicId);
+        command.Parameters.AddWithValue("source_key", document.SourceKey);
+        command.Parameters.AddWithValue("canonical_url", document.CanonicalUrl);
+        command.Parameters.AddWithValue("title", document.Title);
+        command.Parameters.AddWithValue("author_name", (object?)document.AuthorName ?? DBNull.Value);
+        command.Parameters.AddWithValue("published_at", (object?)document.PublishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("normalized_at", document.NormalizedAt.UtcDateTime);
+        command.Parameters.AddWithValue("canonical_body", document.CanonicalBody);
+        command.Parameters.AddWithValue("canonical_hash", document.CanonicalHash);
+        command.Parameters.AddWithValue("raw_content_hash", document.RawContentHash);
+        command.Parameters.Add(new NpgsqlParameter("source_provenance_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(document.SourceProvenanceJson) ? "{}" : document.SourceProvenanceJson
+        });
+        command.Parameters.AddWithValue("normalizer_version", document.NormalizerVersion);
+        command.Parameters.AddWithValue("created_at", document.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", document.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindDocumentChunk(NpgsqlCommand command, ResearchDocumentChunkRecord chunk)
+    {
+        command.Parameters.AddWithValue("id", chunk.Id);
+        command.Parameters.AddWithValue("research_document_id", chunk.ResearchDocumentId);
+        command.Parameters.AddWithValue("chunk_index", chunk.ChunkIndex);
+        command.Parameters.AddWithValue("chunk_title", (object?)chunk.ChunkTitle ?? DBNull.Value);
+        command.Parameters.AddWithValue("chunk_text", chunk.ChunkText);
+        command.Parameters.AddWithValue("token_count", chunk.TokenCount);
+        command.Parameters.AddWithValue("start_offset", chunk.StartOffset);
+        command.Parameters.AddWithValue("end_offset", chunk.EndOffset);
+        command.Parameters.AddWithValue("chunk_hash", chunk.ChunkHash);
+        command.Parameters.Add(new NpgsqlParameter("chunk_metadata_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(chunk.ChunkMetadataJson) ? "{}" : chunk.ChunkMetadataJson
+        });
+        command.Parameters.AddWithValue("created_at", chunk.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", chunk.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindRankingRun(NpgsqlCommand command, ResearchRankingRunRecord rankingRun)
+    {
+        command.Parameters.AddWithValue("id", rankingRun.Id);
+        command.Parameters.AddWithValue("research_topic_run_id", rankingRun.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_run_phase_id", rankingRun.ResearchTopicRunPhaseId);
+        command.Parameters.AddWithValue("research_topic_id", rankingRun.ResearchTopicId);
+        command.Parameters.AddWithValue("status", rankingRun.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("scoring_version", rankingRun.ScoringVersion);
+        command.Parameters.AddWithValue("total_documents", rankingRun.TotalDocuments);
+        command.Parameters.AddWithValue("selected_documents", rankingRun.SelectedDocuments);
+        command.Parameters.AddWithValue("started_at", (object?)rankingRun.StartedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished_at", (object?)rankingRun.FinishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)rankingRun.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)rankingRun.ErrorMessage ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("metrics_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(rankingRun.MetricsJson) ? "{}" : rankingRun.MetricsJson
+        });
+        command.Parameters.AddWithValue("created_at", rankingRun.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", rankingRun.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindRankedDocument(NpgsqlCommand command, ResearchRankedDocumentRecord rankedDocument)
+    {
+        command.Parameters.AddWithValue("id", rankedDocument.Id);
+        command.Parameters.AddWithValue("research_ranking_run_id", rankedDocument.ResearchRankingRunId);
+        command.Parameters.AddWithValue("research_topic_run_id", rankedDocument.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_id", rankedDocument.ResearchTopicId);
+        command.Parameters.AddWithValue("research_document_id", rankedDocument.ResearchDocumentId);
+        command.Parameters.AddWithValue("source_key", rankedDocument.SourceKey);
+        command.Parameters.AddWithValue("title", rankedDocument.Title);
+        command.Parameters.AddWithValue("canonical_url", rankedDocument.CanonicalUrl);
+        command.Parameters.AddWithValue("score", rankedDocument.Score);
+        command.Parameters.AddWithValue("freshness_score", rankedDocument.FreshnessScore);
+        command.Parameters.AddWithValue("source_weight", rankedDocument.SourceWeight);
+        command.Parameters.AddWithValue("length_score", rankedDocument.LengthScore);
+        command.Parameters.AddWithValue("rank_position", rankedDocument.RankPosition);
+        command.Parameters.AddWithValue("is_selected", rankedDocument.IsSelected);
+        command.Parameters.Add(new NpgsqlParameter("reason_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(rankedDocument.ReasonJson) ? "{}" : rankedDocument.ReasonJson
+        });
+        command.Parameters.AddWithValue("created_at", rankedDocument.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", rankedDocument.UpdatedAt.UtcDateTime);
+    }
+
+    private static void BindSynthesisRun(NpgsqlCommand command, ResearchSynthesisRunRecord synthesisRun)
+    {
+        command.Parameters.AddWithValue("id", synthesisRun.Id);
+        command.Parameters.AddWithValue("research_topic_run_id", synthesisRun.ResearchTopicRunId);
+        command.Parameters.AddWithValue("research_topic_run_phase_id", synthesisRun.ResearchTopicRunPhaseId);
+        command.Parameters.AddWithValue("research_topic_id", synthesisRun.ResearchTopicId);
+        command.Parameters.AddWithValue("research_ranking_run_id", synthesisRun.ResearchRankingRunId);
+        command.Parameters.AddWithValue("status", synthesisRun.Status.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("reasoning_provider", synthesisRun.ReasoningProvider);
+        command.Parameters.AddWithValue("model", synthesisRun.Model);
+        command.Parameters.AddWithValue("prompt_version", synthesisRun.PromptVersion);
+        command.Parameters.AddWithValue("input_hash", synthesisRun.InputHash);
+        command.Parameters.Add(new NpgsqlParameter("request_json", NpgsqlDbType.Jsonb)
+        {
+            Value = (object?)synthesisRun.RequestJson ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("response_json", NpgsqlDbType.Jsonb)
+        {
+            Value = (object?)synthesisRun.ResponseJson ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("output_json", NpgsqlDbType.Jsonb)
+        {
+            Value = (object?)synthesisRun.OutputJson ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("usage_json", NpgsqlDbType.Jsonb)
+        {
+            Value = (object?)synthesisRun.UsageJson ?? DBNull.Value
+        });
+        command.Parameters.AddWithValue("selected_document_count", synthesisRun.SelectedDocumentCount);
+        command.Parameters.AddWithValue("started_at", (object?)synthesisRun.StartedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished_at", (object?)synthesisRun.FinishedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)synthesisRun.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)synthesisRun.ErrorMessage ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("research_briefing_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)synthesisRun.ResearchBriefingId ?? DBNull.Value
+        });
+        command.Parameters.AddWithValue("created_at", synthesisRun.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", synthesisRun.UpdatedAt.UtcDateTime);
+    }
+
     private static void BindTopic(NpgsqlCommand command, ResearchTopicRecord topic)
     {
         command.Parameters.AddWithValue("id", topic.Id);
@@ -337,6 +795,7 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         => new(
             reader.GetGuid(reader.GetOrdinal("id")),
             reader.IsDBNull(reader.GetOrdinal("requested_by_user_id")) ? null : reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
+            reader.IsDBNull(reader.GetOrdinal("project_id")) ? null : reader.GetGuid(reader.GetOrdinal("project_id")),
             reader.GetString(reader.GetOrdinal("name")),
             reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
             reader.GetString(reader.GetOrdinal("frequency")),
@@ -386,6 +845,197 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             pastBriefings,
             reader.GetString(reader.GetOrdinal("preview_text")));
     }
+
+    private static ResearchTopicRunDto MapTopicRun(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.IsDBNull(reader.GetOrdinal("requested_by_user_id")) ? null : reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
+            reader.IsDBNull(reader.GetOrdinal("job_id")) ? null : reader.GetGuid(reader.GetOrdinal("job_id")),
+            Enum.Parse<ResearchTopicRunStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.IsDBNull(reader.GetOrdinal("triggered_by")) ? null : reader.GetString(reader.GetOrdinal("triggered_by")),
+            reader.IsDBNull(reader.GetOrdinal("started_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at")),
+            reader.IsDBNull(reader.GetOrdinal("finished_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("finished_at")),
+            reader.IsDBNull(reader.GetOrdinal("next_retry_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("next_retry_at")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
+            reader.IsDBNull(reader.GetOrdinal("summary_preview")) ? null : reader.GetString(reader.GetOrdinal("summary_preview")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchTopicRunPhaseDto MapTopicRunPhase(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetString(reader.GetOrdinal("phase_key")),
+            Enum.Parse<ResearchTopicRunPhaseStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.GetInt32(reader.GetOrdinal("attempt_count")),
+            reader.IsDBNull(reader.GetOrdinal("started_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at")),
+            reader.IsDBNull(reader.GetOrdinal("finished_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("finished_at")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
+            reader.IsDBNull(reader.GetOrdinal("metrics_json")) ? null : reader.GetString(reader.GetOrdinal("metrics_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchSearchResultDto MapSearchResult(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_search_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.GetString(reader.GetOrdinal("source_key")),
+            reader.GetString(reader.GetOrdinal("query")),
+            reader.GetString(reader.GetOrdinal("title")),
+            reader.GetString(reader.GetOrdinal("url")),
+            reader.IsDBNull(reader.GetOrdinal("canonical_url")) ? null : reader.GetString(reader.GetOrdinal("canonical_url")),
+            reader.IsDBNull(reader.GetOrdinal("snippet")) ? null : reader.GetString(reader.GetOrdinal("snippet")),
+            reader.GetFieldValue<double>(reader.GetOrdinal("score")),
+            reader.IsDBNull(reader.GetOrdinal("published_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("published_at")),
+            reader.IsDBNull(reader.GetOrdinal("author_name")) ? null : reader.GetString(reader.GetOrdinal("author_name")),
+            reader.IsDBNull(reader.GetOrdinal("domain")) ? null : reader.GetString(reader.GetOrdinal("domain")),
+            reader.IsDBNull(reader.GetOrdinal("language")) ? null : reader.GetString(reader.GetOrdinal("language")),
+            reader.GetInt32(reader.GetOrdinal("result_rank")),
+            reader.GetString(reader.GetOrdinal("raw_result_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchContentRunDto MapContentRun(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.IsDBNull(reader.GetOrdinal("research_topic_run_phase_id")) ? null : reader.GetGuid(reader.GetOrdinal("research_topic_run_phase_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            Enum.Parse<ResearchContentRunStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.IsDBNull(reader.GetOrdinal("started_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at")),
+            reader.IsDBNull(reader.GetOrdinal("finished_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("finished_at")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
+            reader.IsDBNull(reader.GetOrdinal("metrics_json")) ? null : reader.GetString(reader.GetOrdinal("metrics_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchContentItemDto MapContentItem(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_content_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.GetString(reader.GetOrdinal("source_key")),
+            reader.GetString(reader.GetOrdinal("source_url")),
+            reader.IsDBNull(reader.GetOrdinal("canonical_url")) ? null : reader.GetString(reader.GetOrdinal("canonical_url")),
+            reader.GetString(reader.GetOrdinal("title")),
+            reader.IsDBNull(reader.GetOrdinal("author_name")) ? null : reader.GetString(reader.GetOrdinal("author_name")),
+            reader.IsDBNull(reader.GetOrdinal("published_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("published_at")),
+            reader.GetString(reader.GetOrdinal("fetch_method")),
+            reader.GetString(reader.GetOrdinal("content_type")),
+            Enum.Parse<ResearchContentItemStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.IsDBNull(reader.GetOrdinal("content_hash")) ? null : reader.GetString(reader.GetOrdinal("content_hash")),
+            reader.IsDBNull(reader.GetOrdinal("raw_text")) ? null : reader.GetString(reader.GetOrdinal("raw_text")),
+            reader.IsDBNull(reader.GetOrdinal("raw_storage_path")) ? null : reader.GetString(reader.GetOrdinal("raw_storage_path")),
+            reader.IsDBNull(reader.GetOrdinal("raw_metadata_json")) ? null : reader.GetString(reader.GetOrdinal("raw_metadata_json")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchDocumentDto MapDocument(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_content_item_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.GetString(reader.GetOrdinal("source_key")),
+            reader.GetString(reader.GetOrdinal("canonical_url")),
+            reader.GetString(reader.GetOrdinal("title")),
+            reader.IsDBNull(reader.GetOrdinal("author_name")) ? null : reader.GetString(reader.GetOrdinal("author_name")),
+            reader.IsDBNull(reader.GetOrdinal("published_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("published_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("normalized_at")),
+            reader.GetString(reader.GetOrdinal("canonical_body")),
+            reader.GetString(reader.GetOrdinal("canonical_hash")),
+            reader.GetString(reader.GetOrdinal("raw_content_hash")),
+            reader.GetString(reader.GetOrdinal("source_provenance_json")),
+            reader.GetString(reader.GetOrdinal("normalizer_version")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchDocumentChunkDto MapDocumentChunk(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_document_id")),
+            reader.GetInt32(reader.GetOrdinal("chunk_index")),
+            reader.IsDBNull(reader.GetOrdinal("chunk_title")) ? null : reader.GetString(reader.GetOrdinal("chunk_title")),
+            reader.GetString(reader.GetOrdinal("chunk_text")),
+            reader.GetInt32(reader.GetOrdinal("token_count")),
+            reader.GetInt32(reader.GetOrdinal("start_offset")),
+            reader.GetInt32(reader.GetOrdinal("end_offset")),
+            reader.GetString(reader.GetOrdinal("chunk_hash")),
+            reader.GetString(reader.GetOrdinal("chunk_metadata_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchRankingRunDto MapRankingRun(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_phase_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            Enum.Parse<ResearchRankingRunStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.GetString(reader.GetOrdinal("scoring_version")),
+            reader.GetInt32(reader.GetOrdinal("total_documents")),
+            reader.GetInt32(reader.GetOrdinal("selected_documents")),
+            reader.IsDBNull(reader.GetOrdinal("started_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at")),
+            reader.IsDBNull(reader.GetOrdinal("finished_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("finished_at")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
+            reader.IsDBNull(reader.GetOrdinal("metrics_json")) ? null : reader.GetString(reader.GetOrdinal("metrics_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchRankedDocumentDto MapRankedDocument(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_ranking_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.GetGuid(reader.GetOrdinal("research_document_id")),
+            reader.GetString(reader.GetOrdinal("source_key")),
+            reader.GetString(reader.GetOrdinal("title")),
+            reader.GetString(reader.GetOrdinal("canonical_url")),
+            reader.GetFieldValue<double>(reader.GetOrdinal("score")),
+            reader.GetFieldValue<double>(reader.GetOrdinal("freshness_score")),
+            reader.GetFieldValue<double>(reader.GetOrdinal("source_weight")),
+            reader.GetFieldValue<double>(reader.GetOrdinal("length_score")),
+            reader.GetInt32(reader.GetOrdinal("rank_position")),
+            reader.GetBoolean(reader.GetOrdinal("is_selected")),
+            reader.GetString(reader.GetOrdinal("reason_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchSynthesisRunDto MapSynthesisRun(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_run_phase_id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.GetGuid(reader.GetOrdinal("research_ranking_run_id")),
+            Enum.Parse<ResearchSynthesisRunStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.GetString(reader.GetOrdinal("reasoning_provider")),
+            reader.GetString(reader.GetOrdinal("model")),
+            reader.GetString(reader.GetOrdinal("prompt_version")),
+            reader.GetString(reader.GetOrdinal("input_hash")),
+            reader.IsDBNull(reader.GetOrdinal("request_json")) ? null : reader.GetString(reader.GetOrdinal("request_json")),
+            reader.IsDBNull(reader.GetOrdinal("response_json")) ? null : reader.GetString(reader.GetOrdinal("response_json")),
+            reader.IsDBNull(reader.GetOrdinal("output_json")) ? null : reader.GetString(reader.GetOrdinal("output_json")),
+            reader.IsDBNull(reader.GetOrdinal("usage_json")) ? null : reader.GetString(reader.GetOrdinal("usage_json")),
+            reader.GetInt32(reader.GetOrdinal("selected_document_count")),
+            reader.IsDBNull(reader.GetOrdinal("started_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at")),
+            reader.IsDBNull(reader.GetOrdinal("finished_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("finished_at")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
+            reader.IsDBNull(reader.GetOrdinal("research_briefing_id")) ? null : reader.GetGuid(reader.GetOrdinal("research_briefing_id")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
 
     private static string[] ReadStringArray(NpgsqlDataReader reader, string column)
         => reader.IsDBNull(reader.GetOrdinal(column))

@@ -5,7 +5,15 @@ import { delay } from './delay';
 
 export async function getMockResearchList(): Promise<ResearchListData> {
   await delay();
-  return listData as unknown as ResearchListData;
+  const data = listData as unknown as ResearchListData;
+  return {
+    ...data,
+    topics: data.topics.map((topic) => ({
+      ...topic,
+      projectId: topic.projectId ?? null,
+      updatedAt: topic.updatedAt ?? new Date().toISOString(),
+    })),
+  };
 }
 
 export async function getMockResearchBriefing(topicId: string): Promise<ResearchBriefing | null> {

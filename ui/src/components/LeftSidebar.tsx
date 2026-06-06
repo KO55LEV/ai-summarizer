@@ -1,26 +1,22 @@
 import {
   LayoutDashboard,
   Sparkles,
-  FileText,
-  Lightbulb,
-  Download,
-  Clock,
-  Settings,
   Play,
   Newspaper,
+  Shield,
+  FolderKanban,
+  StickyNote,
+  ChevronRight,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { NavItem, VideoRecord } from '../types';
 
-const navItems: { key: NavItem; label: string; icon: React.ReactNode }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-  { key: 'summarizer', label: 'Summarizer', icon: <Sparkles size={18} /> },
-  { key: 'transcript', label: 'Transcript', icon: <FileText size={18} /> },
-  { key: 'insights', label: 'Insights', icon: <Lightbulb size={18} /> },
-  { key: 'exports', label: 'Exports', icon: <Download size={18} /> },
-  { key: 'history', label: 'History', icon: <Clock size={18} /> },
-  { key: 'research', label: 'Research', icon: <Newspaper size={18} /> },
-  { key: 'settings', label: 'Settings', icon: <Settings size={18} /> },
-];
+type NavEntry = {
+  key: NavItem;
+  label: string;
+  icon: ReactNode;
+  helper?: string;
+};
 
 interface LeftSidebarProps {
   activeNav: NavItem;
@@ -28,75 +24,127 @@ interface LeftSidebarProps {
   onViewAll: () => void;
   onVideoSelect: (idx: number) => void;
   recentVideos: VideoRecord[];
+  onOpenAdmin: () => void;
 }
 
-export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideoSelect, recentVideos }: LeftSidebarProps) {
+export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideoSelect, recentVideos, onOpenAdmin }: LeftSidebarProps) {
+  const showSummarizerContext = activeNav === 'summarizer' || activeNav === 'transcript';
+  const navGroupsToRender: { title: string; items: NavEntry[] }[] = [
+    {
+      title: 'Core',
+      items: [
+        { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+        {
+          key: 'projects',
+          label: 'Projects',
+          icon: <FolderKanban size={18} />,
+          helper: 'Shared workspaces',
+        },
+        { key: 'summarizer', label: 'Summarizer', icon: <Sparkles size={18} /> },
+        {
+          key: 'research',
+          label: 'Research',
+          icon: <Newspaper size={18} />,
+          helper: 'Briefings and topics',
+        },
+        {
+          key: 'notes',
+          label: 'Notes',
+          icon: <StickyNote size={18} />,
+          helper: 'Inbox and drafts',
+        },
+      ],
+    },
+  ];
+
   return (
-    <aside className="w-[230px] flex-shrink-0 bg-bg-secondary border-r border-border flex flex-col h-screen sticky top-0">
+    <aside className="w-[250px] flex-shrink-0 bg-bg-secondary border-r border-border flex flex-col h-screen sticky top-0">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="w-9 h-9 bg-youtube rounded-xl flex items-center justify-center flex-shrink-0">
-          <Play size={16} fill="white" className="text-white" />
-        </div>
-        <div>
-          <div className="text-[13px] font-semibold text-text-primary leading-tight">YouTube Summarizer</div>
-          <div className="text-[11px] text-text-muted leading-tight mt-0.5">Research from any video</div>
+      <div className="px-4 pt-4 pb-3">
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(0,212,170,0.08),rgba(19,28,48,0.92))] px-4 py-4 shadow-[0_0_0_1px_rgba(0,212,170,0.05)]">
+          <img src="/favicon.svg" alt="" className="h-10 w-10 flex-shrink-0 rounded-xl shadow-lg shadow-black/20" />
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-text-primary leading-tight">Ai Summarizer</div>
+            <div className="text-[11px] text-text-muted leading-tight mt-0.5">Research, notes, and project workspaces</div>
+          </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 mt-2 space-y-0.5">
-        {navItems.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => onNavChange(item.key)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-colors cursor-pointer ${
-              activeNav === item.key
-                ? 'bg-accent text-bg-primary font-semibold'
-                : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
-            }`}
-          >
-            {item.icon}
-            {item.label}
-          </button>
+      <nav className="flex-1 px-4 pb-3 space-y-4 overflow-y-auto">
+        {navGroupsToRender.map((group) => (
+          <div key={group.title}>
+            <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+              {group.title}
+            </div>
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const active = activeNav === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => onNavChange(item.key)}
+                    className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] transition-all cursor-pointer ${
+                      active
+                        ? 'border-accent/30 bg-accent/10 text-text-primary shadow-[0_0_0_1px_rgba(0,212,170,0.12)]'
+                        : 'border-transparent text-text-secondary hover:border-border hover:bg-bg-card hover:text-text-primary'
+                    }`}
+                  >
+                    <span className={active ? 'text-accent' : 'text-text-muted'}>{item.icon}</span>
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className={`block truncate ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                        {item.helper && (
+                          <span className="mt-0.5 block text-[10px] leading-tight text-text-muted">{item.helper}</span>
+                        )}
+                      </span>
+                      {active && <ChevronRight size={14} className="text-accent flex-shrink-0" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ))}
       </nav>
 
       {/* Recent Videos */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs text-text-muted font-medium">Recent videos</span>
-          <button onClick={onViewAll} className="text-xs text-accent hover:text-accent-hover cursor-pointer font-medium">View all</button>
-        </div>
-        {recentVideos.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border px-3 py-4 text-[11px] text-text-muted">
-            No recent videos yet.
+      {showSummarizerContext && (
+        <div className="px-4 pb-3">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-text-muted font-medium">Recent videos</span>
+            <button onClick={onViewAll} className="text-xs text-accent hover:text-accent-hover cursor-pointer font-medium">View all</button>
           </div>
-        ) : (
-          <div className="space-y-1">
-            {recentVideos.map((video, i) => (
-              <div
-                key={`${video.url}-${i}`}
-                onClick={() => onVideoSelect(i)}
-                className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-bg-card cursor-pointer transition-colors"
-              >
-                <div className="w-5 h-5 rounded bg-youtube/20 flex items-center justify-center flex-shrink-0">
-                  <Play size={9} className="text-youtube" fill="currentColor" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] text-text-primary truncate leading-tight">{video.title}</div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[11px] text-text-muted leading-tight">{video.age}</span>
-                    <span className="text-[10px] font-medium px-1 py-0 rounded bg-bg-input text-text-muted truncate max-w-[96px]">
-                      {video.source}
-                    </span>
+          {recentVideos.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border px-3 py-4 text-[11px] text-text-muted">
+              No recent videos yet.
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {recentVideos.map((video, i) => (
+                <div
+                  key={`${video.url}-${i}`}
+                  onClick={() => onVideoSelect(i)}
+                  className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-bg-card cursor-pointer transition-colors"
+                >
+                  <div className="w-5 h-5 rounded bg-youtube/20 flex items-center justify-center flex-shrink-0">
+                    <Play size={9} className="text-youtube" fill="currentColor" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] text-text-primary truncate leading-tight">{video.title}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[11px] text-text-muted leading-tight">{video.age}</span>
+                      <span className="text-[10px] font-medium px-1 py-0 rounded bg-bg-input text-text-muted truncate max-w-[96px]">
+                        {video.source}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* User / Pro Badge */}
       <div className="border-t border-border px-4 py-3.5">
@@ -123,6 +171,17 @@ export default function LeftSidebar({ activeNav, onNavChange, onViewAll, onVideo
             <div className="h-full bg-accent rounded-full" style={{ width: '8.4%' }} />
           </div>
         </div>
+        <button
+          type="button"
+          onClick={onOpenAdmin}
+          className="mt-3 flex w-full items-center justify-between rounded-lg border border-border bg-bg-input px-3 py-2.5 text-[12px] text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+        >
+          <span className="flex items-center gap-2">
+            <Shield size={14} className="text-accent" />
+            Admin
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.12em] text-text-muted">Open</span>
+        </button>
       </div>
     </aside>
   );

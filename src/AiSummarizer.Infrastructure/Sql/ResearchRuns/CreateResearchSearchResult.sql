@@ -1,0 +1,43 @@
+insert into research_search_results (
+    id,
+    research_search_run_id,
+    research_topic_run_id,
+    research_topic_id,
+    source_key,
+    query,
+    title,
+    url,
+    canonical_url,
+    snippet,
+    score,
+    published_at,
+    author_name,
+    domain,
+    language,
+    result_rank,
+    raw_result_json,
+    created_at,
+    updated_at
+)
+values (
+    @id,
+    @research_search_run_id,
+    @research_topic_run_id,
+    @research_topic_id,
+    @source_key,
+    @query,
+    @title,
+    @url,
+    @canonical_url,
+    @snippet,
+    @score,
+    @published_at,
+    @author_name,
+    @domain,
+    @language,
+    @result_rank,
+    @raw_result_json,
+    @created_at,
+    @updated_at
+)
+returning id, research_search_run_id, research_topic_run_id, research_topic_id, source_key, query, title, url, canonical_url, snippet, score, published_at, author_name, domain, language, result_rank, raw_result_json, created_at, updated_at;

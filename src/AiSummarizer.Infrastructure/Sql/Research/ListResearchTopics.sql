@@ -1,6 +1,7 @@
 select
     t.id,
     t.requested_by_user_id,
+    t.project_id,
     t.name,
     t.description,
     t.frequency,

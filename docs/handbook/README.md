@@ -18,6 +18,7 @@
 - [API](api.md)
 - [Jobs и workflow](workflows.md)
 - [Prompts и LLM-аудит](prompts.md)
+- [Notes implementation plan](notes-implementation-plan.md)
 - [Пользователи, роли и безопасность](security.md)
 - [Операции и запуск](operations.md)
 - [UI (React frontend)](ui.md)

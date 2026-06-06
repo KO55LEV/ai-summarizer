@@ -111,3 +111,25 @@ API для prompts уже позволяет:
 - выбирать prompt по `workflow_type + provider + model`
 - использовать `prompt_runs` в момент реального LLM-вызова
 - строить метрики по качеству и частоте запуска
+
+## JSON-вывод для synthesis
+
+Для workflow, где downstream ожидает JSON, запрос должен быть максимально жестким:
+
+- в `system_prompt` явно требовать `only valid JSON`
+- не добавлять пояснительный текст до или после JSON
+- валидировать результат до сохранения
+
+Если модель вернула malformed JSON:
+
+1. посмотреть `prompt_runs.request_json` и `prompt_runs.response_json`
+2. посмотреть `research_synthesis_runs.response_json` и `research_synthesis_runs.output_json`
+3. обновить `prompt_version` или текст промпта
+4. при необходимости переключить provider/model на более стабильный
+5. rerun synthesis для того же `research_topic_run_id`
+
+Практика для этого workflow:
+
+- хранить prompt version как обязательный audit field
+- держать `response_format=json` или эквивалент provider-specific setting
+- считать malformed JSON отдельным failure mode, а не silent parse success

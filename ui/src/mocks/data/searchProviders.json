@@ -1,0 +1,38 @@
+{
+  "providers": [
+    {
+      "id": "a2c5a0d1-5f15-4a9d-84c9-0b8bb0000001",
+      "provider": "Tavily",
+      "apiKey": "tvly-mock-key-001",
+      "quotaPerMonth": 100000,
+      "isActive": true,
+      "note": "Primary research search key"
+    },
+    {
+      "id": "a2c5a0d1-5f15-4a9d-84c9-0b8bb0000002",
+      "provider": "Tavily",
+      "apiKey": "tvly-mock-key-002",
+      "quotaPerMonth": 25000,
+      "isActive": false,
+      "note": "Backup key for load balancing"
+    }
+  ],
+  "usage": {
+    "a2c5a0d1-5f15-4a9d-84c9-0b8bb0000001": {
+      "id": "a2c5a0d1-5f15-4a9d-84c9-0b8bb0000001",
+      "provider": "Tavily",
+      "quotaPerMonth": 100000,
+      "used": 4280,
+      "cycleStart": "2026-06-01T00:00:00Z",
+      "cycleEnd": "2026-07-01T00:00:00Z"
+    },
+    "a2c5a0d1-5f15-4a9d-84c9-0b8bb0000002": {
+      "id": "a2c5a0d1-5f15-4a9d-84c9-0b8bb0000002",
+      "provider": "Tavily",
+      "quotaPerMonth": 25000,
+      "used": 0,
+      "cycleStart": "2026-06-01T00:00:00Z",
+      "cycleEnd": "2026-07-01T00:00:00Z"
+    }
+  }
+}

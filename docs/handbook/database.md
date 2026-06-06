@@ -135,6 +135,7 @@
 `research_topics` stores the user-scoped research definition:
 
 - `requested_by_user_id`
+- `project_id`
 - `name`
 - `description`
 - `frequency`
@@ -178,6 +179,31 @@
 `research_briefing_sections` stores briefing sections with `items_jsonb` as an array of bullet text items.
 
 `research_briefing_sources` stores the cited source list for each briefing.
+
+### Notes and projects
+
+- `projects`
+- `notes`
+- `note_inputs`
+- `note_assets`
+- `note_text_versions`
+- `note_processing_runs`
+- `telegram_accounts`
+- `user_telegram_accounts`
+
+`projects` stores user workspaces and topic containers.
+
+`notes` stores user-visible notes and can point to a project via `project_id`.
+
+`note_inputs` stores immutable ingestion events and raw payloads.
+
+`note_assets` stores file metadata and `storage_key` references for local or cloud storage.
+
+`note_text_versions` stores append-only text variants such as original text, Whisper transcript, polished LLM output, and user-edited text.
+
+`note_processing_runs` stores the audit trail for ingestion, routing, transcription, OCR, and rewrite stages.
+
+`telegram_accounts` and `user_telegram_accounts` store Telegram identity and the user-to-account link used for message routing.
 
 ## Что хранится в prompts
 

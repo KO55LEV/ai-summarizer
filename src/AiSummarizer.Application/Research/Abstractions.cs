@@ -93,6 +93,38 @@ public interface IResearchRepository
     Task ReplaceBriefingSectionsAsync(Guid briefingId, IReadOnlyList<ResearchBriefingSectionInput> sections, DbTransaction? transaction, CancellationToken cancellationToken);
     Task ReplaceBriefingSourcesAsync(Guid briefingId, IReadOnlyList<ResearchBriefingSourceInput> sources, DbTransaction? transaction, CancellationToken cancellationToken);
     Task UpdateTopicBriefingStateAsync(Guid topicId, DateTimeOffset? lastRunAt, DateTimeOffset? nextRunAt, string? lastBriefingPreview, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<Guid> CreateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<ResearchTopicRunDto?> GetTopicRunByIdAsync(Guid runId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchTopicRunDto>> ListTopicRunsAsync(Guid topicId, int limit, int offset, CancellationToken cancellationToken);
+    Task<Guid> CreateTopicRunPhaseAsync(ResearchTopicRunPhaseRecord phase, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateTopicRunPhaseAsync(ResearchTopicRunPhaseRecord phase, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<ResearchTopicRunPhaseDto?> GetTopicRunPhaseAsync(Guid runId, string phaseKey, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchTopicRunPhaseDto>> ListTopicRunPhasesAsync(Guid runId, CancellationToken cancellationToken);
+    Task<Guid> CreateSearchRunAsync(ResearchSearchRunRecord searchRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateSearchRunAsync(ResearchSearchRunRecord searchRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<Guid> CreateSearchResultAsync(ResearchSearchResultRecord result, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchSearchResultDto>> ListSearchResultsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken);
+    Task<Guid> CreateContentRunAsync(ResearchContentRunRecord contentRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateContentRunAsync(ResearchContentRunRecord contentRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<ResearchContentRunDto?> GetContentRunByIdAsync(Guid contentRunId, CancellationToken cancellationToken);
+    Task<Guid> CreateContentItemAsync(ResearchContentItemRecord contentItem, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateContentItemAsync(ResearchContentItemRecord contentItem, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchContentItemDto>> ListContentItemsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken);
+    Task<Guid> CreateDocumentAsync(ResearchDocumentRecord document, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<Guid> CreateDocumentChunkAsync(ResearchDocumentChunkRecord chunk, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchDocumentDto>> ListDocumentsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchDocumentChunkDto>> ListDocumentChunksAsync(Guid researchDocumentId, CancellationToken cancellationToken);
+    Task<Guid> CreateRankingRunAsync(ResearchRankingRunRecord rankingRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateRankingRunAsync(ResearchRankingRunRecord rankingRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<ResearchRankingRunDto?> GetRankingRunByIdAsync(Guid rankingRunId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchRankingRunDto>> ListRankingRunsAsync(Guid researchTopicRunId, CancellationToken cancellationToken);
+    Task<Guid> CreateRankedDocumentAsync(ResearchRankedDocumentRecord rankedDocument, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchRankedDocumentDto>> ListRankedDocumentsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken);
+    Task<Guid> CreateSynthesisRunAsync(ResearchSynthesisRunRecord synthesisRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task UpdateSynthesisRunAsync(ResearchSynthesisRunRecord synthesisRun, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<ResearchSynthesisRunDto?> GetSynthesisRunByIdAsync(Guid synthesisRunId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ResearchSynthesisRunDto>> ListSynthesisRunsAsync(Guid researchTopicRunId, int limit, int offset, CancellationToken cancellationToken);
 }
 
 public interface IResearchService

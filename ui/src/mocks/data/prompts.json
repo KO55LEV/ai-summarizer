@@ -1,0 +1,229 @@
+{
+  "prompts": [
+    {
+      "id": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001",
+      "promptKey": "research.briefing.summary",
+      "title": "Research briefing summary",
+      "description": "Turns ranked findings into a concise briefing summary with action items.",
+      "workflowType": "research.synthesis",
+      "provider": "openai",
+      "model": "gpt-4.1-mini",
+      "systemPrompt": "You are a sharp research analyst. Summarize the supplied evidence, call out uncertainty, and avoid generic filler.",
+      "userPrompt": "Summarize the research packet into 5 to 7 bullets, then add a short executive takeaway and next steps.",
+      "isActive": true,
+      "createdAt": "2026-05-21T09:15:00Z",
+      "updatedAt": "2026-06-02T14:20:00Z"
+    },
+    {
+      "id": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002",
+      "promptKey": "research.briefing.sources",
+      "title": "Source triage prompt",
+      "description": "Evaluates relevance, credibility, and novelty of raw research sources.",
+      "workflowType": "research.ranking",
+      "provider": "openrouter",
+      "model": "anthropic/claude-3.5-sonnet",
+      "systemPrompt": "Score sources with a bias toward signal, recency, and original reporting. Return structured JSON only.",
+      "userPrompt": "Assess each source for relevance, credibility, novelty, and whether it should be promoted into the briefing.",
+      "isActive": true,
+      "createdAt": "2026-05-18T11:05:00Z",
+      "updatedAt": "2026-06-01T08:30:00Z"
+    },
+    {
+      "id": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003",
+      "promptKey": "transcript.cleanup",
+      "title": "Transcript cleanup",
+      "description": "Normalizes transcript text before downstream processing and search indexing.",
+      "workflowType": "transcripts.cleanup",
+      "provider": "openai",
+      "model": "gpt-4.1-mini",
+      "systemPrompt": "Clean transcript text without changing meaning. Preserve names, numbers, and quoted passages.",
+      "userPrompt": "Rewrite the transcript so it is readable, compact, and search-friendly.",
+      "isActive": false,
+      "createdAt": "2026-05-12T16:10:00Z",
+      "updatedAt": "2026-05-28T13:45:00Z"
+    }
+  ],
+  "archives": {
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001": [
+      {
+        "id": "c0a7edbc-61c9-43f0-8f72-0f4e8b1d1001",
+        "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001",
+        "archiveVersion": 1,
+        "archiveReason": "Initial prompt draft",
+        "promptKey": "research.briefing.summary",
+        "title": "Research briefing summary",
+        "description": "Turns ranked findings into a concise briefing summary with action items.",
+        "workflowType": "research.synthesis",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "systemPrompt": "You are a sharp research analyst. Summarize the supplied evidence, call out uncertainty, and avoid generic filler.",
+        "userPrompt": "Summarize the research packet into 5 to 7 bullets, then add a short executive takeaway and next steps.",
+        "isActive": true,
+        "archivedAt": "2026-05-21T09:15:00Z",
+        "sourceUpdatedAt": "2026-05-21T09:15:00Z"
+      }
+    ],
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002": [
+      {
+        "id": "c0a7edbc-61c9-43f0-8f72-0f4e8b1d1002",
+        "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002",
+        "archiveVersion": 1,
+        "archiveReason": "Initial prompt draft",
+        "promptKey": "research.briefing.sources",
+        "title": "Source triage prompt",
+        "description": "Evaluates relevance, credibility, and novelty of raw research sources.",
+        "workflowType": "research.ranking",
+        "provider": "openrouter",
+        "model": "anthropic/claude-3.5-sonnet",
+        "systemPrompt": "Score sources with a bias toward signal, recency, and original reporting. Return structured JSON only.",
+        "userPrompt": "Assess each source for relevance, credibility, novelty, and whether it should be promoted into the briefing.",
+        "isActive": true,
+        "archivedAt": "2026-05-18T11:05:00Z",
+        "sourceUpdatedAt": "2026-05-18T11:05:00Z"
+      }
+    ],
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003": [
+      {
+        "id": "c0a7edbc-61c9-43f0-8f72-0f4e8b1d1003",
+        "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003",
+        "archiveVersion": 1,
+        "archiveReason": "Initial prompt draft",
+        "promptKey": "transcript.cleanup",
+        "title": "Transcript cleanup",
+        "description": "Normalizes transcript text before downstream processing and search indexing.",
+        "workflowType": "transcripts.cleanup",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "systemPrompt": "Clean transcript text without changing meaning. Preserve names, numbers, and quoted passages.",
+        "userPrompt": "Rewrite the transcript so it is readable, compact, and search-friendly.",
+        "isActive": false,
+        "archivedAt": "2026-05-12T16:10:00Z",
+        "sourceUpdatedAt": "2026-05-12T16:10:00Z"
+      }
+    ]
+  },
+  "runs": {
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001": [
+      {
+        "id": "d0a7edbc-61c9-43f0-8f72-0f4e8b1d2001",
+        "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001",
+        "workflowId": "eb979df9-46ac-4d9f-9f6f-0c2b89c3a001",
+        "stepKey": "synthesis",
+        "promptKey": "research.briefing.summary",
+        "title": "Research briefing summary",
+        "workflowType": "research.synthesis",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "request": {
+          "topic": "AI agent reliability",
+          "audience": "product leaders",
+          "length": "short"
+        },
+        "response": {
+          "summary": "Reliability is improving, but the biggest risk is still tool orchestration drift.",
+          "confidence": 0.88
+        },
+        "status": "succeeded",
+        "errorCode": null,
+        "errorMessage": null,
+        "inputTokens": 1280,
+        "outputTokens": 442,
+        "totalTokens": 1722,
+        "durationMs": 18422,
+        "startedAt": "2026-06-02T14:18:04Z",
+        "finishedAt": "2026-06-02T14:18:22Z",
+        "createdAt": "2026-06-02T14:18:04Z",
+        "updatedAt": "2026-06-02T14:18:22Z"
+      }
+    ],
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002": [
+      {
+        "id": "d0a7edbc-61c9-43f0-8f72-0f4e8b1d2002",
+        "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002",
+        "workflowId": "eb979df9-46ac-4d9f-9f6f-0c2b89c3a002",
+        "stepKey": "ranking",
+        "promptKey": "research.briefing.sources",
+        "title": "Source triage prompt",
+        "workflowType": "research.ranking",
+        "provider": "openrouter",
+        "model": "anthropic/claude-3.5-sonnet",
+        "request": {
+          "sources": 14,
+          "topic": "foundation models"
+        },
+        "response": null,
+        "status": "running",
+        "errorCode": null,
+        "errorMessage": null,
+        "inputTokens": 912,
+        "outputTokens": null,
+        "totalTokens": null,
+        "durationMs": 9630,
+        "startedAt": "2026-06-06T08:52:10Z",
+        "finishedAt": null,
+        "createdAt": "2026-06-06T08:52:10Z",
+        "updatedAt": "2026-06-06T08:52:40Z"
+      }
+    ],
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003": [
+      {
+        "id": "d0a7edbc-61c9-43f0-8f72-0f4e8b1d2003",
+        "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003",
+        "workflowId": null,
+        "stepKey": "cleanup",
+        "promptKey": "transcript.cleanup",
+        "title": "Transcript cleanup",
+        "workflowType": "transcripts.cleanup",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "request": {
+          "source": "youtube transcript",
+          "language": "en"
+        },
+        "response": {
+          "cleaned": true
+        },
+        "status": "failed",
+        "errorCode": "PROMPT_TIMEOUT",
+        "errorMessage": "The cleanup step timed out after 30s.",
+        "inputTokens": 680,
+        "outputTokens": 0,
+        "totalTokens": 680,
+        "durationMs": 30012,
+        "startedAt": "2026-05-28T13:40:00Z",
+        "finishedAt": "2026-05-28T13:40:30Z",
+        "createdAt": "2026-05-28T13:40:00Z",
+        "updatedAt": "2026-05-28T13:40:30Z"
+      }
+    ]
+  },
+  "usage": {
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001": {
+      "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001",
+      "totalRuns": 18,
+      "succeededRuns": 16,
+      "failedRuns": 1,
+      "runningRuns": 1,
+      "lastRunAt": "2026-06-02T14:18:22Z",
+      "lastStatus": "succeeded"
+    },
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002": {
+      "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0002",
+      "totalRuns": 7,
+      "succeededRuns": 5,
+      "failedRuns": 1,
+      "runningRuns": 1,
+      "lastRunAt": "2026-06-06T08:52:10Z",
+      "lastStatus": "running"
+    },
+    "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003": {
+      "promptId": "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0003",
+      "totalRuns": 4,
+      "succeededRuns": 2,
+      "failedRuns": 2,
+      "runningRuns": 0,
+      "lastRunAt": "2026-05-28T13:40:00Z",
+      "lastStatus": "failed"
+    }
+  }
+}

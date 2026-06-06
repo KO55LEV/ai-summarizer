@@ -9,6 +9,7 @@ public sealed record SearchResult(
 public sealed record ResearchTopicDto(
     Guid Id,
     Guid? RequestedByUserId,
+    Guid? ProjectId,
     string Name,
     string? Description,
     string Frequency,

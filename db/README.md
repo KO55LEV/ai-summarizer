@@ -31,6 +31,16 @@ Transcript data lives in three core tables:
 - `transcript_artifacts` for future AI outputs built from a transcript, such as summaries, quotes, quizzes, and study guides
 - `public_request_runs` for public API request audit logs with request/response payloads, timing, source/workflow links, and endpoint metadata
 
+Notes and project data live in:
+
+- `projects` for user workspaces and topic containers
+- `notes` for user-visible notes tied to a project or inbox
+- `note_inputs` for immutable raw inputs and external message metadata
+- `note_assets` for file metadata and storage keys
+- `note_text_versions` for append-only original, transcript, polished, and edited text variants
+- `note_processing_runs` for ingestion, routing, transcription, OCR, and rewrite audit rows
+- `telegram_accounts` and `user_telegram_accounts` for Telegram identity mapping and account linking
+
 Workflow data lives in:
 
 - `workflows` for the user-facing orchestration state

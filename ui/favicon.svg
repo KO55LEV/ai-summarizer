@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="40" y1="32" x2="212" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#101b36"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="56" y1="40" x2="204" y2="212" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#7c8cff"/>
+    </linearGradient>
+    <linearGradient id="sheet" x1="88" y1="72" x2="176" y2="184" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13213e"/>
+      <stop offset="1" stop-color="#0f1830"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="152" y1="156" x2="200" y2="204" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1ef0c5"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#bg)"/>
+  <rect x="18" y="18" width="220" height="220" rx="54" stroke="url(#edge)" stroke-width="3" opacity=".85"/>
+
+  <rect x="76" y="54" width="112" height="148" rx="22" fill="url(#sheet)" stroke="url(#edge)" stroke-width="3"/>
+  <path d="M148 54v26a14 14 0 0 0 14 14h26" stroke="url(#edge)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="98" y="98" width="60" height="16" rx="8" fill="#12e0c2"/>
+  <rect x="98" y="130" width="76" height="12" rx="6" fill="#41567f"/>
+  <rect x="98" y="154" width="64" height="12" rx="6" fill="#35496f"/>
+  <rect x="98" y="178" width="44" height="12" rx="6" fill="#2c3f61"/>
+
+  <circle cx="182" cy="170" r="32" fill="#0f1c34" stroke="url(#spark)" stroke-width="3"/>
+  <path d="M182 150l6.8 15.2L204 172l-15.2 6.8L182 194l-6.8-15.2L160 172l15.2-6.8L182 150Z" fill="url(#spark)"/>
+  <circle cx="197" cy="160" r="6" fill="#1ef0c5"/>
+</svg>

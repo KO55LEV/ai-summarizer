@@ -1,4 +1,5 @@
 using AiSummarizer.Application.Reasoning;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AiSummarizer.Infrastructure.Reasoning;
 

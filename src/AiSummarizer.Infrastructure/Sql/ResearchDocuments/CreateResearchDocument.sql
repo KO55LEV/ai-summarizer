@@ -1,0 +1,39 @@
+insert into research_documents (
+    id,
+    research_content_item_id,
+    research_topic_run_id,
+    research_topic_id,
+    source_key,
+    canonical_url,
+    title,
+    author_name,
+    published_at,
+    normalized_at,
+    canonical_body,
+    canonical_hash,
+    raw_content_hash,
+    source_provenance_json,
+    normalizer_version,
+    created_at,
+    updated_at
+)
+values (
+    @id,
+    @research_content_item_id,
+    @research_topic_run_id,
+    @research_topic_id,
+    @source_key,
+    @canonical_url,
+    @title,
+    @author_name,
+    @published_at,
+    @normalized_at,
+    @canonical_body,
+    @canonical_hash,
+    @raw_content_hash,
+    @source_provenance_json,
+    @normalizer_version,
+    @created_at,
+    @updated_at
+)
+returning id;

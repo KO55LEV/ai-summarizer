@@ -1,4 +1,5 @@
 using AiSummarizer.Application.Research;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AiSummarizer.Infrastructure.Research;
 

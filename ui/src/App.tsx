@@ -13,11 +13,15 @@ import ExportsPage from './components/pages/ExportsPage';
 import HistoryPage from './components/pages/HistoryPage';
 import SettingsPage from './components/pages/SettingsPage';
 import ProfilePage from './components/pages/ProfilePage';
+import ProjectsPage from './components/pages/ProjectsPage';
+import NotesPage from './components/pages/NotesPage';
 import { ResearchPage } from './components/pages/ResearchPage';
 import { ResearchBriefingPage } from './components/pages/ResearchBriefingPage';
 import { ResearchCreatePage } from './components/pages/ResearchCreatePage';
+import AdminPage from './components/pages/AdminPage';
 import { getRecentVideos } from './api/recentVideos';
 import { analyzeVideo, getTranscriptBySource, getWorkflowStatus } from './api';
+import { getResearchList } from './api/research';
 import { getYouTubePreview } from './api/youtube';
 import { getCurrentUserId } from './config/currentUser';
 import type { NavItem, VideoMetadata, VideoRecord, WorkflowResponse, TranscriptResponse } from './types';
@@ -333,8 +337,81 @@ function buildCompletedState(video: VideoRecord): ProcessingState {
   };
 }
 
+type AppLocation =
+  | { kind: 'admin' }
+  | {
+      kind: 'app';
+      nav: NavItem;
+      researchView: 'list' | 'briefing' | 'create';
+      researchTopicId: string | null;
+    };
+
+const NAV_PATHS: Record<NavItem, string> = {
+  dashboard: '/dashboard',
+  summarizer: '/',
+  transcript: '/transcript',
+  insights: '/insights',
+  exports: '/exports',
+  history: '/history',
+  research: '/research',
+  projects: '/projects',
+  notes: '/notes',
+  settings: '/settings',
+  profile: '/profile',
+};
+
+function isNavItem(value: string): value is NavItem {
+  return value in NAV_PATHS;
+}
+
+function normalizePathname(pathname: string): string {
+  if (!pathname || pathname === '/') return '/';
+  return pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+}
+
+function getLocationFromPathname(pathname: string): AppLocation {
+  const path = normalizePathname(pathname);
+
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    return { kind: 'admin' };
+  }
+
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null };
+  }
+
+  const [first, second] = segments;
+  if (!isNavItem(first)) {
+    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null };
+  }
+
+  if (first === 'research') {
+    if (second === 'create') {
+      return { kind: 'app', nav: 'research', researchView: 'create', researchTopicId: null };
+    }
+
+    if (second) {
+      return {
+        kind: 'app',
+        nav: 'research',
+        researchView: 'briefing',
+        researchTopicId: decodeURIComponent(second),
+      };
+    }
+
+    return { kind: 'app', nav: 'research', researchView: 'list', researchTopicId: null };
+  }
+
+  return { kind: 'app', nav: first, researchView: 'list', researchTopicId: null };
+}
+
+function getPathForNav(nav: NavItem): string {
+  return NAV_PATHS[nav];
+}
+
 export default function App() {
-  const [activeNav, setActiveNav] = useState<NavItem>('summarizer');
+  const [location, setLocation] = useState<AppLocation>(() => getLocationFromPathname(window.location.pathname));
   const urlRef = useRef('');
   const [selectedVideo, setSelectedVideo] = useState<VideoRecord | null>(null);
   const [selectedHistoryTranscript, setSelectedHistoryTranscript] = useState<{
@@ -343,8 +420,8 @@ export default function App() {
     videoMeta: VideoMetadata;
   } | null>(null);
   const [sidebarVideos, setSidebarVideos] = useState<VideoRecord[]>([]);
-  const [researchView, setResearchView] = useState<'list' | 'briefing' | 'create'>('list');
   const [selectedResearchTopic, setSelectedResearchTopic] = useState<ResearchTopic | null>(null);
+  const [researchTopicLoading, setResearchTopicLoading] = useState(false);
   const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'starting' | 'analyzing' | 'ready' | 'error'>('idle');
   const [analysisUrl, setAnalysisUrl] = useState('');
   const [analysisWorkflow, setAnalysisWorkflow] = useState<WorkflowResponse | null>(null);
@@ -354,8 +431,56 @@ export default function App() {
   const [pollingWorkflowId, setPollingWorkflowId] = useState<string | null>(null);
 
   useEffect(() => {
+    const handlePopState = () => {
+      setLocation(getLocationFromPathname(window.location.pathname));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
     getRecentVideos().then(setSidebarVideos);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (location.kind !== 'app' || location.nav !== 'research' || location.researchView !== 'briefing') {
+      setResearchTopicLoading(false);
+      setSelectedResearchTopic(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!location.researchTopicId) {
+      setSelectedResearchTopic(null);
+      setResearchTopicLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setResearchTopicLoading(true);
+    getResearchList(getCurrentUserId())
+      .then((data) => {
+        if (cancelled) return;
+        const topic = data.topics.find((item) => item.id === location.researchTopicId) ?? null;
+        setSelectedResearchTopic(topic);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelectedResearchTopic(null);
+      })
+      .finally(() => {
+        if (!cancelled) setResearchTopicLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location]);
 
   useEffect(() => {
     if (!pollingWorkflowId || analysisPhase !== 'analyzing') return;
@@ -463,16 +588,15 @@ export default function App() {
   const handleChangeUrl = () => {
     setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
-    setResearchView('list');
     setSelectedResearchTopic(null);
-    setActiveNav('summarizer');
+    navigateToPath('/');
     resetSummarizer();
   };
 
   const handleVideoSelect = (video: VideoRecord) => {
     setSelectedHistoryTranscript(null);
     setSelectedVideo(video);
-    setActiveNav('transcript');
+    navigateToPath('/transcript');
   };
 
   const handleHistorySelect = async (item: HistoryItem) => {
@@ -480,7 +604,7 @@ export default function App() {
     setSelectedHistoryTranscript(null);
 
     if (!item.sourceId) {
-      setActiveNav('history');
+      navigateToPath('/history');
       return;
     }
 
@@ -495,15 +619,35 @@ export default function App() {
         transcript,
         videoMeta: buildTranscriptVideoMeta(item, transcript, preview),
       });
-      setActiveNav('transcript');
+      navigateToPath('/transcript');
     } catch {
-      setActiveNav('history');
+      navigateToPath('/history');
     }
   };
 
   const handleViewAll = () => {
-    setActiveNav('history');
+    navigateToPath('/history');
   };
+
+  const navigateToPath = (nextPath: string) => {
+    const normalizedNextPath = normalizePathname(nextPath);
+    if (normalizePathname(window.location.pathname) === normalizedNextPath) return;
+    window.history.pushState({}, '', normalizedNextPath);
+    setLocation(getLocationFromPathname(normalizedNextPath));
+  };
+
+  const handleNavChange = (nav: NavItem) => {
+    setSelectedVideo(null);
+    setSelectedHistoryTranscript(null);
+    setSelectedResearchTopic(null);
+    if (nav !== 'summarizer') {
+      resetSummarizer();
+    }
+    navigateToPath(getPathForNav(nav));
+  };
+
+  const activeNav = location.kind === 'app' ? location.nav : 'summarizer';
+  const researchView = location.kind === 'app' ? location.researchView : 'list';
 
   const summarizerProcessingState = buildProcessingState(
     analysisVideoMeta,
@@ -568,17 +712,44 @@ export default function App() {
     if (activeNav === 'insights') return <InsightsPage />;
     if (activeNav === 'exports') return <ExportsPage />;
     if (activeNav === 'history') return <HistoryPage onVideoOpen={handleHistorySelect} />;
+    if (activeNav === 'projects') return <ProjectsPage />;
+    if (activeNav === 'notes') return <NotesPage />;
     if (activeNav === 'settings') return <SettingsPage />;
-    if (activeNav === 'profile') return <ProfilePage onNavChange={setActiveNav} />;
+    if (activeNav === 'profile') return <ProfilePage onNavChange={handleNavChange} />;
     if (activeNav === 'research') {
-      if (researchView === 'briefing' && selectedResearchTopic)
-        return <ResearchBriefingPage topic={selectedResearchTopic} onBack={() => setResearchView('list')} />;
+      if (researchView === 'briefing') {
+        if (researchTopicLoading) {
+          return (
+            <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">
+                Loading research topic...
+              </div>
+            </main>
+          );
+        }
+
+        if (selectedResearchTopic) {
+          return <ResearchBriefingPage topic={selectedResearchTopic} onBack={() => navigateToPath('/research')} />;
+        }
+
+        return (
+          <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">
+              Research topic not found.
+            </div>
+          </main>
+        );
+      }
+
       if (researchView === 'create')
-        return <ResearchCreatePage onBack={() => setResearchView('list')} />;
+        return <ResearchCreatePage onBack={() => navigateToPath('/research')} />;
       return (
         <ResearchPage
-          onTopicSelect={(t) => { setSelectedResearchTopic(t); setResearchView('briefing'); }}
-          onCreateNew={() => setResearchView('create')}
+          onTopicSelect={(t) => {
+            setSelectedResearchTopic(t);
+            navigateToPath(`/research/${encodeURIComponent(t.id)}`);
+          }}
+          onCreateNew={() => navigateToPath('/research/create')}
         />
       );
     }
@@ -596,23 +767,19 @@ export default function App() {
     return null;
   };
 
+  if (location.kind === 'admin') {
+    return <AdminPage onBackToApp={() => navigateToPath('/')} />;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <LeftSidebar
         activeNav={activeNav}
-        onNavChange={(nav) => {
-          setSelectedVideo(null);
-          setSelectedHistoryTranscript(null);
-          setResearchView('list');
-          setSelectedResearchTopic(null);
-          if (nav !== 'summarizer') {
-            resetSummarizer();
-          }
-          setActiveNav(nav);
-        }}
+        onNavChange={handleNavChange}
         onViewAll={handleViewAll}
         onVideoSelect={(idx) => handleVideoSelect(sidebarVideos[idx])}
         recentVideos={sidebarVideos}
+        onOpenAdmin={() => navigateToPath('/admin')}
       />
       {renderCenter()}
       {renderRight()}

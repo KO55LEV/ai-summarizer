@@ -1,4 +1,4 @@
-export type NavItem = 'dashboard' | 'summarizer' | 'transcript' | 'insights' | 'exports' | 'history' | 'settings' | 'profile' | 'research';
+export type NavItem = 'dashboard' | 'summarizer' | 'transcript' | 'insights' | 'exports' | 'history' | 'research' | 'projects' | 'notes' | 'settings' | 'profile';
 
 export interface VideoRecord {
   title: string;
