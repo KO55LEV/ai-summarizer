@@ -45,8 +45,14 @@ public sealed class NotesRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
     public Task<IReadOnlyList<Note>> ListNotesAsync(Guid? requestedByUserId, Guid? projectId, int limit, int offset, CancellationToken cancellationToken)
         => QueryManyAsync("Notes/ListNotes.sql", cmd =>
         {
-            cmd.Parameters.AddWithValue("requested_by_user_id", (object?)requestedByUserId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("project_id", (object?)projectId ?? DBNull.Value);
+            cmd.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)requestedByUserId ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("project_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)projectId ?? DBNull.Value
+            });
             cmd.Parameters.AddWithValue("limit_value", limit);
             cmd.Parameters.AddWithValue("offset_value", offset);
         }, null, cancellationToken, MapNote);

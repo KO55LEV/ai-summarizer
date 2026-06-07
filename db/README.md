@@ -30,6 +30,11 @@ Transcript data lives in three core tables:
 - `transcript_segments` for timestamped segment rows
 - `transcript_artifacts` for future AI outputs built from a transcript, such as summaries, quotes, quizzes, and study guides
 - `public_request_runs` for public API request audit logs with request/response payloads, timing, source/workflow links, and endpoint metadata
+- `user_video_library` for per-user ownership of summarized videos, including shared transcript links and processing state
+
+TODO:
+
+- enforce user ownership checks on transcript and video detail endpoints using `user_video_library`, while keeping `transcripts` and other source artifacts shared and reusable across users
 
 Notes and project data live in:
 

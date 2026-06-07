@@ -23,6 +23,7 @@ public sealed record TranscriptSummaryDto(
     DateTimeOffset UpdatedAt);
 
 public sealed record ScheduleYoutubeTranscriptCommand(
+    Guid? RequestRunId,
     Guid? RequestedByUserId,
     string YoutubeUrl,
     string? Language,
@@ -32,6 +33,24 @@ public sealed record TranscriptScheduleResultDto(
     string Status,
     TranscriptSummaryDto? Transcript,
     WorkflowDto? Workflow);
+
+public sealed record UserVideoLibraryDto(
+    Guid Id,
+    Guid RequestedByUserId,
+    Guid MediaSourceId,
+    Guid? PublicRequestRunId,
+    Guid? WorkflowId,
+    Guid? TranscriptId,
+    string Status,
+    string SourceProvider,
+    string SourceKind,
+    string ExternalSourceId,
+    string SourceUrl,
+    string? Language,
+    decimal? DurationSeconds,
+    DateTimeOffset? CompletedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
 
 public interface ITranscriptSchedulingService
 {

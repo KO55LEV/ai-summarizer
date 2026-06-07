@@ -7,6 +7,7 @@ namespace AiSummarizer.Worker.JobsProcessing.Handlers;
 
 public sealed class TranscriptImportJobHandler(
     ITranscriptsRepository transcriptsRepository,
+    IUserVideoLibraryRepository userVideoLibraryRepository,
     ILogger<TranscriptImportJobHandler> logger) : IJobHandler
 {
     public string JobType => "transcript.import";
@@ -147,6 +148,10 @@ public sealed class TranscriptImportJobHandler(
                 var savedTranscript = await repository.UpsertTranscriptAsync(transcript, transaction, cancellationToken);
                 await repository.DeleteTranscriptSegmentsAsync(savedTranscript.Id, transaction, cancellationToken);
                 await repository.CreateTranscriptSegmentsAsync(transcriptSegments, transaction, cancellationToken);
+                if (savedTranscript.SourceId is not null)
+                {
+                    await userVideoLibraryRepository.CompleteByMediaSourceIdAsync(savedTranscript.SourceId.Value, savedTranscript.Id, DateTimeOffset.UtcNow, transaction, cancellationToken);
+                }
                 return 0;
             }, cancellationToken);
 

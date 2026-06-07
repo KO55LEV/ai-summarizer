@@ -3,6 +3,7 @@ using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.Emails;
+using AiSummarizer.Application.Notes;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Application.Todos;
 
@@ -68,6 +69,18 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         catch (TodoValidationException ex)
         {
             await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (NoteNotFoundException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (NoteValidationException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (NoteConflictException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status409Conflict, ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {

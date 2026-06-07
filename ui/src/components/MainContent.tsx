@@ -74,22 +74,22 @@ export default function MainContent({ onStartAnalysis, errorMessage }: MainConte
 
   return (
     <main className="flex-1 overflow-y-auto bg-bg-primary">
-      <div className="max-w-[680px] mx-auto px-8 py-8">
+      <div className="w-full max-w-none px-5 py-5 xl:px-6 xl:py-6">
 
         {/* ── Hero ──────────────────────────────────────── */}
-        <div className="text-center mb-6">
-          <h1 className="text-[26px] font-bold text-text-primary mb-2 tracking-tight">
+        <div className="mb-5 text-center">
+          <h1 className="mb-2 text-[28px] font-bold tracking-tight text-text-primary">
             Summarize any YouTube video
           </h1>
-          <p className="text-text-secondary text-[13px] leading-relaxed max-w-[480px] mx-auto">
+          <p className="mx-auto max-w-[640px] text-[13px] leading-relaxed text-text-secondary">
             Paste a YouTube link and we'll automatically fetch captions, detect language,
             and generate a smart summary — even when YouTube has no transcript.
           </p>
         </div>
 
         {/* ── URL Input ─────────────────────────────────── */}
-        <div className="bg-bg-card border border-border rounded-xl p-1.5 mb-4">
-          <div className="flex items-center gap-2.5 bg-bg-input rounded-lg px-4 py-2.5">
+        <div className="mb-4 rounded-xl border border-border bg-bg-card p-1.5">
+          <div className="flex items-center gap-2.5 rounded-lg bg-bg-input px-4 py-2.5">
             <LinkIcon size={16} className="text-text-muted flex-shrink-0" />
             <input
               type="text"
@@ -158,7 +158,7 @@ export default function MainContent({ onStartAnalysis, errorMessage }: MainConte
         )}
 
         {/* ── 3-Step Pipeline ───────────────────────────── */}
-        <div className="bg-bg-card border border-border rounded-xl px-6 py-5 mb-4">
+        <div className="mb-4 rounded-xl border border-border bg-bg-card px-6 py-5">
           <div className="flex items-center">
 
             {/* Step 1 */}
@@ -207,8 +207,8 @@ export default function MainContent({ onStartAnalysis, errorMessage }: MainConte
         </div>
 
         {/* ── How Ai Summarizer works ───────────────── */}
-        <div className="bg-bg-card border border-border rounded-xl px-6 py-6 mb-4">
-          <h3 className="text-[15px] font-bold text-text-primary text-center mb-6">
+        <div className="mb-4 rounded-xl border border-border bg-bg-card px-6 py-6">
+          <h3 className="mb-6 text-center text-[15px] font-bold text-text-primary">
             How Ai Summarizer works
           </h3>
 
@@ -270,7 +270,7 @@ export default function MainContent({ onStartAnalysis, errorMessage }: MainConte
         </div>
 
         {/* ── Account required ──────────────────────────── */}
-        <div className="bg-bg-card border border-border rounded-xl p-5 mb-4">
+        <div className="mb-4 rounded-xl border border-border bg-bg-card p-5">
           <div className="flex gap-4">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#0c1f1f] border border-[#1a5c4a]">
               <CloudDownloadIcon size={22} className="text-accent" />

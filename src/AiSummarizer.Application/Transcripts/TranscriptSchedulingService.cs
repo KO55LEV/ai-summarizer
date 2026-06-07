@@ -10,6 +10,7 @@ namespace AiSummarizer.Application.Transcripts;
 public sealed class TranscriptSchedulingService(
     IMediaSourcesRepository mediaSourcesRepository,
     ITranscriptsRepository transcriptsRepository,
+    IUserVideoLibraryRepository userVideoLibraryRepository,
     IWorkflowsRepository workflowsRepository) : ITranscriptSchedulingService
 {
     public async Task<TranscriptScheduleResultDto> ScheduleYoutubeTranscriptAsync(ScheduleYoutubeTranscriptCommand command, CancellationToken cancellationToken)
@@ -38,12 +39,14 @@ public sealed class TranscriptSchedulingService(
         var existingTranscript = await FindExistingTranscriptAsync(mediaSource, cancellationToken);
         if (existingTranscript is not null)
         {
+            await UpsertUserVideoAsync(command, mediaSource, existingTranscript, null, null, "completed", existingTranscript.Id, cancellationToken);
             return new TranscriptScheduleResultDto("completed", Map(existingTranscript), null);
         }
 
         var activeWorkflow = await FindActiveWorkflowAsync(mediaSource, cancellationToken);
         if (activeWorkflow is not null)
         {
+            await UpsertUserVideoAsync(command, mediaSource, null, activeWorkflow.Id, null, MapWorkflowStatus(activeWorkflow.Status), null, cancellationToken);
             return new TranscriptScheduleResultDto("queued", null, Map(activeWorkflow));
         }
 
@@ -72,6 +75,7 @@ public sealed class TranscriptSchedulingService(
             UpdatedAt = now
         }, null, cancellationToken);
 
+        await UpsertUserVideoAsync(command, mediaSource, null, workflow.Id, null, "queued", null, cancellationToken);
         return new TranscriptScheduleResultDto("queued", null, Map(workflow));
     }
 
@@ -147,4 +151,44 @@ public sealed class TranscriptSchedulingService(
         return await workflowsRepository.GetActiveWorkflowBySourceUrlAsync(mediaSource.CanonicalUrl, cancellationToken)
             ?? await workflowsRepository.GetActiveWorkflowBySourceUrlAsync(mediaSource.OriginalUrl, cancellationToken);
     }
+
+    private async Task UpsertUserVideoAsync(
+        ScheduleYoutubeTranscriptCommand command,
+        MediaSource mediaSource,
+        Transcript? transcript,
+        Guid? workflowId,
+        Guid? publicRequestRunId,
+        string status,
+        Guid? transcriptId,
+        CancellationToken cancellationToken)
+    {
+        if (command.RequestedByUserId is null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        _ = await userVideoLibraryRepository.UpsertUserVideoAsync(new UserVideoLibraryItem
+        {
+            Id = Guid.NewGuid(),
+            RequestedByUserId = command.RequestedByUserId.Value,
+            MediaSourceId = mediaSource.Id,
+            PublicRequestRunId = publicRequestRunId ?? command.RequestRunId,
+            WorkflowId = workflowId,
+            TranscriptId = transcriptId ?? transcript?.Id,
+            Status = status,
+            SourceUrl = mediaSource.CanonicalUrl,
+            CompletedAt = status == "completed" ? now : null,
+            CreatedAt = now,
+            UpdatedAt = now
+        }, null, cancellationToken);
+    }
+
+    private static string MapWorkflowStatus(string workflowStatus)
+        => workflowStatus.Trim().ToLowerInvariant() switch
+        {
+            "succeeded" => "completed",
+            "failed" => "failed",
+            _ => "running"
+        };
 }

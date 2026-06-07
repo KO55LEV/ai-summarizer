@@ -14,6 +14,7 @@ import HistoryPage from './components/pages/HistoryPage';
 import SettingsPage from './components/pages/SettingsPage';
 import ProfilePage from './components/pages/ProfilePage';
 import ProjectsPage from './components/pages/ProjectsPage';
+import ProjectViewPage from './components/pages/ProjectViewPage';
 import TodoPage from './components/pages/TodoPage';
 import NotesPage from './components/pages/NotesPage';
 import { ResearchPage } from './components/pages/ResearchPage';
@@ -352,11 +353,12 @@ type AppLocation =
       nav: NavItem;
       researchView: 'list' | 'briefing' | 'create';
       researchTopicId: string | null;
+      projectId: string | null;
     };
 
 const NAV_PATHS: Record<NavItem, string> = {
   dashboard: '/dashboard',
-  summarizer: '/',
+  summarizer: '/summarizer',
   transcript: '/transcript',
   insights: '/insights',
   exports: '/exports',
@@ -402,19 +404,23 @@ function getLocationFromPathname(pathname: string): AppLocation {
     return { kind: 'landing' };
   }
 
+  if (path === '/summarizer') {
+    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null, projectId: null };
+  }
+
   const segments = path.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null };
+    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null, projectId: null };
   }
 
   const [first, second] = segments;
   if (!isNavItem(first)) {
-    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null };
+    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null, projectId: null };
   }
 
   if (first === 'research') {
     if (second === 'create') {
-      return { kind: 'app', nav: 'research', researchView: 'create', researchTopicId: null };
+      return { kind: 'app', nav: 'research', researchView: 'create', researchTopicId: null, projectId: null };
     }
 
     if (second) {
@@ -423,13 +429,24 @@ function getLocationFromPathname(pathname: string): AppLocation {
         nav: 'research',
         researchView: 'briefing',
         researchTopicId: decodeURIComponent(second),
+        projectId: null,
       };
     }
 
-    return { kind: 'app', nav: 'research', researchView: 'list', researchTopicId: null };
+    return { kind: 'app', nav: 'research', researchView: 'list', researchTopicId: null, projectId: null };
   }
 
-  return { kind: 'app', nav: first, researchView: 'list', researchTopicId: null };
+  if (first === 'projects') {
+    return {
+      kind: 'app',
+      nav: 'projects',
+      researchView: 'list',
+      researchTopicId: null,
+      projectId: second ? decodeURIComponent(second) : null,
+    };
+  }
+
+  return { kind: 'app', nav: first, researchView: 'list', researchTopicId: null, projectId: null };
 }
 
 function getPathForNav(nav: NavItem): string {
@@ -708,7 +725,7 @@ export default function App() {
     setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
     setSelectedResearchTopic(null);
-    navigateToPath('/');
+    navigateToPath('/summarizer');
     resetSummarizer();
   };
 
@@ -831,7 +848,20 @@ export default function App() {
     if (activeNav === 'insights') return <InsightsPage />;
     if (activeNav === 'exports') return <ExportsPage />;
     if (activeNav === 'history') return <HistoryPage onVideoOpen={handleHistorySelect} />;
-    if (activeNav === 'projects') return <ProjectsPage />;
+    if (activeNav === 'projects') {
+      if (location.kind === 'app' && location.projectId) {
+        return (
+          <ProjectViewPage
+            projectId={location.projectId}
+            onBack={() => navigateToPath('/projects')}
+            currentUserDisplayName={authState?.user.displayName ?? null}
+            currentUserEmail={authState?.user.email ?? null}
+          />
+        );
+      }
+
+      return <ProjectsPage />;
+    }
     if (activeNav === 'todo') return <TodoPage />;
     if (activeNav === 'notes') return <NotesPage />;
     if (activeNav === 'settings') return <SettingsPage />;

@@ -90,6 +90,10 @@
 - workflow / transcript ids
 - started_at / finished_at
 
+TODO:
+
+- enforce user ownership on transcript and video detail endpoints with `user_video_library` lookups, while keeping shared transcript storage reusable across users
+
 ### Workflows
 
 - `workflows`

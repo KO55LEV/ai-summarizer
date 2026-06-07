@@ -13,3 +13,12 @@ public interface ITranscriptsRepository
     Task DeleteTranscriptSegmentsAsync(Guid transcriptId, DbTransaction? transaction, CancellationToken cancellationToken);
     Task CreateTranscriptSegmentsAsync(IReadOnlyList<TranscriptSegment> segments, DbTransaction? transaction, CancellationToken cancellationToken);
 }
+
+public interface IUserVideoLibraryRepository
+{
+    Task<T> ExecuteInTransactionAsync<T>(Func<IUserVideoLibraryRepository, DbTransaction, Task<T>> action, CancellationToken cancellationToken);
+    Task<UserVideoLibraryItem> UpsertUserVideoAsync(UserVideoLibraryItem item, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<int> CompleteByMediaSourceIdAsync(Guid mediaSourceId, Guid transcriptId, DateTimeOffset completedAt, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<int> FailByMediaSourceIdAsync(Guid mediaSourceId, DateTimeOffset failedAt, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UserVideoLibraryDto>> ListUserVideosAsync(Guid requestedByUserId, string? status, int limit, int offset, CancellationToken cancellationToken);
+}

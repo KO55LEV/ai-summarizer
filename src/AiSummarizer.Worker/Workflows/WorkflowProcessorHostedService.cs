@@ -6,6 +6,7 @@ using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Settings;
 using AiSummarizer.Application.Workflows;
+using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
 using AiSummarizer.Domain.Jobs;
 using AiSummarizer.Domain.Workflows;
@@ -18,6 +19,7 @@ public sealed class WorkflowProcessorHostedService(
     IMediaSourcesRepository mediaSourcesRepository,
     IWorkflowsRepository workflowsRepository,
     IJobsRepository jobsRepository,
+    IUserVideoLibraryRepository userVideoLibraryRepository,
     IAdminSettingsService adminSettingsService,
     IOptions<WorkflowOptions> options,
     IOptions<YouTubeDownloadOptions> youtubeDownloadOptions,
@@ -82,6 +84,10 @@ public sealed class WorkflowProcessorHostedService(
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             await workflowsRepository.UpdateWorkflowAsync(workflow, null, cancellationToken);
+            if (workflow.SourceId is not null)
+            {
+                await userVideoLibraryRepository.FailByMediaSourceIdAsync(workflow.SourceId.Value, DateTimeOffset.UtcNow, null, cancellationToken);
+            }
             return;
         }
 
@@ -689,6 +695,11 @@ public sealed class WorkflowProcessorHostedService(
             await repository.AddWorkflowEventAsync(workflow.Id, workflow.CurrentStepKey, "error", errorMessage, JsonSerializer.SerializeToElement(new { errorCode }), transaction, cancellationToken);
             return 0;
         }, cancellationToken);
+
+        if (workflow.SourceId is not null)
+        {
+            await userVideoLibraryRepository.FailByMediaSourceIdAsync(workflow.SourceId.Value, now, null, cancellationToken);
+        }
     }
 
     private async Task<WorkflowStep?> GetLatestStepAsync(Guid workflowId, CancellationToken cancellationToken)

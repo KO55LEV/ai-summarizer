@@ -15,6 +15,7 @@ namespace AiSummarizer.Api.Transcripts;
 public sealed class TranscriptsController(
     ITranscriptSchedulingService transcriptSchedulingService,
     ITranscriptsRepository transcriptsRepository,
+    IUserVideoLibraryRepository userVideoLibraryRepository,
     IMediaSourcesRepository mediaSourcesRepository,
     IPublicRequestRunsRepository publicRequestRunsRepository,
     ILogger<TranscriptsController> logger) : ControllerBase
@@ -69,6 +70,7 @@ public sealed class TranscriptsController(
         {
             var result = await transcriptSchedulingService.ScheduleYoutubeTranscriptAsync(
                 new ScheduleYoutubeTranscriptCommand(
+                    requestRun.Id,
                     request.RequestedByUserId,
                     request.YoutubeUrl,
                     request.Language,
@@ -119,6 +121,26 @@ public sealed class TranscriptsController(
             result.Status,
             result.Transcript is null ? null : Map(result.Transcript),
             result.Workflow is null ? null : Map(result.Workflow));
+
+    [HttpGet("library")]
+    public async Task<ActionResult<IReadOnlyList<UserVideoLibraryItemResponse>>> GetLibrary(
+        [FromQuery] Guid? requestedByUserId = null,
+        [FromQuery] string? status = null,
+        [FromQuery] int limit = 50,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        if (requestedByUserId is null || requestedByUserId == Guid.Empty)
+        {
+            return BadRequest(new
+            {
+                status = StatusCodes.Status400BadRequest,
+                detail = "requestedByUserId is required."
+            });
+        }
+
+        return Ok((await userVideoLibraryRepository.ListUserVideosAsync(requestedByUserId.Value, status, limit, offset, cancellationToken)).Select(Map).ToArray());
+    }
 
     private async Task SafeUpdateRequestRunAsync(PublicRequestRun requestRun)
     {
@@ -259,6 +281,25 @@ public sealed class TranscriptsController(
             run.FinishedAt,
             run.CreatedAt,
             run.UpdatedAt);
+
+    private static UserVideoLibraryItemResponse Map(UserVideoLibraryDto item)
+        => new(
+            item.Id,
+            item.RequestedByUserId,
+            item.MediaSourceId,
+            item.PublicRequestRunId,
+            item.WorkflowId,
+            item.TranscriptId,
+            item.Status,
+            item.SourceProvider,
+            item.SourceKind,
+            item.ExternalSourceId,
+            item.SourceUrl,
+            item.Language,
+            item.DurationSeconds,
+            item.CompletedAt,
+            item.CreatedAt,
+            item.UpdatedAt);
 
     private static TranscriptHistoryItemResponse MapHistory(PublicRequestRun run)
     {

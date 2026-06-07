@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiSummarizer.Application.MediaSources;
+using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
 using AiSummarizer.Domain.Workflows;
 
@@ -7,6 +8,7 @@ namespace AiSummarizer.Application.Workflows;
 
 public sealed class WorkflowsService(
     IMediaSourcesRepository mediaSourcesRepository,
+    IUserVideoLibraryRepository userVideoLibraryRepository,
     IWorkflowsRepository repository) : IWorkflowsService
 {
     public async Task<WorkflowDto> CreateYoutubeSummaryWorkflowAsync(CreateYoutubeSummaryWorkflowCommand command, CancellationToken cancellationToken)
@@ -55,6 +57,25 @@ public sealed class WorkflowsService(
             CreatedAt = now,
             UpdatedAt = now
         }, null, cancellationToken);
+
+        if (command.RequestedByUserId is not null)
+        {
+            var nowCompleted = DateTimeOffset.UtcNow;
+            _ = await userVideoLibraryRepository.UpsertUserVideoAsync(new UserVideoLibraryItem
+            {
+                Id = Guid.NewGuid(),
+                RequestedByUserId = command.RequestedByUserId.Value,
+                MediaSourceId = mediaSource.Id,
+                PublicRequestRunId = null,
+                WorkflowId = workflow.Id,
+                TranscriptId = null,
+                Status = "queued",
+                SourceUrl = mediaSource.CanonicalUrl,
+                CompletedAt = null,
+                CreatedAt = nowCompleted,
+                UpdatedAt = nowCompleted
+            }, null, cancellationToken);
+        }
 
         return Map(workflow);
     }

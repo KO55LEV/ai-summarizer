@@ -33,6 +33,24 @@ public sealed record TranscriptScheduleResponse(
     TranscriptSummaryResponse? Transcript,
     AiSummarizer.Api.Workflows.WorkflowResponse? Workflow);
 
+public sealed record UserVideoLibraryItemResponse(
+    Guid Id,
+    Guid RequestedByUserId,
+    Guid MediaSourceId,
+    Guid? PublicRequestRunId,
+    Guid? WorkflowId,
+    Guid? TranscriptId,
+    string Status,
+    string SourceProvider,
+    string SourceKind,
+    string ExternalSourceId,
+    string SourceUrl,
+    string? Language,
+    decimal? DurationSeconds,
+    DateTimeOffset? CompletedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record PublicRequestRunResponse(
     Guid Id,
     Guid? RequestedByUserId,

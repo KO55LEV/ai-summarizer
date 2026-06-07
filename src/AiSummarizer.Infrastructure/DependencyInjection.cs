@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IMediaSourcesRepository, MediaSourcesRepository>();
         services.AddScoped<IPublicRequestRunsRepository, PublicRequestRunsRepository>();
         services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
+        services.AddScoped<IUserVideoLibraryRepository, UserVideoLibraryRepository>();
         services.AddScoped<ITranscriptSchedulingService, TranscriptSchedulingService>();
         services.AddScoped<IResearchRepository, ResearchRepository>();
         services.AddScoped<IProjectsRepository, ProjectsRepository>();
