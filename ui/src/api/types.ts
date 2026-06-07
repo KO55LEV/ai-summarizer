@@ -218,3 +218,39 @@ export interface ResearchBriefing {
   sources: BriefingSource[];
   pastBriefings: PastBriefing[];
 }
+
+// ── Todos ───────────────────────────────────────────────────────────────────
+
+export interface TodoItem {
+  id: string;
+  requestedByUserId: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  title: string;
+  description: string | null;
+  cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | string;
+  status: 'open' | 'doing' | 'blocked' | 'done' | 'archived' | string;
+  priority: 'low' | 'medium' | 'high' | 'urgent' | string;
+  dueAt: string | null;
+  completedAt: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TodoStats {
+  totalCount: number;
+  openCount: number;
+  doingCount: number;
+  blockedCount: number;
+  doneCount: number;
+  dueTodayCount: number;
+  overdueCount: number;
+  projectLinkedCount: number;
+  targetCount: number;
+}
+
+export interface TodoListData {
+  items: TodoItem[];
+  stats: TodoStats;
+}

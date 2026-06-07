@@ -1,0 +1,43 @@
+{
+  "items": [
+    {
+      "id": "project-ops",
+      "requestedByUserId": "user-123",
+      "name": "Operations",
+      "description": "Daily execution, shipping, and maintenance.",
+      "aliases": ["ops"],
+      "status": "active",
+      "color": "#00d4aa",
+      "icon": "Target",
+      "isDefault": true,
+      "createdAt": "2026-05-28T09:00:00Z",
+      "updatedAt": "2026-06-06T09:00:00Z"
+    },
+    {
+      "id": "project-research",
+      "requestedByUserId": "user-123",
+      "name": "Research Lab",
+      "description": "Long-form research topics and briefing workflows.",
+      "aliases": ["research"],
+      "status": "active",
+      "color": "#38bdf8",
+      "icon": "Sparkles",
+      "isDefault": false,
+      "createdAt": "2026-05-20T09:00:00Z",
+      "updatedAt": "2026-06-04T09:00:00Z"
+    },
+    {
+      "id": "project-personal",
+      "requestedByUserId": "user-123",
+      "name": "Personal Growth",
+      "description": "Weekly review, targets, and personal systems.",
+      "aliases": ["personal"],
+      "status": "active",
+      "color": "#a78bfa",
+      "icon": "Lightbulb",
+      "isDefault": false,
+      "createdAt": "2026-05-18T09:00:00Z",
+      "updatedAt": "2026-06-01T09:00:00Z"
+    }
+  ]
+}

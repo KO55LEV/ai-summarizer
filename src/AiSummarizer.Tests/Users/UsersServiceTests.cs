@@ -211,6 +211,18 @@ public sealed class UsersServiceTests
         public Task<User?> GetUserByEmailAsync(string email, DbTransaction? transaction, CancellationToken cancellationToken)
             => Task.FromResult(_users.SingleOrDefault(x => string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)));
 
+        public Task<IReadOnlyList<string>> ListRoleKeysByUserIdAsync(Guid userId, DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+        public Task<IReadOnlyList<AdminUserDto>> ListAdminUsersAsync(string? search, DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AdminUserDto>>(Array.Empty<AdminUserDto>());
+
+        public Task<AdminUserDto?> GetAdminUserByIdAsync(Guid userId, DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.FromResult<AdminUserDto?>(null);
+
+        public Task<IReadOnlyList<AdminRoleDto>> ListRolesAsync(DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AdminRoleDto>>(Array.Empty<AdminRoleDto>());
+
         public Task<AuthIdentity?> GetAuthIdentityByProviderSubjectAsync(AuthProvider provider, string providerSubject, DbTransaction? transaction, CancellationToken cancellationToken)
             => Task.FromResult(_identities.SingleOrDefault(x => x.Provider == provider && x.ProviderSubject == providerSubject));
 
@@ -226,6 +238,15 @@ public sealed class UsersServiceTests
             _users.Add(created);
             return Task.FromResult(created);
         }
+
+        public Task UpdateUserProfileAsync(Guid userId, string email, string? displayName, string? avatarUrl, string? locale, string? timeZone, string status, DateTimeOffset updatedAt, DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task UpdateAuthIdentityEmailsAsync(Guid userId, string email, DateTimeOffset updatedAt, DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task ReplaceUserRolesAsync(Guid userId, IReadOnlyList<string> roleKeys, DbTransaction? transaction, CancellationToken cancellationToken)
+            => Task.CompletedTask;
 
         public Task<AuthIdentity> CreateAuthIdentityAsync(AuthIdentity authIdentity, DbTransaction? transaction, CancellationToken cancellationToken)
         {

@@ -5,6 +5,7 @@ import {
   Newspaper,
   Shield,
   FolderKanban,
+  ListTodo,
   StickyNote,
   ChevronRight,
   LogOut,
@@ -79,6 +80,12 @@ export default function LeftSidebar({
           label: 'Research',
           icon: <Newspaper size={18} />,
           helper: 'Briefings and topics',
+        },
+        {
+          key: 'todo',
+          label: 'To-do',
+          icon: <ListTodo size={18} />,
+          helper: 'Daily and project tasks',
         },
         {
           key: 'notes',

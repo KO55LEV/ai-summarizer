@@ -138,6 +138,26 @@ Primary response models:
 - `ResearchBriefingResponse`
 - `ResearchBriefingHistoryItemResponse`
 
+## Todos API
+
+Базовый путь: `/api/todos`
+
+| Method | Path | Назначение |
+| --- | --- | --- |
+| GET | `/` | список todos, можно фильтровать по `requestedByUserId`, `projectId`, `cadence`, `status` |
+| GET | `/{todoId}` | получить todo |
+| POST | `/` | создать todo |
+| PUT | `/{todoId}` | обновить todo |
+| DELETE | `/{todoId}` | удалить todo |
+
+Todos are user-scoped through `requestedByUserId` and can be linked to `projects` via `projectId`.
+
+Primary response models:
+
+- `TodoListResponse`
+- `TodoResponse`
+- `TodoStatsResponse`
+
 ## Prompts API
 
 Базовый путь: `/api/prompts`

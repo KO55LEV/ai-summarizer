@@ -55,6 +55,7 @@ ui/src/
       ResearchPage.tsx         ← research topic list and filters
       ResearchCreatePage.tsx   ← research topic create studio
       ResearchBriefingPage.tsx  ← briefing viewer and history
+      TodoPage.tsx             ← todo list, cadence filters, project links
       SettingsPage.tsx
       ProfilePage.tsx
   hooks/
@@ -68,7 +69,7 @@ ui/src/
 `NavItem` type controls the active page:
 
 ```
-'dashboard' | 'summarizer' | 'transcript' | 'insights' | 'exports' | 'history' | 'settings' | 'profile'
+'dashboard' | 'summarizer' | 'transcript' | 'insights' | 'exports' | 'history' | 'research' | 'projects' | 'todo' | 'notes' | 'settings' | 'profile'
 ```
 
 `App.tsx` holds `activeNav` state and routes it to the correct center panel via `renderCenter()` and right panel via `renderRight()`.
@@ -138,8 +139,10 @@ Component
 | `api/insights.ts` | `getInsightsData()` | `InsightsData` |
 | `api/exports.ts` | `getExports()` | `ExportRecord[]` |
 | `api/profile.ts` | `getProfileData()` | `ProfileData` |
+| `api/projects.ts` | `getProjects()`, `createProject()` | `ProjectResponse[]`, `ProjectResponse` |
 | `api/prompts.ts` | `listPrompts()`, `createPrompt()`, `updatePrompt()`, `deletePrompt()` | `PromptResponse[]`, `PromptResponse` |
 | `api/recentVideos.ts` | `getRecentVideos()` | `VideoRecord[]` |
+| `api/todos.ts` | `getTodos()`, `getTodo()`, `createTodo()`, `updateTodo()`, `deleteTodo()` | `TodoListData`, `TodoItem` |
 
 All types are defined in `api/types.ts`.
 
@@ -159,6 +162,8 @@ All types are defined in `api/types.ts`.
 | `mocks/data/exports.json` | `ExportsPage` |
 | `mocks/data/profile.json` | `ProfilePage` |
 | `mocks/data/recentVideos.json` | `LeftSidebar` (via `App.tsx`) |
+| `mocks/data/projects.json` | `ProjectsPage`, `TodoPage` |
+| `mocks/data/todos.json` | `TodoPage` |
 | `mocks/data/prompts.json` | `AdminPage` |
 
 ## Pages
@@ -178,6 +183,10 @@ Four format cards (TXT / JSON / PDF / SRT). Export history table with hover-reve
 ### HistoryPage
 
 Search + status filter toolbar. Columnar table with thumbnails, source badges, lifecycle status, date, and hover actions. Clicking a completed row calls `onVideoOpen(VideoRecord)` which navigates to `TranscriptView`. Data from `getHistory()`.
+
+### TodoPage
+
+Task list with create/edit form, cadence filters (`daily`, `weekly`, `monthly`, `yearly`, `target`), status filters, project links, and quick actions to mark done, archive, or delete. Data from `getTodos()` and `getProjects()`.
 
 Props: `onVideoOpen?: (v: VideoRecord) => void`
 

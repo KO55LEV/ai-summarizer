@@ -14,6 +14,7 @@ import HistoryPage from './components/pages/HistoryPage';
 import SettingsPage from './components/pages/SettingsPage';
 import ProfilePage from './components/pages/ProfilePage';
 import ProjectsPage from './components/pages/ProjectsPage';
+import TodoPage from './components/pages/TodoPage';
 import NotesPage from './components/pages/NotesPage';
 import { ResearchPage } from './components/pages/ResearchPage';
 import { ResearchBriefingPage } from './components/pages/ResearchBriefingPage';
@@ -362,6 +363,7 @@ const NAV_PATHS: Record<NavItem, string> = {
   history: '/history',
   research: '/research',
   projects: '/projects',
+  todo: '/todo',
   notes: '/notes',
   settings: '/settings',
   profile: '/profile',
@@ -830,6 +832,7 @@ export default function App() {
     if (activeNav === 'exports') return <ExportsPage />;
     if (activeNav === 'history') return <HistoryPage onVideoOpen={handleHistorySelect} />;
     if (activeNav === 'projects') return <ProjectsPage />;
+    if (activeNav === 'todo') return <TodoPage />;
     if (activeNav === 'notes') return <NotesPage />;
     if (activeNav === 'settings') return <SettingsPage />;
     if (activeNav === 'profile') return <ProfilePage onNavChange={handleNavChange} />;

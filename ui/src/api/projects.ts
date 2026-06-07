@@ -1,4 +1,5 @@
 import { getCurrentUserId } from '../config/currentUser';
+import { createMockProject, getMockProjects } from '../mocks/api/projects';
 
 export interface ProjectResponse {
   id: string;
@@ -33,6 +34,10 @@ export async function getProjects(
   limit = 100,
   offset = 0,
 ): Promise<ProjectResponse[]> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return getMockProjects(requestedByUserId, limit, offset);
+  }
+
   const params = new URLSearchParams({
     requestedByUserId,
     limit: String(limit),
@@ -49,6 +54,15 @@ export async function getProjects(
 }
 
 export async function getProject(projectId: string): Promise<ProjectResponse> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    const projects = await getMockProjects(getCurrentUserId());
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) {
+      throw new Error('Failed to fetch project');
+    }
+    return project;
+  }
+
   const res = await fetch(`/api/projects/${projectId}`);
   if (!res.ok) {
     throw new Error('Failed to fetch project');
@@ -58,6 +72,10 @@ export async function getProject(projectId: string): Promise<ProjectResponse> {
 }
 
 export async function createProject(request: CreateProjectRequest): Promise<ProjectResponse> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return createMockProject(request);
+  }
+
   const res = await fetch('/api/projects', {
     method: 'POST',
     headers: {

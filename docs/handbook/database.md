@@ -184,6 +184,7 @@
 
 - `projects`
 - `notes`
+- `todo_items`
 - `note_inputs`
 - `note_assets`
 - `note_text_versions`
@@ -194,6 +195,32 @@
 `projects` stores user workspaces and topic containers.
 
 `notes` stores user-visible notes and can point to a project via `project_id`.
+
+`todo_items` stores user tasks and targets. It can be:
+
+- personal, with no `project_id`
+- project-linked, for work inside a workspace
+- recurring by `cadence`:
+  - `daily`
+  - `weekly`
+  - `monthly`
+  - `yearly`
+  - `target`
+
+`todo_items.status`:
+
+- `open`
+- `doing`
+- `blocked`
+- `done`
+- `archived`
+
+`todo_items.priority`:
+
+- `low`
+- `medium`
+- `high`
+- `urgent`
 
 `note_inputs` stores immutable ingestion events and raw payloads.
 

@@ -4,6 +4,7 @@ using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.Emails;
 using AiSummarizer.Application.Workflows;
+using AiSummarizer.Application.Todos;
 
 namespace AiSummarizer.Api.Middleware;
 
@@ -57,6 +58,14 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
         }
         catch (ResearchValidationException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (TodoNotFoundException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (TodoValidationException ex)
         {
             await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
         }
