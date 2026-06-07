@@ -16,3 +16,37 @@ public sealed record EmailMessage(
 public sealed record EmailSendResult(
     string Provider,
     string MessageId);
+
+public sealed record EmailTemplateDto(
+    Guid Id,
+    string TemplateKey,
+    string Title,
+    string? Description,
+    string Subject,
+    string? HtmlBody,
+    string? TextBody,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record CreateEmailTemplateCommand(
+    string TemplateKey,
+    string Title,
+    string? Description,
+    string Subject,
+    string? HtmlBody,
+    string? TextBody,
+    bool IsActive);
+
+public sealed record UpdateEmailTemplateCommand(
+    string Title,
+    string? Description,
+    string Subject,
+    string? HtmlBody,
+    string? TextBody,
+    bool IsActive);
+
+public sealed record RenderedEmailTemplateDto(
+    string Subject,
+    string? HtmlBody,
+    string? TextBody);

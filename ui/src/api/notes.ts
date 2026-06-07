@@ -165,7 +165,8 @@ export async function getNotes(request: GetNotesRequest = {}): Promise<NoteRespo
 
   const res = await fetch(`/api/notes?${params.toString()}`);
   if (!res.ok) {
-    throw new Error('Failed to fetch notes');
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to fetch notes');
   }
 
   const data = await res.json() as NoteListResponse;
@@ -175,7 +176,8 @@ export async function getNotes(request: GetNotesRequest = {}): Promise<NoteRespo
 export async function getNoteDetail(noteId: string): Promise<NoteDetailResponse> {
   const res = await fetch(`/api/notes/${noteId}`);
   if (!res.ok) {
-    throw new Error('Failed to fetch note');
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to fetch note');
   }
 
   return res.json() as Promise<NoteDetailResponse>;
@@ -191,7 +193,8 @@ export async function createNote(request: CreateNoteRequest): Promise<NoteDetail
   });
 
   if (!res.ok) {
-    throw new Error('Failed to create note');
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to create note');
   }
 
   return res.json() as Promise<NoteDetailResponse>;
@@ -203,7 +206,8 @@ export async function getLinkedTelegramAccount(requestedByUserId = getCurrentUse
     return null;
   }
   if (!res.ok) {
-    throw new Error('Failed to fetch linked Telegram account');
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to fetch linked Telegram account');
   }
 
   return res.json() as Promise<LinkedTelegramAccountResponse>;
@@ -219,7 +223,8 @@ export async function linkTelegramAccount(request: LinkTelegramAccountRequest): 
   });
 
   if (!res.ok) {
-    throw new Error('Failed to link Telegram account');
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to link Telegram account');
   }
 
   return res.json() as Promise<UserTelegramAccountResponse>;
@@ -231,6 +236,7 @@ export async function revokeTelegramAccountLink(userTelegramAccountId: string): 
   });
 
   if (!res.ok) {
-    throw new Error('Failed to revoke Telegram account link');
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to revoke Telegram account link');
   }
 }

@@ -1,0 +1,16 @@
+{
+  "templates": [
+    {
+      "id": "mock-email-template-1",
+      "templateKey": "email.welcome",
+      "title": "Welcome email",
+      "description": "Sent when a new user signs up.",
+      "subject": "Welcome to Ai Summarizer",
+      "htmlBody": "<div style=\"font-family: Inter, Arial, sans-serif; color: #e5eefc; background: #081122; padding: 32px;\"><div style=\"max-width: 640px; margin: 0 auto; background: #0b172b; border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 32px;\"><h1 style=\"margin: 0 0 16px; font-size: 28px;\">Welcome, {{displayName}}!</h1><p style=\"margin: 0 0 14px; line-height: 1.6;\">Your Ai Summarizer account is ready.</p><p style=\"margin: 0 0 14px; line-height: 1.6;\">You can now organize research, generate summaries, and keep everything in one workspace.</p><p style=\"margin: 24px 0 0; line-height: 1.6; color: #8aa0bd;\">If you did not create this account, you can ignore this message.</p></div></div>",
+      "textBody": "Welcome, {{displayName}}! Your Ai Summarizer account is ready. You can now organize research, generate summaries, and keep everything in one workspace. If you did not create this account, you can ignore this message.",
+      "isActive": true,
+      "createdAt": "2026-06-07T10:00:00.000Z",
+      "updatedAt": "2026-06-07T10:00:00.000Z"
+    }
+  ]
+}

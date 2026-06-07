@@ -345,7 +345,7 @@ function buildCompletedState(video: VideoRecord): ProcessingState {
 type AppLocation =
   | { kind: 'landing' }
   | { kind: 'auth'; mode: 'login' | 'signup' }
-  | { kind: 'admin'; section: 'users' | 'prompts' | 'search-providers' | 'runtime-settings' }
+  | { kind: 'admin'; section: 'users' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates' }
   | {
       kind: 'app';
       nav: NavItem;
@@ -389,7 +389,7 @@ function getLocationFromPathname(pathname: string): AppLocation {
 
   if (path.startsWith('/admin/')) {
     const section = path.split('/')[2];
-    if (section === 'prompts' || section === 'search-providers' || section === 'runtime-settings' || section === 'users') {
+    if (section === 'prompts' || section === 'search-providers' || section === 'runtime-settings' || section === 'users' || section === 'email-templates') {
       return { kind: 'admin', section };
     }
 

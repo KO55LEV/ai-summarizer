@@ -13,6 +13,8 @@ public static class EmailServiceCollectionExtensions
         services.AddOptions<BrevoEmailOptions>().Bind(configuration.GetSection(BrevoEmailOptions.SectionName));
         services.AddOptions<EmailFileDumpOptions>().Bind(configuration.GetSection(EmailFileDumpOptions.SectionName));
 
+        services.AddScoped<IEmailTemplatesRepository, EmailTemplatesRepository>();
+        services.AddScoped<IEmailTemplatesService, EmailTemplatesService>();
         services.AddHttpClient<BrevoEmailSender>((sp, client) =>
         {
             var options = sp.GetRequiredService<IOptions<BrevoEmailOptions>>().Value;

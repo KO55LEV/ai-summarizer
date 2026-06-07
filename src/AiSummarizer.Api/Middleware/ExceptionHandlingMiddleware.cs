@@ -2,6 +2,7 @@ using AiSummarizer.Application.Users;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Prompts;
+using AiSummarizer.Application.Emails;
 using AiSummarizer.Application.Workflows;
 
 namespace AiSummarizer.Api.Middleware;
@@ -10,6 +11,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
 {
     public async Task InvokeAsync(HttpContext context)
     {
+        var isDevelopment = context.RequestServices.GetService<IHostEnvironment>()?.IsDevelopment() == true;
         try
         {
             await next(context);
@@ -38,6 +40,14 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         {
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
         }
+        catch (EmailTemplateConflictException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status409Conflict, ex.Message);
+        }
+        catch (EmailTemplateNotFoundException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
         catch (WorkflowNotFoundException ex)
         {
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
@@ -57,7 +67,10 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         catch (Exception ex)
         {
             logger.LogError(ex, "Unhandled exception");
-            await WriteProblem(context, StatusCodes.Status500InternalServerError, "An unexpected error occurred.");
+            await WriteProblem(
+                context,
+                StatusCodes.Status500InternalServerError,
+                isDevelopment ? ex.Message : "An unexpected error occurred.");
         }
     }
 

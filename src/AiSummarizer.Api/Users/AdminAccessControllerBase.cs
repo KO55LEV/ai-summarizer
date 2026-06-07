@@ -5,7 +5,7 @@ namespace AiSummarizer.Api.Users;
 
 public abstract class AdminAccessControllerBase(IUsersService usersService) : ControllerBase
 {
-    protected async Task<IActionResult?> RequireAdminAsync(CancellationToken cancellationToken)
+    protected async Task<ActionResult?> RequireAdminAsync(CancellationToken cancellationToken)
     {
         var sessionId = ReadSessionId();
         if (sessionId is null)

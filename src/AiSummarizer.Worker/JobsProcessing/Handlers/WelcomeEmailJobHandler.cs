@@ -32,24 +32,56 @@ public sealed class WelcomeEmailJobHandler(
         {
             using var scope = scopeFactory.CreateScope();
             var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
+            var emailTemplatesService = scope.ServiceProvider.GetRequiredService<IEmailTemplatesService>();
 
             var recipientName = string.IsNullOrWhiteSpace(payload.DisplayName)
-                ? null
+                ? payload.Email.Trim()
                 : payload.DisplayName.Trim();
 
-            var message = new EmailMessage(
-                To:
-                [
-                    new EmailAddress(payload.Email, recipientName)
-                ],
-                Subject: "Welcome to Ai Summarizer",
-                HtmlBody: BuildHtmlBody(payload.DisplayName, payload.Email),
-                TextBody: BuildTextBody(payload.DisplayName, payload.Email),
-                Tags:
-                [
-                    "welcome",
-                    "signup"
-                ]);
+            EmailMessage message;
+            try
+            {
+                var rendered = await emailTemplatesService.RenderAsync(
+                    "email.welcome",
+                    new Dictionary<string, string?>
+                    {
+                        ["displayName"] = recipientName,
+                        ["name"] = recipientName,
+                        ["email"] = payload.Email.Trim(),
+                        ["appName"] = "Ai Summarizer"
+                    },
+                    cancellationToken);
+
+                message = new EmailMessage(
+                    To:
+                    [
+                        new EmailAddress(payload.Email, recipientName)
+                    ],
+                    Subject: rendered.Subject,
+                    HtmlBody: rendered.HtmlBody,
+                    TextBody: rendered.TextBody,
+                    Tags:
+                    [
+                        "welcome",
+                        "signup"
+                    ]);
+            }
+            catch (EmailTemplateNotFoundException)
+            {
+                message = new EmailMessage(
+                    To:
+                    [
+                        new EmailAddress(payload.Email, recipientName)
+                    ],
+                    Subject: "Welcome to Ai Summarizer",
+                    HtmlBody: BuildHtmlBody(recipientName, payload.Email),
+                    TextBody: BuildTextBody(recipientName, payload.Email),
+                    Tags:
+                    [
+                        "welcome",
+                        "signup"
+                    ]);
+            }
 
             var result = await emailSender.SendAsync(message, cancellationToken);
             await context.LogInfoAsync(
@@ -89,7 +121,7 @@ public sealed class WelcomeEmailJobHandler(
         }
     }
 
-    private static string BuildHtmlBody(string? displayName, string email)
+    private static string BuildHtmlBody(string displayName, string email)
     {
         var name = string.IsNullOrWhiteSpace(displayName) ? email : displayName.Trim();
         return $$"""
@@ -104,7 +136,7 @@ public sealed class WelcomeEmailJobHandler(
                """;
     }
 
-    private static string BuildTextBody(string? displayName, string email)
+    private static string BuildTextBody(string displayName, string email)
     {
         var name = string.IsNullOrWhiteSpace(displayName) ? email : displayName.Trim();
         return $"Welcome, {name}! Your Ai Summarizer account is ready. If you did not create this account, you can ignore this message.";

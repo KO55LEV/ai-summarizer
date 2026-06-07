@@ -72,8 +72,19 @@ import {
   listAdminUsers,
   updateAdminUser,
 } from '../../api/adminUsers';
+import type {
+  CreateEmailTemplateInput,
+  EmailTemplateResponse,
+  UpdateEmailTemplateInput,
+} from '../../api/adminEmailTemplates';
+import {
+  createEmailTemplate,
+  deleteEmailTemplate,
+  listEmailTemplates,
+  updateEmailTemplate,
+} from '../../api/adminEmailTemplates';
 
-type AdminSection = 'users' | 'prompts' | 'search-providers' | 'runtime-settings';
+type AdminSection = 'users' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates';
 type PromptTab = 'editor' | 'runs' | 'archive' | 'usage';
 type ProviderTab = 'editor' | 'usage';
 
@@ -120,6 +131,16 @@ interface RuntimeSettingsFormState {
   transcribeProvider: string;
 }
 
+interface EmailTemplateFormState {
+  templateKey: string;
+  title: string;
+  description: string;
+  subject: string;
+  htmlBody: string;
+  textBody: string;
+  isActive: boolean;
+}
+
 const EMPTY_PROMPT_FORM: PromptFormState = {
   promptKey: 'admin.new.prompt',
   title: 'New prompt',
@@ -145,6 +166,16 @@ const EMPTY_RUNTIME_SETTINGS_FORM: RuntimeSettingsFormState = {
   emailFromEmail: 'no-reply@example.com',
   emailFromName: 'AiSummarizer',
   transcribeProvider: 'Whisper',
+};
+
+const EMPTY_EMAIL_TEMPLATE_FORM: EmailTemplateFormState = {
+  templateKey: 'email.new.template',
+  title: 'New email template',
+  description: '',
+  subject: 'Subject line',
+  htmlBody: '',
+  textBody: '',
+  isActive: true,
 };
 
 const EMPTY_USER_FORM: AdminUserFormState = {
@@ -207,6 +238,18 @@ function providerToForm(provider: SearchProviderResponse): ProviderFormState {
     quotaPerMonth: String(provider.quotaPerMonth),
     note: provider.note ?? '',
     isActive: provider.isActive,
+  };
+}
+
+function templateToForm(template: EmailTemplateResponse): EmailTemplateFormState {
+  return {
+    templateKey: template.templateKey,
+    title: template.title,
+    description: template.description ?? '',
+    subject: template.subject,
+    htmlBody: template.htmlBody ?? '',
+    textBody: template.textBody ?? '',
+    isActive: template.isActive,
   };
 }
 
@@ -282,17 +325,20 @@ function Input({
   value,
   onChange,
   placeholder,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/60 focus:bg-bg-card"
+      className={`w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/60 focus:bg-bg-card disabled:cursor-not-allowed disabled:opacity-70`}
     />
   );
 }
@@ -302,18 +348,21 @@ function Textarea({
   onChange,
   placeholder,
   minHeight = 'min-h-[140px]',
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   minHeight?: string;
+  disabled?: boolean;
 }) {
   return (
     <textarea
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] leading-6 text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/60 focus:bg-bg-card ${minHeight}`}
+      className={`w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] leading-6 text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/60 focus:bg-bg-card disabled:cursor-not-allowed disabled:opacity-70 ${minHeight}`}
     />
   );
 }
@@ -431,6 +480,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   const [runtimeSettingsSaving, setRuntimeSettingsSaving] = useState(false);
   const [runtimeSettingsError, setRuntimeSettingsError] = useState<string | null>(null);
 
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplateResponse[]>([]);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState<string | null>(null);
+  const [emailTemplateForm, setEmailTemplateForm] = useState<EmailTemplateFormState>(EMPTY_EMAIL_TEMPLATE_FORM);
+  const [emailTemplateLoading, setEmailTemplateLoading] = useState(true);
+  const [emailTemplateSaving, setEmailTemplateSaving] = useState(false);
+  const [emailTemplateError, setEmailTemplateError] = useState<string | null>(null);
+  const [emailTemplateSearch, setEmailTemplateSearch] = useState('');
+  const [emailTemplateStatusFilter, setEmailTemplateStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [emailTemplateMode, setEmailTemplateMode] = useState<'view' | 'new'>('view');
+
   const changeSection = (nextSection: AdminSection) => {
     setSection(nextSection);
     onSectionChange(nextSection);
@@ -454,6 +513,35 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         setUserError(err instanceof Error ? err.message : 'Failed to load users');
       } finally {
         if (mounted) setUserLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const items = await listEmailTemplates('');
+        if (!mounted) return;
+
+        setEmailTemplates(items);
+        if (items.length > 0) {
+          setSelectedTemplateKey(items[0].templateKey);
+        } else {
+          setSelectedTemplateKey(null);
+          setEmailTemplateMode('new');
+          setEmailTemplateForm(EMPTY_EMAIL_TEMPLATE_FORM);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setEmailTemplateError(err instanceof Error ? err.message : 'Failed to load email templates');
+      } finally {
+        if (mounted) setEmailTemplateLoading(false);
       }
     })();
 
@@ -613,6 +701,19 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   }, [providerMode, selectedProviderId]);
 
   useEffect(() => {
+    if (emailTemplateMode === 'new') {
+      setEmailTemplateForm(EMPTY_EMAIL_TEMPLATE_FORM);
+      return;
+    }
+
+    if (!selectedTemplateKey) return;
+    const item = emailTemplates.find((template) => template.templateKey === selectedTemplateKey);
+    if (item) {
+      setEmailTemplateForm(templateToForm(item));
+    }
+  }, [emailTemplateMode, selectedTemplateKey, emailTemplates]);
+
+  useEffect(() => {
     if (userMode === 'new') {
       setUserForm(EMPTY_USER_FORM);
       return;
@@ -659,6 +760,21 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     return matchesSearch && matchesStatus;
   });
 
+  const filteredEmailTemplates = emailTemplates.filter((template) => {
+    const haystack = [
+      template.templateKey,
+      template.title,
+      template.description ?? '',
+      template.subject,
+      template.htmlBody ?? '',
+      template.textBody ?? '',
+    ].join(' ').toLowerCase();
+    const matchesSearch = haystack.includes(emailTemplateSearch.toLowerCase());
+    const matchesStatus =
+      emailTemplateStatusFilter === 'all' ? true : emailTemplateStatusFilter === 'active' ? template.isActive : !template.isActive;
+    return matchesSearch && matchesStatus;
+  });
+
   const filteredUsers = users.filter((user) => {
     const haystack = [
       user.email,
@@ -688,6 +804,13 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     quota: providers.reduce((sum, item) => sum + item.quotaPerMonth, 0),
   };
 
+  const emailTemplateStats = {
+    total: emailTemplates.length,
+    active: emailTemplates.filter((item) => item.isActive).length,
+    inactive: emailTemplates.filter((item) => !item.isActive).length,
+    withHtml: emailTemplates.filter((item) => Boolean(item.htmlBody?.trim())).length,
+  };
+
   const userStats = {
     total: users.length,
     active: users.filter((item) => item.status === 'active').length,
@@ -696,6 +819,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   };
 
   const selectedUser = selectedUserId ? users.find((item) => item.id === selectedUserId) ?? null : null;
+  const selectedTemplate = selectedTemplateKey ? emailTemplates.find((item) => item.templateKey === selectedTemplateKey) ?? null : null;
 
   const reloadPrompts = async (focusId?: string) => {
     const items = await listPrompts(100, 0);
@@ -734,6 +858,21 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     } else {
       setUserMode('new');
       setUserForm(EMPTY_USER_FORM);
+    }
+  };
+
+  const reloadEmailTemplates = async (focusKey?: string) => {
+    setEmailTemplateError(null);
+    const items = await listEmailTemplates(emailTemplateSearch.trim());
+    setEmailTemplates(items);
+    if (focusKey && items.some((item) => item.templateKey === focusKey)) {
+      setSelectedTemplateKey(focusKey);
+    } else if (items.length > 0) {
+      setSelectedTemplateKey(items[0].templateKey);
+    } else {
+      setSelectedTemplateKey(null);
+      setEmailTemplateMode('new');
+      setEmailTemplateForm(EMPTY_EMAIL_TEMPLATE_FORM);
     }
   };
 
@@ -911,7 +1050,73 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     }
   };
 
-  if (userLoading || promptLoading || providerLoading || runtimeSettingsLoading) return <PageSkeleton />;
+  const saveEmailTemplate = async () => {
+    setEmailTemplateSaving(true);
+    setEmailTemplateError(null);
+
+    const payloadBase = {
+      templateKey: emailTemplateForm.templateKey.trim(),
+      title: emailTemplateForm.title.trim(),
+      description: normalizeMaybe(emailTemplateForm.description),
+      subject: emailTemplateForm.subject.trim(),
+      htmlBody: normalizeMaybe(emailTemplateForm.htmlBody),
+      textBody: normalizeMaybe(emailTemplateForm.textBody),
+      isActive: emailTemplateForm.isActive,
+    };
+
+    try {
+      if (emailTemplateMode === 'new') {
+        const created = await createEmailTemplate(payloadBase satisfies CreateEmailTemplateInput);
+        setEmailTemplateMode('view');
+        await reloadEmailTemplates(created.templateKey);
+      } else {
+        if (!selectedTemplateKey) throw new Error('No email template selected');
+        const updated = await updateEmailTemplate(
+          selectedTemplateKey,
+          {
+            title: payloadBase.title,
+            description: payloadBase.description,
+            subject: payloadBase.subject,
+            htmlBody: payloadBase.htmlBody,
+            textBody: payloadBase.textBody,
+            isActive: payloadBase.isActive,
+          } satisfies UpdateEmailTemplateInput,
+        );
+        setEmailTemplateMode('view');
+        await reloadEmailTemplates(updated.templateKey);
+      }
+    } catch (err) {
+      setEmailTemplateError(err instanceof Error ? err.message : 'Failed to save email template');
+    } finally {
+      setEmailTemplateSaving(false);
+    }
+  };
+
+  const deleteEmailTemplateItem = async () => {
+    if (!selectedTemplateKey) return;
+    if (!window.confirm(`Delete email template "${selectedTemplate?.title ?? selectedTemplateKey}"?`)) return;
+
+    setEmailTemplateSaving(true);
+    setEmailTemplateError(null);
+    try {
+      await deleteEmailTemplate(selectedTemplateKey);
+      const remaining = emailTemplates.filter((item) => item.templateKey !== selectedTemplateKey);
+      setEmailTemplates(remaining);
+      if (remaining.length > 0) {
+        setSelectedTemplateKey(remaining[0].templateKey);
+      } else {
+        setSelectedTemplateKey(null);
+        setEmailTemplateMode('new');
+        setEmailTemplateForm(EMPTY_EMAIL_TEMPLATE_FORM);
+      }
+    } catch (err) {
+      setEmailTemplateError(err instanceof Error ? err.message : 'Failed to delete email template');
+    } finally {
+      setEmailTemplateSaving(false);
+    }
+  };
+
+  if (userLoading || promptLoading || providerLoading || runtimeSettingsLoading || emailTemplateLoading) return <PageSkeleton />;
 
   const renderUserPanel = () => {
     const toggleRole = (roleKey: string) => {
@@ -1712,6 +1917,268 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     </div>
   );
 
+  const renderEmailTemplatesPanel = () => (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+        <div className="border-b border-border px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[15px] font-semibold text-text-primary">Email templates</h2>
+              <p className="text-[11px] text-text-muted">View, create, and edit email template content.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEmailTemplateMode('new');
+                setEmailTemplateForm(EMPTY_EMAIL_TEMPLATE_FORM);
+                setSelectedTemplateKey(null);
+                setEmailTemplateError(null);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-accent px-3.5 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover"
+            >
+              <Plus size={14} />
+              New
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={emailTemplateSearch}
+                onChange={(e) => setEmailTemplateSearch(e.target.value)}
+                placeholder="Search by key, title, subject..."
+                className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Filter size={13} className="text-text-muted" />
+              {(['all', 'active', 'inactive'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setEmailTemplateStatusFilter(value)}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
+                    emailTemplateStatusFilter === value
+                      ? 'bg-accent text-bg-primary'
+                      : 'border border-border bg-bg-input text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[calc(100vh-310px)] overflow-y-auto p-3">
+          {filteredEmailTemplates.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+              <div className="text-[13px] font-medium text-text-primary">No email templates match your filters.</div>
+              <div className="mt-1 text-[11px] text-text-muted">Create a new template or loosen the search criteria.</div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredEmailTemplates.map((template) => {
+                const isSelected = template.templateKey === selectedTemplateKey && emailTemplateMode !== 'new';
+                return (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => {
+                      setEmailTemplateMode('view');
+                      setSelectedTemplateKey(template.templateKey);
+                      setEmailTemplateError(null);
+                    }}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                      isSelected
+                        ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]'
+                        : 'border-border bg-bg-input/40 hover:border-border/80 hover:bg-bg-input'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-semibold text-text-primary">{template.title}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-text-muted">{template.templateKey}</div>
+                      </div>
+                      <Badge tone={template.isActive ? 'accent' : 'muted'}>{template.isActive ? 'Active' : 'Inactive'}</Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge>{template.subject}</Badge>
+                    </div>
+                    <div className="mt-3 line-clamp-2 text-[11px] leading-5 text-text-secondary">
+                      {template.description ?? 'No description set.'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="min-h-[760px] rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+        <div className="border-b border-border px-5 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-[16px] font-semibold text-text-primary">
+                  {emailTemplateMode === 'new' ? 'Create email template' : selectedTemplate?.title ?? 'Select an email template'}
+                </h2>
+                {selectedTemplate && emailTemplateMode === 'view' && (
+                  <Badge tone={selectedTemplate.isActive ? 'accent' : 'muted'}>{selectedTemplate.isActive ? 'Active' : 'Inactive'}</Badge>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                {emailTemplateMode === 'new' ? (
+                  <span>Draft editor for a new template key.</span>
+                ) : selectedTemplate ? (
+                  <>
+                    <span>{selectedTemplate.templateKey}</span>
+                    <span>•</span>
+                    <span>Updated {formatDateTime(selectedTemplate.updatedAt)}</span>
+                  </>
+                ) : (
+                  <span>No email template selected.</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {emailTemplateMode === 'view' && selectedTemplate && (
+                <button
+                  type="button"
+                  onClick={deleteEmailTemplateItem}
+                  disabled={emailTemplateSaving}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3.5 py-2 text-[12px] font-semibold text-red-200 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={saveEmailTemplate}
+                disabled={emailTemplateSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {emailTemplateSaving ? <RefreshCw size={14} className="animate-spin" /> : <CircleCheck size={14} />}
+                Save
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <StatCard label="Total" value={String(emailTemplateStats.total)} icon={<Layers3 size={14} />} />
+            <StatCard label="Active" value={String(emailTemplateStats.active)} icon={<CircleCheck size={14} />} accent />
+            <StatCard label="Inactive" value={String(emailTemplateStats.inactive)} icon={<CircleDashed size={14} />} />
+            <StatCard label="HTML" value={String(emailTemplateStats.withHtml)} icon={<KeyRound size={14} />} />
+          </div>
+        </div>
+
+        <div className="p-5">
+          {emailTemplateLoading ? (
+            <div className="grid gap-4">
+              <div className="h-28 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+              <div className="h-64 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Field label="Template key" helper="Required and unique">
+                  <Input
+                    value={emailTemplateForm.templateKey}
+                    onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, templateKey: value }))}
+                    placeholder="email.welcome"
+                    disabled={emailTemplateMode === 'view'}
+                  />
+                </Field>
+                <Field label="Title">
+                  <Input
+                    value={emailTemplateForm.title}
+                    onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, title: value }))}
+                    placeholder="Welcome email"
+                  />
+                </Field>
+                <Field label="Subject">
+                  <Input
+                    value={emailTemplateForm.subject}
+                    onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, subject: value }))}
+                    placeholder="Welcome to Ai Summarizer"
+                  />
+                </Field>
+                <Field label="Active">
+                  <div className="flex h-full items-center gap-3 rounded-xl border border-border bg-bg-input px-3.5 py-2.5">
+                    <Toggle checked={emailTemplateForm.isActive} onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, isActive: value }))} />
+                    <div>
+                      <div className="text-[12px] font-medium text-text-primary">{emailTemplateForm.isActive ? 'Enabled' : 'Disabled'}</div>
+                      <div className="text-[11px] text-text-muted">Disabled templates fall back to built-in content in the worker.</div>
+                    </div>
+                  </div>
+                </Field>
+              </div>
+
+              <Field label="Description" helper="Optional">
+                <Textarea
+                  value={emailTemplateForm.description}
+                  onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, description: value }))}
+                  placeholder="Explain when this template is used."
+                  minHeight="min-h-[100px]"
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <Field label="HTML body">
+                  <Textarea
+                    value={emailTemplateForm.htmlBody}
+                    onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, htmlBody: value }))}
+                    placeholder="<div>Hi {{displayName}}</div>"
+                    minHeight="min-h-[340px]"
+                  />
+                </Field>
+                <Field label="Text body">
+                  <Textarea
+                    value={emailTemplateForm.textBody}
+                    onChange={(value) => setEmailTemplateForm((cur) => ({ ...cur, textBody: value }))}
+                    placeholder="Hi {{displayName}}"
+                    minHeight="min-h-[340px]"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                    <KeyRound size={14} className="text-accent" />
+                    Placeholder hints
+                  </div>
+                  <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                    <div><span className="text-text-primary">{"{{displayName}}"}</span> renders the recipient display name or email fallback.</div>
+                    <div><span className="text-text-primary">{"{{email}}"}</span> renders the recipient email address.</div>
+                    <div><span className="text-text-primary">{"{{appName}}"}</span> renders the product name.</div>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                    <Shield size={14} className="text-accent" />
+                    Routing behavior
+                  </div>
+                  <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                    <div>The worker loads the template at send time.</div>
+                    <div>If the template is missing or disabled, it falls back to built-in welcome content.</div>
+                    <div>The final email is still routed through the selected provider.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+
   const renderRuntimeSettingsPanel = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
@@ -1855,6 +2322,8 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
       ? 'User management'
       : section === 'prompts'
         ? 'Prompt management'
+        : section === 'email-templates'
+          ? 'Email template management'
         : section === 'search-providers'
         ? 'Search provider management'
         : 'Runtime settings';
@@ -1863,6 +2332,8 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
       ? 'Search users, inspect access, and edit profile data and roles.'
       : section === 'prompts'
         ? 'Scan, edit, archive, and delete prompt templates.'
+        : section === 'email-templates'
+          ? 'View, edit, add, and remove email templates used by the worker.'
         : section === 'search-providers'
         ? 'Add, review, and remove search-provider keys.'
         : 'Choose active email and transcription providers.';
@@ -1881,9 +2352,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         { label: 'Inactive', value: String(promptStats.inactive), icon: <CircleDashed size={14} /> },
         { label: 'Archive', value: String(promptStats.archives), icon: <Archive size={14} /> },
       ]
+    : section === 'email-templates'
+      ? [
+          { label: 'Total', value: String(emailTemplateStats.total), icon: <Layers3 size={14} /> },
+          { label: 'Active', value: String(emailTemplateStats.active), icon: <CircleCheck size={14} />, accent: true },
+          { label: 'Inactive', value: String(emailTemplateStats.inactive), icon: <CircleDashed size={14} /> },
+          { label: 'HTML', value: String(emailTemplateStats.withHtml), icon: <KeyRound size={14} /> },
+        ]
     : section === 'search-providers'
       ? [
-        { label: 'Total', value: String(providerStats.total), icon: <Server size={14} /> },
+          { label: 'Total', value: String(providerStats.total), icon: <Server size={14} /> },
         { label: 'Active', value: String(providerStats.active), icon: <CircleCheck size={14} />, accent: true },
         { label: 'Inactive', value: String(providerStats.inactive), icon: <CircleDashed size={14} /> },
         { label: 'Quota', value: formatQuota(providerStats.quota), icon: <KeyRound size={14} /> },
@@ -1935,6 +2413,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               </button>
               <button
                 type="button"
+                onClick={() => changeSection('email-templates')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'email-templates' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <Settings2 size={16} />
+                Email templates
+              </button>
+              <button
+                type="button"
                 onClick={() => changeSection('search-providers')}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
                   section === 'search-providers' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
@@ -1969,6 +2457,12 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                       { label: 'Execution trail', value: 'Runs and payloads', icon: <Activity size={14} /> },
                       { label: 'Version history', value: 'Archived revisions', icon: <Archive size={14} /> },
                     ]
+                  : section === 'email-templates'
+                    ? [
+                        { label: 'Template library', value: 'View and edit email content', icon: <Settings2 size={14} /> },
+                        { label: 'Rendering', value: 'Token replacement on send', icon: <Sparkles size={14} /> },
+                        { label: 'Fallback', value: 'Built-in welcome template', icon: <Shield size={14} /> },
+                      ]
                   : section === 'users'
                     ? [
                         { label: 'User profiles', value: 'Edit profile data', icon: <Users size={14} /> },
@@ -2048,6 +2542,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                   </div>
                 )}
                 {renderPromptPanel()}
+              </>
+            ) : section === 'email-templates' ? (
+              <>
+                {emailTemplateError && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>{emailTemplateError}</div>
+                  </div>
+                )}
+                {renderEmailTemplatesPanel()}
               </>
             ) : section === 'search-providers' ? (
               <>
