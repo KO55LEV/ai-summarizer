@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Clock,
+  AlertCircle,
+  ChevronRight,
+  RefreshCw,
   Search,
   Play,
-  ChevronRight,
-  AlertCircle,
-  RefreshCw,
+  Plus,
 } from 'lucide-react';
 import type { HistoryItem } from '../../api/types';
 import { getHistory } from '../../api/history';
@@ -96,7 +97,23 @@ function formatSourceLabel(source: string): string {
   }
 }
 
-export default function HistoryPage({ onVideoOpen }: { onVideoOpen?: (v: HistoryItem) => void }) {
+export default function HistoryPage({
+  onVideoOpen,
+  onNew,
+}: {
+  onVideoOpen?: (v: HistoryItem) => void;
+  onNew?: () => void;
+}) {
+  return <HistoryPageView onVideoOpen={onVideoOpen} onNew={onNew} />;
+}
+
+export function HistoryPageView({
+  onVideoOpen,
+  onNew,
+}: {
+  onVideoOpen?: (v: HistoryItem) => void;
+  onNew?: () => void;
+}) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -176,43 +193,60 @@ export default function HistoryPage({ onVideoOpen }: { onVideoOpen?: (v: History
 
   return (
     <main className="flex-1 overflow-y-auto bg-bg-primary">
-      <div className="max-w-[900px] mx-auto px-8 py-8">
+      <div className="mx-auto max-w-[1600px] px-3 py-3 sm:px-5 sm:py-5">
+        <section className="rounded-[22px] border border-border bg-[linear-gradient(135deg,rgba(0,212,170,0.12),rgba(19,28,48,0.96)_45%,rgba(12,18,33,1))] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.2)] sm:p-4.5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-3xl">
+              <h1 className="text-[22px] font-semibold tracking-tight text-text-primary sm:text-[24px]">Summarizer</h1>
+              <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-text-secondary">
+                Recent transcript requests and completed analyses. Start a new video or return to previous results.
+              </p>
+            </div>
 
-        <div className="mb-7">
-          <h1 className="text-[24px] font-bold text-text-primary tracking-tight mb-1">History</h1>
-          <p className="text-text-secondary text-[13px]">Recent transcript requests and completed analyses for the current user.</p>
-        </div>
+            {onNew && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onNew}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-3 py-2 text-[11px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover sm:w-auto"
+                >
+                  <Plus size={14} />
+                  New Video
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
 
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <div className="flex-1 min-w-[240px] flex items-center gap-2 bg-bg-card border border-border rounded-xl px-4 py-2.5">
-            <Search size={14} className="text-text-muted" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by title, channel, source or URL…"
-              className="flex-1 bg-transparent text-[13px] text-text-primary placeholder:text-text-muted outline-none"
-            />
+        <section className="mt-5">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <label className="flex items-center gap-2.5 rounded-2xl border border-border bg-bg-card px-3.5 py-2.5">
+              <Search size={15} className="text-text-muted" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search videos..."
+                className="w-full bg-transparent text-[12px] text-text-primary outline-none placeholder:text-text-muted"
+              />
+            </label>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as (typeof STATUS_FILTERS)[number])}
+              className="rounded-2xl border border-border bg-bg-card px-3.5 py-2.5 text-[12px] text-text-secondary outline-none transition-colors hover:bg-bg-card-hover"
+            >
+              {STATUS_FILTERS.map((status) => (
+                <option key={status} value={status}>
+                  {status === 'all' ? 'All statuses' : formatStatusLabel(status)}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="flex items-center gap-1.5 bg-bg-card border border-border rounded-xl p-1.5">
-            {STATUS_FILTERS.map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors cursor-pointer ${
-                  statusFilter === status
-                    ? 'bg-accent text-bg-primary'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-input'
-                }`}
-              >
-                {status === 'all' ? 'All' : formatStatusLabel(status)}
-              </button>
-            ))}
-          </div>
-        </div>
+        </section>
 
         {error && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-danger">
+          <div className="mt-5 rounded-2xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[12px] text-red-300">
             <div className="flex items-center gap-2 text-[13px]">
               <AlertCircle size={14} />
               <span>{error}</span>
@@ -227,7 +261,7 @@ export default function HistoryPage({ onVideoOpen }: { onVideoOpen?: (v: History
           </div>
         )}
 
-        <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
+        <div className="mt-5 overflow-hidden rounded-[22px] border border-border bg-bg-card">
           <div className="grid grid-cols-[2.2fr_1fr_1fr_1fr_72px] items-center gap-4 px-5 py-2.5 border-b border-border">
             <span className="text-[11px] font-medium text-text-muted">Video</span>
             <span className="text-[11px] font-medium text-text-muted">Source</span>

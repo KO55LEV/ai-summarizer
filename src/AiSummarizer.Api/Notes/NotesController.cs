@@ -85,6 +85,28 @@ public sealed class NotesController(INotesService notesService) : ControllerBase
             request.Height,
             request.Metadata), cancellationToken)));
 
+    [HttpPost("{noteId:guid}/assets/upload")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<NoteAssetResponse>> UploadAsset(
+        [FromRoute] Guid noteId,
+        [FromForm] IFormFile file,
+        [FromForm] Guid? noteInputId,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { detail = "File is required." });
+        }
+
+        await using var stream = file.OpenReadStream();
+        return Ok(Map(await notesService.UploadNoteAssetAsync(new UploadNoteAssetCommand(
+            noteId,
+            noteInputId,
+            file.FileName,
+            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+            stream), cancellationToken)));
+    }
+
     [HttpGet("{noteId:guid}/text-versions")]
     public async Task<ActionResult<IReadOnlyList<NoteTextVersionResponse>>> ListTextVersions([FromRoute] Guid noteId, CancellationToken cancellationToken)
         => Ok((await notesService.ListNoteTextVersionsAsync(noteId, cancellationToken)).Select(Map).ToArray());
@@ -93,6 +115,7 @@ public sealed class NotesController(INotesService notesService) : ControllerBase
     public async Task<ActionResult<NoteTextVersionResponse>> AddTextVersion([FromRoute] Guid noteId, [FromBody] CreateNoteTextVersionRequest request, CancellationToken cancellationToken)
         => Ok(Map(await notesService.AddNoteTextVersionAsync(new CreateNoteTextVersionCommand(
             noteId,
+            request.SourceAssetId,
             request.SourceRunId,
             request.VersionKind,
             request.Text,
@@ -114,6 +137,7 @@ public sealed class NotesController(INotesService notesService) : ControllerBase
         => Ok(Map(await notesService.AddNoteProcessingRunAsync(new CreateNoteProcessingRunCommand(
             noteId,
             request.JobId,
+            request.SourceAssetId,
             request.Stage,
             request.Status,
             request.Provider,
@@ -250,6 +274,7 @@ public sealed class NotesController(INotesService notesService) : ControllerBase
         => new(
             version.Id,
             version.NoteId,
+            version.SourceAssetId,
             version.SourceRunId,
             version.VersionKind,
             version.Text,
@@ -264,6 +289,7 @@ public sealed class NotesController(INotesService notesService) : ControllerBase
             run.Id,
             run.NoteId,
             run.JobId,
+            run.SourceAssetId,
             run.Stage,
             run.Status,
             run.Provider,

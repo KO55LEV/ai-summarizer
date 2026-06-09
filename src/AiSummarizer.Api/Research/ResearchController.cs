@@ -19,19 +19,36 @@ public sealed class ResearchController(IResearchService researchService) : Contr
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(Map(await researchService.GetResearchListAsync(requestedByUserId, limit, offset, cancellationToken)));
+    {
+        if (requestedByUserId is null || requestedByUserId == Guid.Empty)
+        {
+            return BadRequest(new { message = "requestedByUserId is required." });
+        }
+
+        return Ok(Map(await researchService.GetResearchListAsync(requestedByUserId, limit, offset, cancellationToken)));
+    }
 
     [HttpGet("{topicId:guid}")]
-    public async Task<ActionResult<ResearchTopicResponse>> GetTopic([FromRoute] Guid topicId, CancellationToken cancellationToken)
-        => Ok(MapTopic(await researchService.GetTopicAsync(topicId, cancellationToken)));
+    public async Task<ActionResult<ResearchTopicResponse>> GetTopic([FromRoute] Guid topicId, [FromQuery] Guid? requestedByUserId, CancellationToken cancellationToken)
+    {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
+        return Ok(MapTopic(topic));
+    }
 
     [HttpPost]
     public async Task<ActionResult<ResearchTopicResponse>> CreateTopic([FromBody] CreateResearchTopicRequest request, CancellationToken cancellationToken)
         => Ok(MapTopic(await researchService.CreateTopicAsync(new CreateResearchTopicCommand(
             request.RequestedByUserId,
+            request.ProjectId,
             request.Name,
             request.Description,
             request.Frequency,
+            string.IsNullOrWhiteSpace(request.Status) ? "active" : request.Status,
             request.DeliveryTime,
             request.Sources,
             request.Tags,
@@ -39,7 +56,15 @@ public sealed class ResearchController(IResearchService researchService) : Contr
 
     [HttpPut("{topicId:guid}")]
     public async Task<ActionResult<ResearchTopicResponse>> UpdateTopic([FromRoute] Guid topicId, [FromBody] UpdateResearchTopicRequest request, CancellationToken cancellationToken)
-        => Ok(MapTopic(await researchService.UpdateTopicAsync(topicId, new UpdateResearchTopicCommand(
+    {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, request.RequestedByUserId))
+        {
+            return Forbid();
+        }
+
+        return Ok(MapTopic(await researchService.UpdateTopicAsync(topicId, new UpdateResearchTopicCommand(
+            request.ProjectId,
             request.Name,
             request.Description,
             request.Frequency,
@@ -48,33 +73,74 @@ public sealed class ResearchController(IResearchService researchService) : Contr
             request.Sources,
             request.Tags,
             request.Outputs), cancellationToken)));
+    }
 
     [HttpDelete("{topicId:guid}")]
-    public async Task<IActionResult> DeleteTopic([FromRoute] Guid topicId, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteTopic([FromRoute] Guid topicId, [FromQuery] Guid? requestedByUserId, CancellationToken cancellationToken)
     {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
         await researchService.DeleteTopicAsync(topicId, cancellationToken);
         return NoContent();
     }
 
     [HttpGet("{topicId:guid}/briefing")]
-    public async Task<ActionResult<ResearchBriefingResponse>> GetLatestBriefing([FromRoute] Guid topicId, CancellationToken cancellationToken)
-        => Ok(MapBriefing(await researchService.GetLatestBriefingAsync(topicId, cancellationToken)));
+    public async Task<ActionResult<ResearchBriefingResponse>> GetLatestBriefing([FromRoute] Guid topicId, [FromQuery] Guid? requestedByUserId, CancellationToken cancellationToken)
+    {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
+        return Ok(MapBriefing(await researchService.GetLatestBriefingAsync(topicId, cancellationToken)));
+    }
 
     [HttpGet("{topicId:guid}/briefings")]
     public async Task<ActionResult<IReadOnlyList<ResearchBriefingHistoryItemResponse>>> ListBriefings(
         [FromRoute] Guid topicId,
+        [FromQuery] Guid? requestedByUserId,
         [FromQuery] int limit = 20,
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok((await researchService.ListBriefingHistoryAsync(topicId, limit, offset, cancellationToken)).Select(MapBriefingHistory).ToArray());
+    {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
+        return Ok((await researchService.ListBriefingHistoryAsync(topicId, limit, offset, cancellationToken)).Select(MapBriefingHistory).ToArray());
+    }
 
     [HttpGet("{topicId:guid}/history")]
     public Task<ActionResult<IReadOnlyList<ResearchBriefingHistoryItemResponse>>> GetHistory(
         [FromRoute] Guid topicId,
+        [FromQuery] Guid? requestedByUserId,
         [FromQuery] int limit = 20,
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
-        => ListBriefings(topicId, limit, offset, cancellationToken);
+        => ListBriefings(topicId, requestedByUserId, limit, offset, cancellationToken);
+
+    [HttpGet("{topicId:guid}/briefings/{briefingId:guid}")]
+    public async Task<ActionResult<ResearchBriefingResponse>> GetBriefing(
+        [FromRoute] Guid topicId,
+        [FromRoute] Guid briefingId,
+        [FromQuery] Guid? requestedByUserId,
+        CancellationToken cancellationToken)
+    {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
+        return Ok(MapBriefing(await researchService.GetBriefingAsync(topicId, briefingId, cancellationToken)));
+    }
 
     [HttpPost("{topicId:guid}/briefings")]
     public async Task<ActionResult<ResearchBriefingResponse>> CreateBriefing(
@@ -98,19 +164,51 @@ public sealed class ResearchController(IResearchService researchService) : Contr
         [FromRoute] Guid topicId,
         [FromServices] IResearchRepository researchRepository,
         CancellationToken cancellationToken,
+        [FromQuery] Guid? requestedByUserId,
         [FromQuery] int limit = 20,
         [FromQuery] int offset = 0)
-        => Ok((await researchRepository.ListTopicRunsAsync(topicId, limit, offset, cancellationToken)).Select(MapRun).ToArray());
+    {
+        var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
+        var runs = await researchRepository.ListTopicRunsAsync(topicId, limit, offset, cancellationToken);
+        IReadOnlyList<ResearchTopicRunDto> activeJobRuns = offset == 0
+            ? await researchRepository.ListActiveTopicRunJobsAsync(topicId, cancellationToken)
+            : Array.Empty<ResearchTopicRunDto>();
+
+        return Ok(activeJobRuns.Concat(runs).Select(MapRun).ToArray());
+    }
 
     [HttpPost("{topicId:guid}/runs")]
     public async Task<ActionResult<StartResearchTopicRunResponse>> StartRun(
         [FromRoute] Guid topicId,
         [FromBody] StartResearchTopicRunRequest request,
         [FromServices] IJobsService jobsService,
+        [FromServices] IResearchRepository researchRepository,
         CancellationToken cancellationToken)
     {
         var topic = await researchService.GetTopicAsync(topicId, cancellationToken);
         var requestedByUserId = request.RequestedByUserId ?? topic.RequestedByUserId;
+        if (!CanAccessTopic(topic, requestedByUserId))
+        {
+            return Forbid();
+        }
+
+        var activeRun = await researchRepository.GetActiveTopicRunAsync(topicId, cancellationToken);
+        if (activeRun is not null)
+        {
+            return Ok(new StartResearchTopicRunResponse(
+                activeRun.JobId,
+                topicId,
+                activeRun.Id,
+                "research.topic.run",
+                "already_running",
+                activeRun.CreatedAt,
+                "A research run is already queued or running for this topic."));
+        }
 
         var job = await jobsService.CreateJobAsync(new CreateJobCommand(
             "research.topic.run",
@@ -126,7 +224,14 @@ public sealed class ResearchController(IResearchService researchService) : Contr
             null,
             3), cancellationToken);
 
-        return Ok(new StartResearchTopicRunResponse(job.Job.Id, topicId, job.Job.JobType));
+        return Ok(new StartResearchTopicRunResponse(
+            job.Job.Id,
+            topicId,
+            null,
+            job.Job.JobType,
+            "queued",
+            job.Job.CreatedAt,
+            "Research run queued."));
     }
 
     [HttpGet("runs/{runId:guid}")]
@@ -279,6 +384,11 @@ public sealed class ResearchController(IResearchService researchService) : Contr
             run.SummaryPreview,
             run.CreatedAt,
             run.UpdatedAt);
+
+    private static bool CanAccessTopic(ResearchTopicDto topic, Guid? requestedByUserId)
+        => requestedByUserId is not null
+           && requestedByUserId != Guid.Empty
+           && topic.RequestedByUserId == requestedByUserId;
 
     private static ResearchContentItemResponse MapContentItem(ResearchContentItemDto item)
         => new(

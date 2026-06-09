@@ -119,6 +119,8 @@ export interface ProfileUser {
   name: string;
   email: string;
   initials: string;
+  avatarUrl?: string | null;
+  status: string;
   plan: 'free' | 'pro';
   memberSince: string;
 }
@@ -163,17 +165,23 @@ export interface ProfileData {
 
 export interface ResearchTopic {
   id: string;
+  requestedByUserId: string | null;
   projectId: string | null;
   name: string;
   description: string;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
   status: 'active' | 'paused' | 'draft';
+  deliveryTime: string | null;
   sources: string[];
   tags: string[];
+  outputs: string[];
   briefingsCount: number;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
   lastRun: string;
   nextRun: string;
   lastBriefingPreview: string;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -202,11 +210,13 @@ export interface BriefingSource {
 
 export interface PastBriefing {
   id: string;
+  generatedAt: string;
   date: string;
   preview: string;
 }
 
 export interface ResearchBriefing {
+  id: string;
   topicId: string;
   topicName: string;
   generatedAt: string;
@@ -217,6 +227,24 @@ export interface ResearchBriefing {
   sections: BriefingSection[];
   sources: BriefingSource[];
   pastBriefings: PastBriefing[];
+  previewText: string;
+}
+
+export interface ResearchTopicRun {
+  id: string;
+  researchTopicId: string;
+  requestedByUserId: string | null;
+  jobId: string | null;
+  status: string;
+  triggeredBy: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  nextRetryAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  summaryPreview: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ── Todos ───────────────────────────────────────────────────────────────────
@@ -226,6 +254,7 @@ export interface TodoItem {
   requestedByUserId: string | null;
   projectId: string | null;
   projectName: string | null;
+  bucket: 'today' | 'next' | 'later' | string;
   title: string;
   description: string | null;
   cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | string;

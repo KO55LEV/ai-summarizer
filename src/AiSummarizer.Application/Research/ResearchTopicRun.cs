@@ -43,6 +43,12 @@ public sealed record ResearchTopicRunDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record ResearchActiveTopicRunDto(
+    Guid Id,
+    Guid? JobId,
+    string Status,
+    DateTimeOffset CreatedAt);
+
 public sealed record ResearchTopicRunPhaseDto(
     Guid Id,
     Guid ResearchTopicRunId,

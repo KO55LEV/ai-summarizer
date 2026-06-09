@@ -28,6 +28,7 @@ public sealed record ResearchTopicDto(
 public sealed record ResearchTopicRecord(
     Guid Id,
     Guid? RequestedByUserId,
+    Guid? ProjectId,
     string Name,
     string? Description,
     string Frequency,
@@ -60,15 +61,18 @@ public sealed record ResearchBriefingSourceInput(
 
 public sealed record CreateResearchTopicCommand(
     Guid? RequestedByUserId,
+    Guid? ProjectId,
     string Name,
     string? Description,
     string Frequency,
+    string Status,
     TimeOnly? DeliveryTime,
     IReadOnlyList<string> Sources,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Outputs);
 
 public sealed record UpdateResearchTopicCommand(
+    Guid? ProjectId,
     string Name,
     string? Description,
     string Frequency,

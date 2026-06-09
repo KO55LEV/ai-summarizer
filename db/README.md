@@ -35,6 +35,7 @@ Transcript data lives in three core tables:
 TODO:
 
 - enforce user ownership checks on transcript and video detail endpoints using `user_video_library`, while keeping `transcripts` and other source artifacts shared and reusable across users
+- enforce user ownership checks for note asset list/upload/download flows so uploaded files stay isolated per note/user and cannot be accessed through another user's notes
 
 Notes and project data live in:
 

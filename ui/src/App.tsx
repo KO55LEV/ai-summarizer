@@ -25,9 +25,8 @@ import LandingPage from './components/pages/LandingPage';
 import LoginPage from './components/pages/LoginPage';
 import { getCurrentUser, loginWithPassword, logoutUser, registerUser } from './api/auth';
 import { getAdminRoles } from './api/adminUsers';
-import { getRecentVideos } from './api/recentVideos';
 import { analyzeVideo, getTranscriptBySource, getWorkflowStatus } from './api';
-import { getResearchList } from './api/research';
+import { getResearchTopic } from './api/research';
 import { getYouTubePreview } from './api/youtube';
 import { getCurrentUserId } from './config/currentUser';
 import { clearAuthenticated, getStoredAuthState, isAuthenticated, setStoredAuthState } from './config/auth';
@@ -347,12 +346,14 @@ function buildCompletedState(video: VideoRecord): ProcessingState {
 type AppLocation =
   | { kind: 'landing' }
   | { kind: 'auth'; mode: 'login' | 'signup' }
-  | { kind: 'admin'; section: 'users' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates' }
+  | { kind: 'admin'; section: 'users' | 'billing' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs' }
   | {
       kind: 'app';
       nav: NavItem;
-      researchView: 'list' | 'briefing' | 'create';
+      summarizerView: 'history' | 'new';
+      researchView: 'list' | 'briefing' | 'create' | 'edit';
       researchTopicId: string | null;
+      researchBriefingId: string | null;
       projectId: string | null;
     };
 
@@ -393,7 +394,7 @@ function getLocationFromPathname(pathname: string): AppLocation {
 
   if (path.startsWith('/admin/')) {
     const section = path.split('/')[2];
-    if (section === 'prompts' || section === 'search-providers' || section === 'runtime-settings' || section === 'users' || section === 'email-templates') {
+    if (section === 'prompts' || section === 'search-providers' || section === 'runtime-settings' || section === 'users' || section === 'billing' || section === 'email-templates' || section === 'billing-rules' || section === 'workflow-costs') {
       return { kind: 'admin', section };
     }
 
@@ -405,48 +406,68 @@ function getLocationFromPathname(pathname: string): AppLocation {
   }
 
   if (path === '/summarizer') {
-    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+  }
+
+  if (path === '/summarizer/new') {
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'new', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
   }
 
   const segments = path.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
   }
 
   const [first, second] = segments;
   if (!isNavItem(first)) {
-    return { kind: 'app', nav: 'summarizer', researchView: 'list', researchTopicId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
   }
 
   if (first === 'research') {
     if (second === 'create') {
-      return { kind: 'app', nav: 'research', researchView: 'create', researchTopicId: null, projectId: null };
+      return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'create', researchTopicId: null, researchBriefingId: null, projectId: null };
     }
 
     if (second) {
+      if (segments[2] === 'edit') {
+        return {
+          kind: 'app',
+          nav: 'research',
+          summarizerView: 'history',
+          researchView: 'edit',
+          researchTopicId: decodeURIComponent(second),
+          researchBriefingId: null,
+          projectId: null,
+        };
+      }
+
       return {
         kind: 'app',
         nav: 'research',
+        summarizerView: 'history',
         researchView: 'briefing',
         researchTopicId: decodeURIComponent(second),
+        researchBriefingId: segments[2] === 'briefings' && segments[3] ? decodeURIComponent(segments[3]) : null,
         projectId: null,
       };
     }
 
-    return { kind: 'app', nav: 'research', researchView: 'list', researchTopicId: null, projectId: null };
+    return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
   }
 
   if (first === 'projects') {
     return {
       kind: 'app',
       nav: 'projects',
+      summarizerView: 'history',
       researchView: 'list',
       researchTopicId: null,
+      researchBriefingId: null,
       projectId: second ? decodeURIComponent(second) : null,
     };
   }
 
-  return { kind: 'app', nav: first, researchView: 'list', researchTopicId: null, projectId: null };
+  return { kind: 'app', nav: first, summarizerView: first === 'summarizer' && second === 'new' ? 'new' : 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
 }
 
 function getPathForNav(nav: NavItem): string {
@@ -465,7 +486,6 @@ export default function App() {
     transcript: TranscriptResponse;
     videoMeta: VideoMetadata;
   } | null>(null);
-  const [sidebarVideos, setSidebarVideos] = useState<VideoRecord[]>([]);
   const [selectedResearchTopic, setSelectedResearchTopic] = useState<ResearchTopic | null>(null);
   const [researchTopicLoading, setResearchTopicLoading] = useState(false);
   const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'starting' | 'analyzing' | 'ready' | 'error'>('idle');
@@ -576,13 +596,9 @@ export default function App() {
   }, [authenticated, authHydrating, isAdmin, location]);
 
   useEffect(() => {
-    getRecentVideos().then(setSidebarVideos);
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
 
-    if (location.kind !== 'app' || location.nav !== 'research' || location.researchView !== 'briefing') {
+    if (location.kind !== 'app' || location.nav !== 'research' || !['briefing', 'edit'].includes(location.researchView)) {
       setResearchTopicLoading(false);
       setSelectedResearchTopic(null);
       return () => {
@@ -599,10 +615,9 @@ export default function App() {
     }
 
     setResearchTopicLoading(true);
-    getResearchList(getCurrentUserId())
-      .then((data) => {
+    getResearchTopic(location.researchTopicId)
+      .then((topic) => {
         if (cancelled) return;
-        const topic = data.topics.find((item) => item.id === location.researchTopicId) ?? null;
         setSelectedResearchTopic(topic);
       })
       .catch(() => {
@@ -725,14 +740,16 @@ export default function App() {
     setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
     setSelectedResearchTopic(null);
-    navigateToPath('/summarizer');
+    navigateToPath('/summarizer/new');
     resetSummarizer();
   };
 
-  const handleVideoSelect = (video: VideoRecord) => {
+  const handleNewSummarizer = () => {
+    setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
-    setSelectedVideo(video);
-    navigateToPath('/transcript');
+    setSelectedResearchTopic(null);
+    resetSummarizer();
+    navigateToPath('/summarizer/new');
   };
 
   const handleHistorySelect = async (item: HistoryItem) => {
@@ -761,10 +778,6 @@ export default function App() {
     }
   };
 
-  const handleViewAll = () => {
-    navigateToPath('/history');
-  };
-
   const navigateToPath = (nextPath: string) => {
     const normalizedNextPath = normalizePathname(nextPath);
     if (normalizePathname(window.location.pathname) === normalizedNextPath) return;
@@ -784,6 +797,7 @@ export default function App() {
 
   const activeNav = location.kind === 'app' ? location.nav : 'summarizer';
   const researchView = location.kind === 'app' ? location.researchView : 'list';
+  const summarizerView = location.kind === 'app' ? location.summarizerView : 'history';
 
   const summarizerProcessingState = buildProcessingState(
     analysisVideoMeta,
@@ -805,6 +819,10 @@ export default function App() {
 
   const renderCenter = () => {
     if (activeNav === 'summarizer') {
+      if (summarizerView === 'history') {
+        return <HistoryPage onVideoOpen={handleHistorySelect} onNew={handleNewSummarizer} />;
+      }
+
       if (analysisPhase === 'ready' && analysisTranscript) {
         return (
           <BackendTranscriptView
@@ -879,7 +897,16 @@ export default function App() {
         }
 
         if (selectedResearchTopic) {
-          return <ResearchBriefingPage topic={selectedResearchTopic} onBack={() => navigateToPath('/research')} />;
+          return (
+            <ResearchBriefingPage
+              topic={selectedResearchTopic}
+              briefingId={location.kind === 'app' ? location.researchBriefingId : null}
+              onBack={() => navigateToPath('/research')}
+              onEdit={() => navigateToPath(`/research/${encodeURIComponent(selectedResearchTopic.id)}/edit`)}
+              onOpenBriefing={(briefingId) => navigateToPath(`/research/${encodeURIComponent(selectedResearchTopic.id)}/briefings/${encodeURIComponent(briefingId)}`)}
+              onTopicChanged={(topic) => setSelectedResearchTopic(topic)}
+            />
+          );
         }
 
         return (
@@ -893,6 +920,34 @@ export default function App() {
 
       if (researchView === 'create')
         return <ResearchCreatePage onBack={() => navigateToPath('/research')} />;
+      if (researchView === 'edit') {
+        if (researchTopicLoading) {
+          return (
+            <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">
+                Loading research topic...
+              </div>
+            </main>
+          );
+        }
+
+        if (selectedResearchTopic) {
+          return (
+            <ResearchCreatePage
+              topic={selectedResearchTopic}
+              onBack={() => navigateToPath(`/research/${encodeURIComponent(selectedResearchTopic.id)}`)}
+            />
+          );
+        }
+
+        return (
+          <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">
+              Research topic not found.
+            </div>
+          </main>
+        );
+      }
       return (
         <ResearchPage
           onTopicSelect={(t) => {
@@ -994,29 +1049,70 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <LeftSidebar
-        activeNav={activeNav}
-        onNavChange={handleNavChange}
-        onViewAll={handleViewAll}
-        onVideoSelect={(idx) => handleVideoSelect(sidebarVideos[idx])}
-        recentVideos={sidebarVideos}
-        onOpenAdmin={isAdmin ? () => navigateToPath('/admin/users') : undefined}
-        onLogout={handleLogout}
-        onHome={() => navigateToPath('/')}
-        userName={authState?.user.displayName ?? authState?.user.email}
-        userEmail={authState?.user.email}
-        isAdmin={isAdmin}
-        userInitials={(authState?.user.displayName ?? authState?.user.email ?? 'AI')
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((part) => part[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase()}
-      />
-      {renderCenter()}
-      {renderRight()}
+    <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
+      <div className="lg:hidden sticky top-0 z-40 border-b border-border bg-bg-secondary/95 backdrop-blur">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => navigateToPath('/')}
+            className="inline-flex items-center gap-3 rounded-2xl border border-border bg-bg-card px-3 py-2 text-left"
+          >
+            <img src="/favicon.svg" alt="" className="h-8 w-8 rounded-lg" />
+            <div>
+              <div className="text-[13px] font-semibold text-text-primary">Ai Summarizer</div>
+              <div className="text-[10px] text-text-muted">Workspaces</div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-xl border border-border bg-bg-card px-3 py-2 text-[12px] font-medium text-text-secondary"
+          >
+            Logout
+          </button>
+        </div>
+        <div className="flex gap-2 overflow-x-auto px-4 pb-3">
+          {(['dashboard', 'projects', 'summarizer', 'research', 'todo', 'notes'] as NavItem[]).map((nav) => {
+            const active = activeNav === nav;
+            return (
+              <button
+                key={nav}
+                type="button"
+                onClick={() => handleNavChange(nav)}
+                className={`whitespace-nowrap rounded-full border px-3 py-2 text-[12px] transition-colors ${
+                  active ? 'border-accent/30 bg-accent/10 text-text-primary' : 'border-border bg-bg-card text-text-secondary'
+                }`}
+              >
+                {nav[0].toUpperCase() + nav.slice(1)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="hidden lg:block">
+        <LeftSidebar
+          activeNav={activeNav}
+          onNavChange={handleNavChange}
+          onOpenAdmin={isAdmin ? () => navigateToPath('/admin/users') : undefined}
+          onLogout={handleLogout}
+          onHome={() => navigateToPath('/')}
+          userName={authState?.user.displayName ?? authState?.user.email}
+          userEmail={authState?.user.email}
+          isAdmin={isAdmin}
+          userInitials={(authState?.user.displayName ?? authState?.user.email ?? 'AI')
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((part) => part[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase()}
+        />
+      </div>
+      <div className="min-w-0 flex min-h-0 flex-1 flex-col">
+        {renderCenter()}
+      </div>
+      <div className="hidden lg:block">{renderRight()}</div>
     </div>
   );
 }

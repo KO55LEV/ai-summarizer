@@ -2,14 +2,11 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
-  Clock3,
   Compass,
   ExternalLink,
   FolderKanban,
-  LayoutGrid,
   Lightbulb,
   Layers3,
-  List,
   MessageSquareQuote,
   MoreVertical,
   PenTool,
@@ -24,13 +21,13 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getCurrentUserId } from '../../config/currentUser';
+import { getStoredAuthState } from '../../config/auth';
 import { getNotes, type NoteResponse } from '../../api/notes';
 import { createProject, getProjects, type ProjectResponse } from '../../api/projects';
 import { getResearchList } from '../../api/research';
 import type { ResearchTopic } from '../../api/types';
 
 type ProjectStatus = 'active' | 'archived' | 'deleted' | 'unknown';
-type ListLayout = 'grid' | 'list';
 type ProjectFilter = 'all' | 'active' | 'archived';
 type OwnerFilter = 'all' | 'mine';
 type SortOption = 'recent' | 'name' | 'notes';
@@ -50,15 +47,6 @@ type ProjectCardModel = {
   tags: string[];
   isDefault: boolean;
   isOwner: boolean;
-};
-
-type ActivityItem = {
-  id: string;
-  title: string;
-  meta: string;
-  time: string;
-  accent: string;
-  icon: ReactNode;
 };
 
 const PROJECT_COLOR_OPTIONS = [
@@ -162,6 +150,16 @@ function fallbackAccent(index: number): string {
   return ['#00d4aa', '#38bdf8', '#f59e0b', '#a78bfa', '#fb7185', '#34d399'][index % 6];
 }
 
+function initialsFrom(value?: string | null): string {
+  const source = (value?.trim() || 'AN').toUpperCase();
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2);
+}
+
 function renderProjectIcon(key?: string | null): ReactNode {
   switch (key) {
     case 'Sparkles':
@@ -190,12 +188,6 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [notes, setNotes] = useState<NoteResponse[]>([]);
   const [researchTopics, setResearchTopics] = useState<ResearchTopic[]>([]);
-  const [researchStats, setResearchStats] = useState({
-    activeTopics: 0,
-    briefingsGenerated: 0,
-    sourcesTracked: 0,
-    avgReadTime: '0 min',
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -212,8 +204,6 @@ export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<ProjectFilter>('all');
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
-  const [layout, setLayout] = useState<ListLayout>('grid');
-
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -229,7 +219,6 @@ export default function ProjectsPage() {
         setProjects(projectList);
         setNotes(noteList);
         setResearchTopics(researchList.topics);
-        setResearchStats(researchList.stats);
       })
       .catch((err: unknown) => {
         if (!mounted) return;
@@ -253,7 +242,6 @@ export default function ProjectsPage() {
     setProjects(projectList);
     setNotes(noteList);
     setResearchTopics(researchList.topics);
-    setResearchStats(researchList.stats);
     if (nextOpen) {
       setCreateOpen(true);
     }
@@ -368,85 +356,14 @@ export default function ProjectsPage() {
     return visibleProjects;
   }, [notes, ownerFilter, projects, query, researchTopics, sortBy, statusFilter]);
 
-  const heroStats = useMemo(() => {
-    const activeProjects = projectCards.filter((project) => project.id !== 'inbox' && project.status === 'active').length;
-    const recentNotes = notes.filter((note) => Date.now() - Date.parse(note.updatedAt) < 1000 * 60 * 60 * 24 * 7).length;
-    const researchItems = researchStats.briefingsGenerated || researchTopics.length;
-    const videoSummaries = notes.filter((note) => VIDEO_INPUT_KINDS.has(note.inputKind.toLowerCase())).length;
-
-    return [
-      { label: 'Active projects', value: formatCount(activeProjects), detail: 'Live workspaces', icon: <FolderKanban size={15} />, accent: '#00d4aa' },
-      { label: 'Recent notes', value: formatCount(recentNotes), detail: 'Updated this week', icon: <MessageSquareQuote size={15} />, accent: '#4dc8e8' },
-      { label: 'Research items', value: formatCount(researchItems), detail: `${formatCount(researchStats.activeTopics)} topics tracked`, icon: <Sparkles size={15} />, accent: '#a78bfa' },
-      { label: 'Video summaries', value: formatCount(videoSummaries), detail: 'Imported or transcribed', icon: <Play size={15} />, accent: '#38bdf8' },
-    ];
-  }, [notes, projectCards, researchStats.activeTopics, researchStats.briefingsGenerated, researchTopics.length]);
-
-  const recentActivity = useMemo<ActivityItem[]>(() => {
-    const projectById = new Map<string, ProjectResponse>(projects.map((project) => [project.id, project]));
-    const noteItems = notes.map((note) => ({
-      id: `note-${note.id}`,
-      sort: Date.parse(note.updatedAt),
-      title: note.projectName ? `${note.projectName}: ${note.title}` : note.title,
-      meta: `${note.sourceChannel} · ${note.inputKind}`,
-      time: formatRelative(note.updatedAt),
-      accent: '#00d4aa',
-      icon: <MessageSquareQuote size={16} />,
-    }));
-    const researchItems = researchTopics.map((topic) => ({
-      id: `research-${topic.id}`,
-      sort: Date.parse(topic.updatedAt),
-      title: topic.name,
-      meta: `${topic.projectId ? projectById.get(topic.projectId)?.name ?? 'Project-linked research' : 'Research topic'} · ${topic.status}`,
-      time: formatRelative(topic.updatedAt),
-      accent: '#a78bfa',
-      icon: <Sparkles size={16} />,
-    }));
-
-    return [...noteItems, ...researchItems]
-      .sort((a, b) => b.sort - a.sort)
-      .slice(0, 5)
-      .map(({ id, title, meta, time, accent, icon }) => ({
-        id,
-        title,
-        meta,
-        time,
-        accent,
-        icon,
-      }));
-  }, [notes, projects, researchTopics]);
-
-  const howItWorks = [
-    {
-      title: 'Capture',
-      description: 'Add notes, start research, or import YouTube videos.',
-      icon: <Sparkles size={16} />,
-      accent: '#a855f7',
-    },
-    {
-      title: 'Organize',
-      description: 'Group everything in a project that fits your goals.',
-      icon: <FolderKanban size={16} />,
-      accent: '#00d4aa',
-    },
-    {
-      title: 'Connect',
-      description: 'Notes, research, and summaries stay linked and searchable.',
-      icon: <Layers3 size={16} />,
-      accent: '#60a5fa',
-    },
-    {
-      title: 'Create',
-      description: 'Move from raw captures to insights, exports, and deliverables.',
-      icon: <Lightbulb size={16} />,
-      accent: '#34d399',
-    },
-  ];
+  const ownerProfile = getStoredAuthState();
+  const ownerName = ownerProfile?.user.displayName?.trim() || ownerProfile?.user.email?.trim() || 'Alex Nerd';
+  const ownerInitials = initialsFrom(ownerName);
 
   if (loading) {
     return (
       <main className="flex-1 overflow-y-auto bg-bg-primary">
-        <div className="mx-auto max-w-[1600px] px-5 py-5 animate-pulse">
+        <div className="mx-auto max-w-[1600px] px-3 py-3 sm:px-5 sm:py-5 animate-pulse">
           <div className="h-[176px] rounded-[24px] border border-border bg-bg-card" />
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[...Array(4)].map((_, i) => <div key={i} className="h-[94px] rounded-[20px] border border-border bg-bg-card" />)}
@@ -468,11 +385,11 @@ export default function ProjectsPage() {
 
   return (
     <main className="flex-1 overflow-y-auto bg-bg-primary">
-      <div className="mx-auto max-w-[1600px] px-5 py-5">
-        <section className="rounded-[22px] border border-border bg-[linear-gradient(135deg,rgba(0,212,170,0.12),rgba(19,28,48,0.96)_45%,rgba(12,18,33,1))] p-4.5 shadow-[0_14px_36px_rgba(0,0,0,0.2)]">
+      <div className="mx-auto max-w-[1600px] px-3 py-3 sm:px-5 sm:py-5">
+        <section className="rounded-[22px] border border-border bg-[linear-gradient(135deg,rgba(0,212,170,0.12),rgba(19,28,48,0.96)_45%,rgba(12,18,33,1))] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.2)] sm:p-4.5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
-              <h1 className="text-[24px] font-semibold tracking-tight text-text-primary">Projects</h1>
+              <h1 className="text-[22px] font-semibold tracking-tight text-text-primary sm:text-[24px]">Projects</h1>
               <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-text-secondary">
                 Organize your notes, research, and YouTube summaries in one place.
                 Keep everything connected, searchable, and ready when you need it.
@@ -482,21 +399,21 @@ export default function ProjectsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setCreateOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-3 py-2 text-[11px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-3 py-2 text-[11px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover sm:w-auto"
               >
                 <Plus size={14} />
                 New project
               </button>
               <button
                 onClick={() => navigateTo('/notes')}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-card px-3 py-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-bg-card px-3 py-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary sm:w-auto"
               >
                 <MessageSquareQuote size={14} className="text-accent" />
                 Quick note
               </button>
               <button
                 onClick={() => navigateTo('/research/create')}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-card px-3 py-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-bg-card px-3 py-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary sm:w-auto"
               >
                 <Sparkles size={14} className="text-accent" />
                 Start research
@@ -520,7 +437,7 @@ export default function ProjectsPage() {
               </div>
             )}
 
-            <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_repeat(4,minmax(0,auto))]">
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,auto))] xl:grid-cols-[minmax(0,1fr)_repeat(4,minmax(0,auto))]">
               <label className="flex items-center gap-2.5 rounded-2xl border border-border bg-bg-card px-3.5 py-2.5">
                 <Search size={15} className="text-text-muted" />
                 <input
@@ -553,48 +470,12 @@ export default function ProjectsPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="rounded-2xl border border-border bg-bg-card px-3.5 py-2.5 text-[12px] text-text-secondary outline-none transition-colors hover:bg-bg-card-hover"
+                className="rounded-2xl border border-border bg-bg-card px-3.5 py-2.5 text-[12px] text-text-secondary outline-none transition-colors hover:bg-bg-card-hover sm:col-span-2 lg:col-span-1"
               >
                 <option value="recent">Sort: Recent activity</option>
                 <option value="name">Sort: Name</option>
                 <option value="notes">Sort: Notes</option>
               </select>
-
-              <div className="flex items-center rounded-2xl border border-border bg-bg-card p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setLayout('grid')}
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                    layout === 'grid' ? 'bg-accent/15 text-accent' : 'text-text-muted hover:bg-bg-card-hover hover:text-text-primary'
-                  }`}
-                  aria-label="Grid layout"
-                >
-                  <LayoutGrid size={15} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLayout('list')}
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                    layout === 'list' ? 'bg-accent/15 text-accent' : 'text-text-muted hover:bg-bg-card-hover hover:text-text-primary'
-                  }`}
-                  aria-label="List layout"
-                >
-                  <List size={15} />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {heroStats.map((stat) => (
-                <MetricCard
-                  key={stat.label}
-                  label={stat.label}
-                  value={stat.value}
-                  detail={stat.detail}
-                  icon={stat.icon}
-                  accent={stat.accent}
-                />
-              ))}
             </div>
 
             <section className="rounded-[22px] border border-border bg-bg-card p-4">
@@ -615,61 +496,30 @@ export default function ProjectsPage() {
                 </button>
               </div>
 
-              {layout === 'grid' ? (
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="overflow-hidden rounded-[18px] border border-border">
+                <table className="min-w-full border-collapse">
+                  <thead className="bg-bg-primary/40">
+                    <tr className="text-left text-[10px] uppercase tracking-[0.16em] text-text-muted">
+                      <th className="px-3 py-3.5 font-medium sm:px-4">Project</th>
+                      <th className="hidden px-4 py-3.5 font-medium sm:table-cell">Contents</th>
+                      <th className="hidden px-4 py-3.5 font-medium md:table-cell">Last updated</th>
+                      <th className="hidden px-4 py-3.5 font-medium md:table-cell">Status</th>
+                      <th className="hidden px-4 py-3.5 font-medium lg:table-cell">Owner</th>
+                      <th className="px-3 py-3.5 text-right font-medium sm:px-4">Open</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
                     {projectCards.map((project) => (
-                      <ProjectCard key={project.id} project={project} layout="grid" />
+                      <ProjectTableRow
+                        key={project.id}
+                        project={project}
+                        ownerName={ownerName}
+                        ownerInitials={ownerInitials}
+                      />
                     ))}
-                  </div>
-
-                  <div className="grid gap-4 xl:grid-cols-4">
-                    <CreateProjectTile onClick={() => setCreateOpen(true)} className="xl:col-span-1" />
-                    <section className="rounded-[22px] border border-border bg-bg-card p-4 xl:col-span-3">
-                      <div className="mb-3.5 flex items-center justify-between gap-3">
-                        <div>
-                          <h2 className="text-[15px] font-semibold text-text-primary">Recent activity</h2>
-                          <p className="mt-1 text-[12px] text-text-secondary">Latest changes across your workspaces.</p>
-                        </div>
-                        <button className="rounded-xl border border-border bg-bg-input px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary">
-                          View all activity
-                        </button>
-                      </div>
-
-                      <div className="overflow-hidden rounded-[18px] border border-border">
-                        {recentActivity.length === 0 ? (
-                          <div className="px-4 py-8 text-center text-[12px] text-text-muted">No recent activity yet.</div>
-                        ) : (
-                          <div className="divide-y divide-border">
-                            {recentActivity.map((item) => (
-                              <div key={item.id} className="grid grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-2.5 px-4 py-3">
-                                <div
-                                  className="flex h-7 w-7 items-center justify-center rounded-lg"
-                                  style={{ backgroundColor: `${item.accent}18`, color: item.accent }}
-                                >
-                                  {item.icon}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="truncate text-[12px] font-medium text-text-primary">{item.title}</div>
-                                  <div className="truncate text-[11px] text-text-secondary">{item.meta}</div>
-                                </div>
-                                <div className="text-[10px] text-text-muted">{item.time}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {projectCards.map((project) => (
-                    <ProjectCard key={project.id} project={project} layout="list" />
-                  ))}
-                  <CreateProjectTile onClick={() => setCreateOpen(true)} list />
-                </div>
-              )}
+                  </tbody>
+                </table>
+              </div>
 
               {projectCards.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-[12px] text-text-muted">
@@ -683,13 +533,32 @@ export default function ProjectsPage() {
           <aside className="space-y-4">
             <SidebarCard title="How projects work" accent="#a855f7" actionLabel="Hide">
               <div className="space-y-2.5">
-                {howItWorks.map((step, index) => (
+                {[
+                  {
+                    title: 'Organize',
+                    description: 'Group everything in a project that fits your goals.',
+                    icon: <FolderKanban size={16} />,
+                    accent: '#00d4aa',
+                  },
+                  {
+                    title: 'Connect',
+                    description: 'Notes, research, and summaries stay linked and searchable.',
+                    icon: <Layers3 size={16} />,
+                    accent: '#60a5fa',
+                  },
+                  {
+                    title: 'Create',
+                    description: 'Move from raw captures to insights, exports, and deliverables.',
+                    icon: <Lightbulb size={16} />,
+                    accent: '#34d399',
+                  },
+                ].map((step, index, list) => (
                   <div key={step.title} className="flex gap-3">
                     <div className="flex flex-col items-center">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-bg-input" style={{ color: step.accent }}>
                         {step.icon}
                       </div>
-                      {index < howItWorks.length - 1 && <div className="mt-2 h-7 w-px bg-border" />}
+                      {index < list.length - 1 && <div className="mt-2 h-7 w-px bg-border" />}
                     </div>
                     <div className="pb-1.5">
                       <div className="text-[12px] font-semibold text-text-primary">{step.title}</div>
@@ -755,17 +624,17 @@ export default function ProjectsPage() {
   );
 }
 
-function ProjectCard({
+function ProjectTableRow({
   project,
-  layout,
+  ownerName,
+  ownerInitials,
 }: {
   project: ProjectCardModel;
-  layout: ListLayout;
+  ownerName: string;
+  ownerInitials: string;
 }) {
-  const isList = layout === 'list';
-
   return (
-    <article
+    <tr
       role="button"
       tabIndex={0}
       aria-label={`Open project ${project.name}`}
@@ -776,96 +645,46 @@ function ProjectCard({
           navigateTo(`/projects/${encodeURIComponent(project.id)}`);
         }
       }}
-      className={`cursor-pointer rounded-2xl border border-border bg-bg-card p-4 transition-all hover:border-accent/30 hover:bg-bg-card-hover ${isList ? 'min-h-[180px]' : ''}`}
+      className="group cursor-pointer transition-colors hover:bg-bg-card-hover/50"
     >
-      <div className="flex items-start gap-3">
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border"
-          style={{ backgroundColor: `${project.accent}18`, color: project.accent }}
-        >
-          {project.icon}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-text-muted">Project</span>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusStyles(project.status)}`}>
-              {statusLabel(project.status)}
-            </span>
-            {project.isDefault && (
-              <span className="rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
-                Default
-              </span>
-            )}
-            </div>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-              }}
-              className="text-text-muted transition-colors hover:text-text-primary"
-              aria-label={`More options for ${project.name}`}
-            >
-              <MoreVertical size={14} />
-            </button>
+      <td className="px-4 py-4 align-top">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border" style={{ backgroundColor: `${project.accent}18`, color: project.accent }}>
+            {project.icon}
           </div>
-
-          <h3 className="mt-1.5 text-[15px] font-semibold text-text-primary">{project.name}</h3>
-          <p className="mt-1.5 min-h-[40px] text-[11px] leading-relaxed text-text-secondary">{project.description}</p>
-
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <InfoPill label="Notes" value={formatCount(project.notesCount)} />
-            <InfoPill label="Research" value={formatCount(project.researchCount)} />
-            <InfoPill label="Videos" value={formatCount(project.videoCount)} />
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {project.tags.map((tag) => (
-              <span key={tag} className="rounded-full border border-border bg-bg-input px-2 py-0.75 text-[10px] text-text-secondary">
-                {tag}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-3.5 flex items-center justify-between gap-3 text-[10px] text-text-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <Clock3 size={11} />
-              Updated {project.updatedLabel}
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-accent">
-              Open
-              <ArrowRight size={11} />
-            </span>
+          <div className="min-w-0">
+            <div className="truncate text-[14px] font-semibold text-text-primary">{project.name}</div>
+            <div className="mt-1 max-w-[420px] text-[12px] leading-relaxed text-text-secondary">{project.description}</div>
           </div>
         </div>
-      </div>
-    </article>
-  );
-}
-
-function CreateProjectTile({ onClick, list = false, className = '' }: { onClick: () => void; list?: boolean; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-2xl border border-dashed border-border bg-bg-primary/40 text-left transition-colors hover:border-accent/30 hover:bg-bg-card ${
-        list ? 'px-4 py-3.5' : 'px-4 py-6'
-      } ${className}`}
-    >
-      <div className={`flex ${list ? 'items-center justify-between' : 'flex-col items-center text-center'} gap-4`}>
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-input text-text-secondary">
-          <Plus size={16} />
+      </td>
+      <td className="hidden px-4 py-4 align-top sm:table-cell">
+        <div className="flex flex-wrap gap-2">
+          <InfoPill label="Notes" value={formatCount(project.notesCount)} />
+          <InfoPill label="Research" value={formatCount(project.researchCount)} />
+          <InfoPill label="Videos" value={formatCount(project.videoCount)} />
+          <InfoPill label="Tasks" value={formatCount(Math.max(1, project.notesCount + project.researchCount + project.videoCount))} />
         </div>
-        <div className={list ? 'min-w-0 flex-1' : ''}>
-          <div className="text-[13px] font-semibold text-text-primary">Create new project</div>
-          <div className={`mt-1 text-[12px] leading-relaxed text-text-secondary ${list ? 'max-w-xl' : 'max-w-[220px]'}`}>
-            Bring your notes, research, and summaries together.
-          </div>
+      </td>
+      <td className="hidden px-4 py-4 align-top text-[12px] text-text-secondary md:table-cell">{project.updatedLabel}</td>
+      <td className="hidden px-4 py-4 align-top md:table-cell">
+        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusStyles(project.status)}`}>{statusLabel(project.status)}</span>
+      </td>
+      <td className="hidden px-4 py-4 align-top lg:table-cell">
+        <div className="inline-flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-[10px] font-semibold text-accent">
+            {project.isOwner ? ownerInitials : 'SH'}
+          </span>
+          <span className="text-[12px] text-text-secondary">{project.isOwner ? ownerName : 'Shared'}</span>
         </div>
-        {list && <ArrowRight size={15} className="text-accent" />}
-      </div>
-    </button>
+      </td>
+      <td className="px-3 py-4 align-top text-right sm:px-4">
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent">
+          Open
+          <ArrowRight size={13} />
+        </span>
+      </td>
+    </tr>
   );
 }
 
@@ -903,35 +722,6 @@ function SidebarCard({
       </div>
       {children}
     </section>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-  icon,
-  accent,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: ReactNode;
-  accent: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted">{label}</div>
-          <div className="mt-1.5 text-[22px] font-semibold tracking-tight text-text-primary">{value}</div>
-          <div className="mt-1.5 text-[11px] text-text-secondary">{detail}</div>
-        </div>
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-bg-primary/60" style={{ color: accent }}>
-          {icon}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1036,15 +826,17 @@ function ProjectCreateModal({
                 <button
                   type="button"
                   onClick={() => setActivePicker((current) => (current === 'color' ? null : 'color'))}
-                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-bg-primary/60 px-3.5 py-2.5 text-left text-[12px] text-text-primary outline-none transition-colors hover:border-accent/30"
+                  className="flex min-h-[68px] w-full items-center justify-between gap-3 rounded-xl border border-border bg-bg-primary/60 px-3.5 py-2.5 text-left text-[12px] text-text-primary outline-none transition-colors hover:border-accent/30"
                   aria-haspopup="listbox"
                   aria-expanded={activePicker === 'color'}
                 >
-                  <span
-                    className="h-5 w-5 rounded-full border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]"
-                    style={{ backgroundColor: selectedColor.value }}
-                  />
-                  <span className="flex-1">{selectedColor.label}</span>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span
+                      className="h-5 w-5 rounded-full border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]"
+                      style={{ backgroundColor: selectedColor.value }}
+                    />
+                    <span className="truncate text-[13px] font-medium">{selectedColor.label}</span>
+                  </span>
                   <span className="hidden text-[11px] text-text-muted sm:inline">{selectedColorHex}</span>
                   <ChevronDown size={14} className="text-text-muted" />
                 </button>
@@ -1101,14 +893,17 @@ function ProjectCreateModal({
                 <button
                   type="button"
                   onClick={() => setActivePicker((current) => (current === 'icon' ? null : 'icon'))}
-                  className="flex w-full items-center gap-3 rounded-xl border border-border bg-bg-primary/60 px-3.5 py-2.5 text-left text-[12px] text-text-primary outline-none transition-colors hover:border-accent/30"
+                  className="flex min-h-[68px] w-full items-center justify-between gap-3 rounded-xl border border-border bg-bg-primary/60 px-3.5 py-2.5 text-left text-[12px] text-text-primary outline-none transition-colors hover:border-accent/30"
                   aria-haspopup="listbox"
                   aria-expanded={activePicker === 'icon'}
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-border bg-accent/10 text-accent">
-                    <SelectedIcon size={15} />
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-accent/10 text-accent">
+                      <SelectedIcon size={15} />
+                    </span>
+                    <span className="truncate text-[13px] font-medium">{selectedIcon.label}</span>
                   </span>
-                  <span className="flex-1">{selectedIcon.label}</span>
+                  <ChevronDown size={14} className="text-text-muted" />
                 </button>
                 {activePicker === 'icon' && (
                   <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[640px] max-w-[calc(100vw-32px)] rounded-2xl border border-border bg-bg-card p-4 shadow-2xl shadow-black/30">

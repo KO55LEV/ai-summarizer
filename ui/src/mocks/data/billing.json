@@ -1,0 +1,97 @@
+{
+  "accounts": [
+    {
+      "userId": "mock-user-1",
+      "balanceCredits": 250.0,
+      "reservedCredits": 30.0,
+      "availableCredits": 220.0,
+      "createdAt": "2026-06-01T08:00:00.000Z",
+      "updatedAt": "2026-06-09T09:00:00.000Z"
+    },
+    {
+      "userId": "mock-user-2",
+      "balanceCredits": 80.0,
+      "reservedCredits": 0.0,
+      "availableCredits": 80.0,
+      "createdAt": "2026-06-03T08:00:00.000Z",
+      "updatedAt": "2026-06-08T09:30:00.000Z"
+    }
+  ],
+  "ledger": {
+    "mock-user-1": [
+      {
+        "id": "ledger-1",
+        "userId": "mock-user-1",
+        "reservationId": "res-1",
+        "entryType": "reserve",
+        "amountCredits": 30.0,
+        "balanceDeltaCredits": 0.0,
+        "reservedDeltaCredits": 30.0,
+        "balanceBeforeCredits": 250.0,
+        "balanceAfterCredits": 250.0,
+        "reservedBeforeCredits": 0.0,
+        "reservedAfterCredits": 30.0,
+        "sourceType": "youtube.summary",
+        "sourceId": "source-1",
+        "reason": "Reserved for summary workflow",
+        "createdAt": "2026-06-09T08:30:00.000Z"
+      },
+      {
+        "id": "ledger-2",
+        "userId": "mock-user-1",
+        "reservationId": null,
+        "entryType": "topup",
+        "amountCredits": 100.0,
+        "balanceDeltaCredits": 100.0,
+        "reservedDeltaCredits": 0.0,
+        "balanceBeforeCredits": 150.0,
+        "balanceAfterCredits": 250.0,
+        "reservedBeforeCredits": 0.0,
+        "reservedAfterCredits": 0.0,
+        "sourceType": null,
+        "sourceId": null,
+        "reason": "Manual top up",
+        "createdAt": "2026-06-08T16:00:00.000Z"
+      }
+    ],
+    "mock-user-2": [
+      {
+        "id": "ledger-3",
+        "userId": "mock-user-2",
+        "reservationId": null,
+        "entryType": "topup",
+        "amountCredits": 80.0,
+        "balanceDeltaCredits": 80.0,
+        "reservedDeltaCredits": 0.0,
+        "balanceBeforeCredits": 0.0,
+        "balanceAfterCredits": 80.0,
+        "reservedBeforeCredits": 0.0,
+        "reservedAfterCredits": 0.0,
+        "sourceType": null,
+        "sourceId": null,
+        "reason": "Initial purchase",
+        "createdAt": "2026-06-07T10:00:00.000Z"
+      }
+    ]
+  },
+  "reservations": {
+    "mock-user-1": [
+      {
+        "id": "res-1",
+        "userId": "mock-user-1",
+        "sourceType": "youtube.summary",
+        "sourceId": "source-1",
+        "estimatedCredits": 30.0,
+        "finalCredits": null,
+        "status": "active",
+        "reason": "Reserved for summary workflow",
+        "settledAt": null,
+        "releasedAt": null,
+        "expiresAt": null,
+        "createdAt": "2026-06-09T08:30:00.000Z",
+        "updatedAt": "2026-06-09T08:30:00.000Z"
+      }
+    ],
+    "mock-user-2": []
+  }
+}

@@ -7,6 +7,7 @@ public sealed record NoteProcessingRun
     public Guid Id { get; init; }
     public Guid NoteId { get; init; }
     public Guid? JobId { get; init; }
+    public Guid? SourceAssetId { get; init; }
     public NoteProcessingStage Stage { get; init; }
     public NoteProcessingStatus Status { get; init; } = NoteProcessingStatus.Queued;
     public string? Provider { get; init; }

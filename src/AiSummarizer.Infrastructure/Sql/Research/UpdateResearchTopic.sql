@@ -1,6 +1,7 @@
 update research_topics
 set
     requested_by_user_id = @requested_by_user_id,
+    project_id = @project_id,
     name = @name,
     description = @description,
     frequency = @frequency,

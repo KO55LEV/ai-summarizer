@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   Sparkles,
-  Play,
   Newspaper,
   Shield,
   FolderKanban,
@@ -11,7 +10,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { NavItem, VideoRecord } from '../types';
+import type { NavItem } from '../types';
 
 type NavEntry = {
   key: NavItem;
@@ -23,9 +22,6 @@ type NavEntry = {
 interface LeftSidebarProps {
   activeNav: NavItem;
   onNavChange: (nav: NavItem) => void;
-  onViewAll: () => void;
-  onVideoSelect: (idx: number) => void;
-  recentVideos: VideoRecord[];
   onOpenAdmin?: () => void;
   onLogout: () => void;
   onHome: () => void;
@@ -48,9 +44,6 @@ function deriveFallbackInitials(userName?: string, userEmail?: string): string {
 export default function LeftSidebar({
   activeNav,
   onNavChange,
-  onViewAll,
-  onVideoSelect,
-  recentVideos,
   onOpenAdmin,
   onLogout,
   onHome,
@@ -59,41 +52,35 @@ export default function LeftSidebar({
   userEmail,
   userInitials,
 }: LeftSidebarProps) {
-  const showSummarizerContext = activeNav === 'summarizer' || activeNav === 'transcript';
   const displayName = userName?.trim() || 'Researcher Pro';
   const displayEmail = userEmail?.trim() || 'researcher.pro@example.com';
   const initials = (userInitials?.trim() || deriveFallbackInitials(userName, userEmail)).slice(0, 2);
-  const navGroupsToRender: { title: string; items: NavEntry[] }[] = [
+  const navEntries: NavEntry[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     {
-      title: 'Core',
-      items: [
-        { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-        {
-          key: 'projects',
-          label: 'Projects',
-          icon: <FolderKanban size={18} />,
-          helper: 'Shared workspaces',
-        },
-        { key: 'summarizer', label: 'Summarizer', icon: <Sparkles size={18} /> },
-        {
-          key: 'research',
-          label: 'Research',
-          icon: <Newspaper size={18} />,
-          helper: 'Briefings and topics',
-        },
-        {
-          key: 'todo',
-          label: 'To-do',
-          icon: <ListTodo size={18} />,
-          helper: 'Daily and project tasks',
-        },
-        {
-          key: 'notes',
-          label: 'Notes',
-          icon: <StickyNote size={18} />,
-          helper: 'Inbox and drafts',
-        },
-      ],
+      key: 'projects',
+      label: 'Projects',
+      icon: <FolderKanban size={18} />,
+      helper: 'Shared workspaces',
+    },
+    { key: 'summarizer', label: 'Summarizer', icon: <Sparkles size={18} /> },
+    {
+      key: 'research',
+      label: 'Research',
+      icon: <Newspaper size={18} />,
+      helper: 'Briefings and topics',
+    },
+    {
+      key: 'todo',
+      label: 'To-do',
+      icon: <ListTodo size={18} />,
+      helper: 'Daily and project tasks',
+    },
+    {
+      key: 'notes',
+      label: 'Notes',
+      icon: <StickyNote size={18} />,
+      helper: 'Inbox and drafts',
     },
   ];
 
@@ -116,79 +103,34 @@ export default function LeftSidebar({
 
       {/* Nav */}
       <nav className="flex-1 px-4 pb-3 space-y-4 overflow-y-auto">
-        {navGroupsToRender.map((group) => (
-          <div key={group.title}>
-            <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-              {group.title}
-            </div>
-            <div className="space-y-1">
-              {group.items.map((item) => {
-                const active = activeNav === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    onClick={() => onNavChange(item.key)}
-                    className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] transition-all cursor-pointer ${
-                      active
-                        ? 'border-accent/30 bg-accent/10 text-text-primary shadow-[0_0_0_1px_rgba(0,212,170,0.12)]'
-                        : 'border-transparent text-text-secondary hover:border-border hover:bg-bg-card hover:text-text-primary'
-                    }`}
-                  >
-                    <span className={active ? 'text-accent' : 'text-text-muted'}>{item.icon}</span>
-                    <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className={`block truncate ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
-                        {item.helper && (
-                          <span className="mt-0.5 block text-[10px] leading-tight text-text-muted">{item.helper}</span>
-                        )}
-                      </span>
-                      {active && <ChevronRight size={14} className="text-accent flex-shrink-0" />}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Recent Videos */}
-      {showSummarizerContext && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-text-muted font-medium">Recent videos</span>
-            <button onClick={onViewAll} className="text-xs text-accent hover:text-accent-hover cursor-pointer font-medium">View all</button>
-          </div>
-          {recentVideos.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border px-3 py-4 text-[11px] text-text-muted">
-              No recent videos yet.
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {recentVideos.map((video, i) => (
-                <div
-                  key={`${video.url}-${i}`}
-                  onClick={() => onVideoSelect(i)}
-                  className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-bg-card cursor-pointer transition-colors"
-                >
-                  <div className="w-5 h-5 rounded bg-youtube/20 flex items-center justify-center flex-shrink-0">
-                    <Play size={9} className="text-youtube" fill="currentColor" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] text-text-primary truncate leading-tight">{video.title}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[11px] text-text-muted leading-tight">{video.age}</span>
-                      <span className="text-[10px] font-medium px-1 py-0 rounded bg-bg-input text-text-muted truncate max-w-[96px]">
-                        {video.source}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="space-y-1">
+          {navEntries.map((item) => {
+            const active = activeNav === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => onNavChange(item.key)}
+                className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] transition-all cursor-pointer ${
+                  active
+                    ? 'border-accent/30 bg-accent/10 text-text-primary shadow-[0_0_0_1px_rgba(0,212,170,0.12)]'
+                    : 'border-transparent text-text-secondary hover:border-border hover:bg-bg-card hover:text-text-primary'
+                }`}
+              >
+                <span className={active ? 'text-accent' : 'text-text-muted'}>{item.icon}</span>
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className={`block truncate ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                    {item.helper && (
+                      <span className="mt-0.5 block text-[10px] leading-tight text-text-muted">{item.helper}</span>
+                    )}
+                  </span>
+                  {active && <ChevronRight size={14} className="text-accent flex-shrink-0" />}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      )}
+      </nav>
 
       {/* User / Pro Badge */}
       <div className="border-t border-border px-4 py-3.5">

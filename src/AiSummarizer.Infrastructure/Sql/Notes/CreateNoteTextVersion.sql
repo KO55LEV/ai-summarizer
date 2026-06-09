@@ -1,6 +1,7 @@
 insert into note_text_versions (
     id,
     note_id,
+    source_asset_id,
     source_run_id,
     version_kind,
     text,
@@ -13,6 +14,7 @@ insert into note_text_versions (
 values (
     @id,
     @note_id,
+    @source_asset_id,
     @source_run_id,
     @version_kind,
     @text,
@@ -22,4 +24,4 @@ values (
     @prompt_version,
     now()
 )
-returning id, note_id, source_run_id, version_kind, text, language, provider, model, prompt_version, created_at;
+returning id, note_id, source_asset_id, source_run_id, version_kind, text, language, provider, model, prompt_version, created_at;

@@ -65,6 +65,7 @@ export interface NoteAssetResponse {
 export interface NoteTextVersionResponse {
   id: string;
   noteId: string;
+  sourceAssetId: string | null;
   sourceRunId: string | null;
   versionKind: string;
   text: string;
@@ -79,6 +80,7 @@ export interface NoteProcessingRunResponse {
   id: string;
   noteId: string;
   jobId: string | null;
+  sourceAssetId: string | null;
   stage: string;
   status: string;
   provider: string | null;
@@ -142,7 +144,7 @@ export interface LinkTelegramAccountRequest {
 export interface CreateNoteRequest {
   requestedByUserId?: string | null;
   projectId?: string | null;
-  title: string;
+  title?: string | null;
   sourceChannel: string;
   inputKind: string;
   primaryLanguage?: string | null;
@@ -198,6 +200,26 @@ export async function createNote(request: CreateNoteRequest): Promise<NoteDetail
   }
 
   return res.json() as Promise<NoteDetailResponse>;
+}
+
+export async function uploadNoteAsset(noteId: string, file: File, noteInputId?: string | null): Promise<NoteAssetResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (noteInputId) {
+    formData.append('noteInputId', noteInputId);
+  }
+
+  const res = await fetch(`/api/notes/${noteId}/assets/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail || 'Failed to upload note asset');
+  }
+
+  return res.json() as Promise<NoteAssetResponse>;
 }
 
 export async function getLinkedTelegramAccount(requestedByUserId = getCurrentUserId()): Promise<LinkedTelegramAccountResponse | null> {

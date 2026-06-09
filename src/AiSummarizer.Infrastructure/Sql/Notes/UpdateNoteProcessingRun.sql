@@ -1,6 +1,7 @@
 update note_processing_runs
 set note_id = @note_id,
     job_id = @job_id,
+    source_asset_id = @source_asset_id,
     stage = @stage,
     status = @status,
     provider = @provider,
@@ -19,7 +20,7 @@ set note_id = @note_id,
     created_at = @created_at,
     updated_at = @updated_at
 where id = @id
-returning id, note_id, job_id, stage, status, provider, model, prompt_version, input_hash,
+returning id, note_id, job_id, source_asset_id, stage, status, provider, model, prompt_version, input_hash,
           request_json::text as request_json, response_json::text as response_json, output_json::text as output_json,
           usage_json::text as usage_json, metrics_json::text as metrics_json,
           error_code, error_message, started_at, finished_at, created_at, updated_at;

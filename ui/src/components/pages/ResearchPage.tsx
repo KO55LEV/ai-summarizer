@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, BookOpen, Zap, Globe, Clock } from 'lucide-react';
+import type { MouseEvent } from 'react';
+import { Plus, Search, Filter, BookOpen, Zap, Globe, Clock, Play, Pause, RotateCcw, Pencil } from 'lucide-react';
 import type { ResearchTopic, ResearchListData } from '../../api/types';
-import { getResearchList } from '../../api/research';
+import { getResearchList, listResearchRuns, startResearchRun, updateResearchTopic } from '../../api/research';
 import { getCurrentUserId } from '../../config/currentUser';
 
 const FREQ_COLORS: Record<string, string> = {
@@ -34,10 +35,63 @@ export function ResearchPage({ onTopicSelect, onCreateNew }: ResearchPageProps) 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
+  const [activeRunTopicIds, setActiveRunTopicIds] = useState<Set<string>>(() => new Set());
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getResearchList(getCurrentUserId()).then((d) => { setData(d); setLoading(false); });
+    refreshList();
   }, []);
+
+  const refreshList = () => {
+    setLoading(true);
+    setError(null);
+    getResearchList(getCurrentUserId())
+      .then(async (d) => {
+        setData(d);
+        const runLists = await Promise.all(d.topics.map(async (topic) => ({
+          topicId: topic.id,
+          runs: await listResearchRuns(topic.id),
+        })));
+        setActiveRunTopicIds(new Set(runLists
+          .filter((item) => item.runs.some((run) => ['queued', 'running'].includes(run.status)))
+          .map((item) => item.topicId)));
+      })
+      .catch((loadError) => {
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load research topics');
+      })
+      .finally(() => setLoading(false));
+  };
+
+  const handleRunNow = async (topic: ResearchTopic) => {
+    try {
+      const result = await startResearchRun(topic.id, getCurrentUserId());
+      if (result.status === 'already_running') {
+        setError(result.message);
+      }
+      refreshList();
+    } catch (runError) {
+      setError(runError instanceof Error ? runError.message : 'Failed to start research run');
+    }
+  };
+
+  const handleToggleStatus = async (topic: ResearchTopic) => {
+    try {
+      await updateResearchTopic(topic.id, {
+        projectId: topic.projectId,
+        name: topic.name,
+        description: topic.description,
+        frequency: topic.frequency,
+        status: topic.status === 'active' ? 'paused' : 'active',
+        deliveryTime: topic.deliveryTime,
+        sources: topic.sources,
+        tags: topic.tags,
+        outputs: topic.outputs,
+      });
+      refreshList();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Failed to update research topic');
+    }
+  };
 
   const filtered = (data?.topics ?? []).filter((t) => {
     const matchSearch =
@@ -98,6 +152,13 @@ export function ResearchPage({ onTopicSelect, onCreateNew }: ResearchPageProps) 
       </div>
 
       {/* Search + Filter */}
+      {error && (
+        <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      {/* Search + Filter */}
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1">
           <Search
@@ -148,6 +209,13 @@ export function ResearchPage({ onTopicSelect, onCreateNew }: ResearchPageProps) 
               key={topic.id}
               topic={topic}
               onClick={() => onTopicSelect(topic)}
+              onRunNow={handleRunNow}
+              onToggleStatus={handleToggleStatus}
+              hasActiveRun={activeRunTopicIds.has(topic.id)}
+              onEdit={() => {
+                window.history.pushState({}, '', `/research/${encodeURIComponent(topic.id)}/edit`);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
             />
           ))}
         </div>
@@ -156,8 +224,34 @@ export function ResearchPage({ onTopicSelect, onCreateNew }: ResearchPageProps) 
   );
 }
 
-function TopicCard({ topic, onClick }: { topic: ResearchTopic; onClick: () => void }) {
+function TopicCard({
+  topic,
+  onClick,
+  onRunNow,
+  onToggleStatus,
+  hasActiveRun,
+  onEdit,
+}: {
+  topic: ResearchTopic;
+  onClick: () => void;
+  onRunNow: (topic: ResearchTopic) => Promise<void>;
+  onToggleStatus: (topic: ResearchTopic) => Promise<void>;
+  hasActiveRun: boolean;
+  onEdit: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  const runAction = async (event: MouseEvent, action: string, callback: () => Promise<void> | void) => {
+    event.stopPropagation();
+    if (actionBusy) return;
+    setActionBusy(action);
+    try {
+      await callback();
+    } finally {
+      setActionBusy(null);
+    }
+  };
 
   return (
     <div
@@ -219,18 +313,42 @@ function TopicCard({ topic, onClick }: { topic: ResearchTopic; onClick: () => vo
             <BookOpen size={12} />
             {topic.briefingsCount} briefings
           </span>
+          <span>{topic.sources.length} sources</span>
+          <span>Delivery: {topic.deliveryTime ?? '—'}</span>
           <span>Last: {topic.lastRun}</span>
           <span style={{ color: topic.nextRun === 'paused' ? '#f59e0b' : 'var(--color-text-muted)' }}>
             Next: {topic.nextRun}
           </span>
         </div>
         {hovered && (
-          <span
-            className="text-xs font-medium px-3 py-1 rounded-lg"
-            style={{ background: 'var(--color-accent)', color: 'black' }}
-          >
-            View
-          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(event) => runAction(event, 'run', () => onRunNow(topic))}
+              disabled={Boolean(actionBusy) || hasActiveRun}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium disabled:opacity-50"
+              style={{ background: 'var(--color-accent)', color: 'black' }}
+            >
+              <Play size={11} />
+              {hasActiveRun ? 'Running' : 'Run'}
+            </button>
+            <button
+              onClick={(event) => runAction(event, 'status', () => onToggleStatus(topic))}
+              disabled={Boolean(actionBusy)}
+              className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium disabled:opacity-50"
+              style={{ background: 'var(--color-bg-hover)', color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}
+            >
+              {topic.status === 'active' ? <Pause size={11} /> : <RotateCcw size={11} />}
+              {topic.status === 'active' ? 'Pause' : 'Resume'}
+            </button>
+            <button
+              onClick={(event) => runAction(event, 'edit', onEdit)}
+              className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium"
+              style={{ background: 'var(--color-bg-hover)', color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}
+            >
+              <Pencil size={11} />
+              Edit
+            </button>
+          </div>
         )}
       </div>
     </div>

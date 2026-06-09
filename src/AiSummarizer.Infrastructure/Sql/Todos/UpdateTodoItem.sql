@@ -1,6 +1,7 @@
 update todo_items
 set
     project_id = @project_id,
+    bucket = @bucket,
     title = @title,
     description = @description,
     cadence = @cadence,

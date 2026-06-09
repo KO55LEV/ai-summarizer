@@ -1,4 +1,5 @@
 using AiSummarizer.Application.Users;
+using AiSummarizer.Application.Billing;
 using AiSummarizer.Application.State;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Application.Jobs;
@@ -12,7 +13,9 @@ using AiSummarizer.Application.PublicRequests;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Infrastructure.Email;
 using AiSummarizer.Infrastructure.Persistence;
+using AiSummarizer.Infrastructure.Billing;
 using AiSummarizer.Infrastructure.Settings;
+using AiSummarizer.Infrastructure.Storage;
 using AiSummarizer.Infrastructure.State;
 using AiSummarizer.Infrastructure.MediaSources;
 using AiSummarizer.Infrastructure.Research;
@@ -42,7 +45,9 @@ public static class DependencyInjection
         services.AddSingleton(NpgsqlDataSource.Create(connectionString));
         services.AddSingleton<ISqlScriptLoader, FileSqlScriptLoader>();
         services.AddScoped<IUsersRepository, UsersRepository>();
+        services.AddScoped<IBillingRepository, BillingRepository>();
         services.AddScoped<IJobsRepository, JobsRepository>();
+        services.AddScoped<IJobsService, JobsService>();
         services.AddScoped<IMediaSourcesRepository, MediaSourcesRepository>();
         services.AddScoped<IPublicRequestRunsRepository, PublicRequestRunsRepository>();
         services.AddScoped<ITranscriptsRepository, TranscriptsRepository>();
@@ -51,11 +56,13 @@ public static class DependencyInjection
         services.AddScoped<IResearchRepository, ResearchRepository>();
         services.AddScoped<IProjectsRepository, ProjectsRepository>();
         services.AddScoped<INotesRepository, NotesRepository>();
+        services.AddScoped<INoteAssetStorage, LocalNoteAssetStorage>();
         services.AddScoped<ITodosRepository, TodosRepository>();
         services.AddScoped<IAppStateRepository, AppStateRepository>();
         services.AddScoped<ISearchProviderRepository, SearchProvidersRepository>();
         services.AddOptions<ResearchSearchSourceOptions>().Bind(configuration.GetSection("ResearchSearchSources"));
         services.AddOptions<ResearchSynthesisOptions>().Bind(configuration.GetSection(ResearchSynthesisOptions.SectionName));
+        services.AddOptions<StorageOptions>().Bind(configuration.GetSection("Storage"));
         services.AddScoped<IPromptsRepository, PromptsRepository>();
         services.AddScoped<IWorkflowsRepository, WorkflowsRepository>();
         services.AddScoped<ISecurePasswordHasher, PasswordHasherAdapter>();
@@ -67,8 +74,10 @@ public static class DependencyInjection
         services.AddScoped<IProjectsService, ProjectsService>();
         services.AddScoped<INotesService, NotesService>();
         services.AddScoped<ITodosService, TodosService>();
+        services.AddScoped<IBillingService, BillingService>();
         services.AddScoped<IPromptsService, PromptsService>();
         services.AddScoped<IAdminUsersService, AdminUsersService>();
+        services.AddScoped<IAdminWorkflowCostsService, AdminWorkflowCostsService>();
         services.AddAdminSettings(configuration);
         services.AddEmailing(configuration);
         services.AddHttpClient<ISearchProvider, TavilySearchProvider>(client =>

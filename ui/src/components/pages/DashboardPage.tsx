@@ -47,16 +47,51 @@ function PageSkeleton() {
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let mounted = true;
-    getDashboardData().then(d => { if (mounted) setData(d); });
+    setError(null);
+    getDashboardData()
+      .then((d) => {
+        if (mounted) setData(d);
+      })
+      .catch((err) => {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+        }
+      });
     return () => { mounted = false; };
-  }, []);
+  }, [reloadToken]);
 
-  if (!data) return <PageSkeleton />;
+  if (!data && !error) return <PageSkeleton />;
 
-  const { used, total } = data.monthlyUsage;
+  if (error && !data) {
+    return (
+      <main className="flex-1 overflow-y-auto bg-bg-primary">
+        <div className="max-w-[900px] mx-auto px-8 py-8">
+          <div className="mb-7">
+            <h1 className="text-[24px] font-bold text-text-primary tracking-tight mb-1">Dashboard</h1>
+            <p className="text-text-secondary text-[13px]">Overview of your research activity and recent work.</p>
+          </div>
+          <div className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-[13px] text-danger flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setReloadToken((value) => value + 1)}
+              className="rounded-lg bg-bg-card px-3 py-1.5 text-[12px] font-medium text-text-primary hover:bg-bg-card-hover"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const dashboard = data as DashboardData;
+  const { used, total } = dashboard.monthlyUsage;
 
   return (
     <main className="flex-1 overflow-y-auto bg-bg-primary">
@@ -70,7 +105,7 @@ export default function DashboardPage() {
 
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-3 mb-6">
-          {data.stats.map((s) => (
+          {dashboard.stats.map((s) => (
             <div key={s.label} className="bg-bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] text-text-muted font-medium">{s.label}</span>
@@ -97,7 +132,7 @@ export default function DashboardPage() {
               </button>
             </div>
             <div className="divide-y divide-border">
-              {data.recentVideos.map((v, i) => (
+              {dashboard.recentVideos.map((v, i) => (
                 <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-bg-input/40 transition-colors cursor-pointer">
                   <div className="w-[64px] h-[36px] rounded-md bg-bg-input overflow-hidden flex-shrink-0">
                     <img src={v.thumbnail} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -122,7 +157,7 @@ export default function DashboardPage() {
               <span className="text-[13px] font-semibold text-text-primary">Usage breakdown</span>
             </div>
             <div className="p-4 space-y-3">
-              {data.usageBreakdown.map((ins) => (
+              {dashboard.usageBreakdown.map((ins) => (
                 <div key={ins.title} className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-md bg-bg-input flex items-center justify-center flex-shrink-0" style={{ color: ins.color }}>
                     {USAGE_ICONS[ins.iconKey]}
@@ -142,7 +177,7 @@ export default function DashboardPage() {
                 <div className="w-full h-1.5 bg-bg-input rounded-full overflow-hidden">
                   <div className="h-full bg-accent rounded-full" style={{ width: `${(used / total) * 100}%` }} />
                 </div>
-                <div className="text-[10px] text-text-muted mt-1">{total - used} videos remaining</div>
+                <div className="text-[10px] text-text-muted mt-1">{Math.max(0, total - used)} videos remaining</div>
               </div>
             </div>
           </div>

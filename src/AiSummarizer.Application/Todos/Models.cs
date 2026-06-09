@@ -5,6 +5,7 @@ public sealed record TodoItemDto(
     Guid? RequestedByUserId,
     Guid? ProjectId,
     string? ProjectName,
+    string Bucket,
     string Title,
     string? Description,
     string Cadence,
@@ -20,6 +21,7 @@ public sealed record TodoItemRecord(
     Guid Id,
     Guid? RequestedByUserId,
     Guid? ProjectId,
+    string Bucket,
     string Title,
     string? Description,
     string Cadence,
@@ -49,6 +51,7 @@ public sealed record TodoListDto(
 public sealed record CreateTodoCommand(
     Guid? RequestedByUserId,
     Guid? ProjectId,
+    string? Bucket,
     string Title,
     string? Description,
     string Cadence,
@@ -59,6 +62,7 @@ public sealed record CreateTodoCommand(
 
 public sealed record UpdateTodoCommand(
     Guid? ProjectId,
+    string? Bucket,
     string Title,
     string? Description,
     string Cadence,

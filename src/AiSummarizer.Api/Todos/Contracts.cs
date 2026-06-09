@@ -3,6 +3,7 @@ namespace AiSummarizer.Api.Todos;
 public sealed record CreateTodoRequest(
     Guid? RequestedByUserId,
     Guid? ProjectId,
+    string? Bucket,
     string Title,
     string? Description,
     string Cadence,
@@ -13,6 +14,7 @@ public sealed record CreateTodoRequest(
 
 public sealed record UpdateTodoRequest(
     Guid? ProjectId,
+    string? Bucket,
     string Title,
     string? Description,
     string Cadence,
@@ -37,6 +39,7 @@ public sealed record TodoResponse(
     Guid? RequestedByUserId,
     Guid? ProjectId,
     string? ProjectName,
+    string Bucket,
     string Title,
     string? Description,
     string Cadence,

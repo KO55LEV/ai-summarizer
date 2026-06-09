@@ -26,6 +26,30 @@ import {
   Zap,
 } from 'lucide-react';
 import type {
+  BillingRuleInput,
+  BillingRuleResponse,
+  BillingRuleUpdateInput,
+} from '../../api/adminBillingRules';
+import {
+  createBillingRule,
+  deleteBillingRule,
+  listBillingRules,
+  updateBillingRule,
+} from '../../api/adminBillingRules';
+import type {
+  BillingBalanceResponse,
+  BillingLedgerEntryResponse,
+  BillingReservationResponse,
+} from '../../api/adminBilling';
+import {
+  getBillingBalance,
+  listBillingLedger,
+  listBillingReservations,
+  topUpBillingBalance,
+} from '../../api/adminBilling';
+import type { WorkflowCostResponse } from '../../api/adminWorkflowCosts';
+import { listWorkflowCosts } from '../../api/adminWorkflowCosts';
+import type {
   PromptArchiveResponse,
   PromptResponse,
   PromptRunResponse,
@@ -84,7 +108,8 @@ import {
   updateEmailTemplate,
 } from '../../api/adminEmailTemplates';
 
-type AdminSection = 'users' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates';
+type AdminSection = 'users' | 'billing' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs';
+type WorkflowCostStatusFilter = 'all' | 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'dead';
 type PromptTab = 'editor' | 'runs' | 'archive' | 'usage';
 type ProviderTab = 'editor' | 'usage';
 
@@ -141,6 +166,26 @@ interface EmailTemplateFormState {
   isActive: boolean;
 }
 
+interface BillingRuleFormState {
+  actionType: string;
+  provider: string;
+  model: string;
+  version: string;
+  unitType: string;
+  baseFeeCredits: string;
+  ratePerUnitCredits: string;
+  minCredits: string;
+  maxCredits: string;
+  multiplier: string;
+  isActive: boolean;
+  effectiveFrom: string;
+}
+
+interface BillingTopUpFormState {
+  credits: string;
+  reason: string;
+}
+
 const EMPTY_PROMPT_FORM: PromptFormState = {
   promptKey: 'admin.new.prompt',
   title: 'New prompt',
@@ -178,6 +223,26 @@ const EMPTY_EMAIL_TEMPLATE_FORM: EmailTemplateFormState = {
   isActive: true,
 };
 
+const EMPTY_BILLING_RULE_FORM: BillingRuleFormState = {
+  actionType: 'youtube.transcript',
+  provider: 'Whisper',
+  model: 'whisper-large-v3',
+  version: '1',
+  unitType: 'minute',
+  baseFeeCredits: '0',
+  ratePerUnitCredits: '0',
+  minCredits: '0',
+  maxCredits: '',
+  multiplier: '1',
+  isActive: true,
+  effectiveFrom: new Date().toISOString().slice(0, 16),
+};
+
+const EMPTY_BILLING_TOPUP_FORM: BillingTopUpFormState = {
+  credits: '50',
+  reason: 'Manual top up',
+};
+
 const EMPTY_USER_FORM: AdminUserFormState = {
   email: '',
   displayName: '',
@@ -205,6 +270,21 @@ function formatDateTime(value: string | null): string {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
+}
+
+function formatDateTimeLocalValue(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatCredits(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(value);
 }
 
 function formatQuota(value: number): string {
@@ -490,6 +570,37 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   const [emailTemplateStatusFilter, setEmailTemplateStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [emailTemplateMode, setEmailTemplateMode] = useState<'view' | 'new'>('view');
 
+  const [billingRules, setBillingRules] = useState<BillingRuleResponse[]>([]);
+  const [selectedBillingRuleId, setSelectedBillingRuleId] = useState<string | null>(null);
+  const [billingRuleForm, setBillingRuleForm] = useState<BillingRuleFormState>(EMPTY_BILLING_RULE_FORM);
+  const [billingRuleLoading, setBillingRuleLoading] = useState(true);
+  const [billingRuleDetailLoading, setBillingRuleDetailLoading] = useState(false);
+  const [billingRuleSaving, setBillingRuleSaving] = useState(false);
+  const [billingRuleError, setBillingRuleError] = useState<string | null>(null);
+  const [billingRuleSearch, setBillingRuleSearch] = useState('');
+  const [billingRuleStatusFilter, setBillingRuleStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [billingRuleMode, setBillingRuleMode] = useState<'view' | 'new'>('view');
+
+  const [billingUsers, setBillingUsers] = useState<AdminUserResponse[]>([]);
+  const [selectedBillingUserId, setSelectedBillingUserId] = useState<string | null>(null);
+  const [billingBalance, setBillingBalance] = useState<BillingBalanceResponse | null>(null);
+  const [billingLedger, setBillingLedger] = useState<BillingLedgerEntryResponse[]>([]);
+  const [billingReservations, setBillingReservations] = useState<BillingReservationResponse[]>([]);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingDetailLoading, setBillingDetailLoading] = useState(false);
+  const [billingSaving, setBillingSaving] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingUserSearch, setBillingUserSearch] = useState('');
+  const [billingUserStatusFilter, setBillingUserStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deleted'>('all');
+  const [billingTopUpForm, setBillingTopUpForm] = useState<BillingTopUpFormState>(EMPTY_BILLING_TOPUP_FORM);
+
+  const [workflowCosts, setWorkflowCosts] = useState<WorkflowCostResponse[]>([]);
+  const [selectedWorkflowCostId, setSelectedWorkflowCostId] = useState<string | null>(null);
+  const [workflowCostsLoading, setWorkflowCostsLoading] = useState(true);
+  const [workflowCostsError, setWorkflowCostsError] = useState<string | null>(null);
+  const [workflowCostSearch, setWorkflowCostSearch] = useState('');
+  const [workflowCostStatusFilter, setWorkflowCostStatusFilter] = useState<WorkflowCostStatusFilter>('all');
+
   const changeSection = (nextSection: AdminSection) => {
     setSection(nextSection);
     onSectionChange(nextSection);
@@ -504,6 +615,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         if (!mounted) return;
 
         setUsers(items);
+        setBillingUsers(items);
         setUserRoles(roles);
         if (items.length > 0) {
           setSelectedUserId(items[0].id);
@@ -513,6 +625,34 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         setUserError(err instanceof Error ? err.message : 'Failed to load users');
       } finally {
         if (mounted) setUserLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const items = await listBillingRules();
+        if (!mounted) return;
+
+        setBillingRules(items);
+        if (items.length > 0) {
+          setSelectedBillingRuleId(items[0].id);
+        } else {
+          setBillingRuleMode('new');
+          setBillingRuleForm(EMPTY_BILLING_RULE_FORM);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setBillingRuleError(err instanceof Error ? err.message : 'Failed to load billing rules');
+      } finally {
+        if (mounted) setBillingRuleLoading(false);
       }
     })();
 
@@ -714,6 +854,139 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   }, [emailTemplateMode, selectedTemplateKey, emailTemplates]);
 
   useEffect(() => {
+    if (billingRuleMode === 'new') {
+      setBillingRuleForm(EMPTY_BILLING_RULE_FORM);
+      setBillingRuleDetailLoading(false);
+      return;
+    }
+
+    if (!selectedBillingRuleId) return;
+    setBillingRuleDetailLoading(true);
+    const item = billingRules.find((rule) => rule.id === selectedBillingRuleId);
+    if (item) {
+      setBillingRuleForm({
+        actionType: item.actionType,
+        provider: item.provider ?? '',
+        model: item.model ?? '',
+        version: String(item.version),
+        unitType: item.unitType,
+        baseFeeCredits: String(item.baseFeeCredits),
+        ratePerUnitCredits: String(item.ratePerUnitCredits),
+        minCredits: String(item.minCredits),
+        maxCredits: item.maxCredits === null ? '' : String(item.maxCredits),
+        multiplier: String(item.multiplier),
+        isActive: item.isActive,
+        effectiveFrom: formatDateTimeLocalValue(item.effectiveFrom),
+      });
+    }
+    setBillingRuleDetailLoading(false);
+  }, [billingRuleMode, selectedBillingRuleId, billingRules]);
+
+  useEffect(() => {
+    if (section !== 'billing') {
+      return;
+    }
+
+    if (billingUsers.length === 0) {
+      setSelectedBillingUserId(null);
+      setBillingBalance(null);
+      setBillingLedger([]);
+      setBillingReservations([]);
+      setBillingLoading(false);
+      return;
+    }
+
+    if (!selectedBillingUserId || !billingUsers.some((item) => item.id === selectedBillingUserId)) {
+      setSelectedBillingUserId(billingUsers[0].id);
+    }
+  }, [section, billingUsers, selectedBillingUserId]);
+
+  useEffect(() => {
+    if (section !== 'billing' || !selectedBillingUserId) {
+      setBillingLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setBillingError(null);
+    setBillingDetailLoading(true);
+    setBillingLoading(true);
+
+    Promise.all([
+      getBillingBalance(selectedBillingUserId),
+      listBillingLedger(selectedBillingUserId, 50, 0),
+      listBillingReservations(selectedBillingUserId, 50, 0),
+    ])
+      .then(([balance, ledger, reservations]) => {
+        if (cancelled) return;
+        setBillingBalance(balance);
+        setBillingLedger(ledger);
+        setBillingReservations(reservations);
+      })
+      .catch((err) => {
+        if (!cancelled) setBillingError(err instanceof Error ? err.message : 'Failed to load billing details');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBillingDetailLoading(false);
+          setBillingLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, selectedBillingUserId]);
+
+  useEffect(() => {
+    if (section !== 'workflow-costs') {
+      setWorkflowCostsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setWorkflowCostsError(null);
+    setWorkflowCostsLoading(true);
+
+    listWorkflowCosts(100, 0)
+      .then((items) => {
+        if (cancelled) return;
+        setWorkflowCosts(items);
+        if (items.length > 0 && (!selectedWorkflowCostId || !items.some((item) => item.workflowId === selectedWorkflowCostId))) {
+          setSelectedWorkflowCostId(items[0].workflowId);
+        }
+        if (items.length === 0) {
+          setSelectedWorkflowCostId(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setWorkflowCostsError(err instanceof Error ? err.message : 'Failed to load workflow costs');
+      })
+      .finally(() => {
+        if (!cancelled) setWorkflowCostsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+
+  useEffect(() => {
+    if (section !== 'workflow-costs') {
+      return;
+    }
+
+    if (workflowCosts.length === 0) {
+      setSelectedWorkflowCostId(null);
+      return;
+    }
+
+    if (!selectedWorkflowCostId || !workflowCosts.some((item) => item.workflowId === selectedWorkflowCostId)) {
+      setSelectedWorkflowCostId(workflowCosts[0].workflowId);
+    }
+  }, [section, workflowCosts, selectedWorkflowCostId]);
+
+  useEffect(() => {
     if (userMode === 'new') {
       setUserForm(EMPTY_USER_FORM);
       return;
@@ -743,6 +1016,9 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
 
   const selectedPrompt = selectedPromptId ? prompts.find((item) => item.id === selectedPromptId) ?? null : null;
   const selectedProvider = selectedProviderId ? providers.find((item) => item.id === selectedProviderId) ?? null : null;
+  const selectedBillingRule = selectedBillingRuleId ? billingRules.find((item) => item.id === selectedBillingRuleId) ?? null : null;
+  const selectedBillingUser = selectedBillingUserId ? billingUsers.find((item) => item.id === selectedBillingUserId) ?? null : null;
+  const selectedWorkflowCost = selectedWorkflowCostId ? workflowCosts.find((item) => item.workflowId === selectedWorkflowCostId) ?? null : null;
 
   const filteredPrompts = prompts.filter((prompt) => {
     const haystack = [prompt.promptKey, prompt.title, prompt.description ?? '', prompt.provider, prompt.model, prompt.workflowType ?? ''].join(' ').toLowerCase();
@@ -790,6 +1066,38 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     return matchesSearch && matchesStatus;
   });
 
+  const filteredBillingUsers = billingUsers.filter((user) => {
+    const haystack = [
+      user.email,
+      user.displayName ?? '',
+      user.locale ?? '',
+      user.timeZone ?? '',
+      user.roles.join(' '),
+      user.status,
+    ].join(' ').toLowerCase();
+    const matchesSearch = haystack.includes(billingUserSearch.toLowerCase());
+    const matchesStatus =
+      billingUserStatusFilter === 'all' ? true : user.status === billingUserStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const filteredWorkflowCosts = workflowCosts.filter((item) => {
+    const haystack = [
+      item.workflowId,
+      item.requestedByUserEmail ?? '',
+      item.requestedByUserDisplayName ?? '',
+      item.workflowType,
+      item.workflowStatus,
+      item.sourceLabel ?? '',
+      item.reason ?? '',
+      item.sourceType ?? '',
+    ].join(' ').toLowerCase();
+    const matchesSearch = haystack.includes(workflowCostSearch.toLowerCase());
+    const matchesStatus =
+      workflowCostStatusFilter === 'all' ? true : item.workflowStatus === workflowCostStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   const promptStats = {
     total: prompts.length,
     active: prompts.filter((item) => item.isActive).length,
@@ -809,6 +1117,27 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     active: emailTemplates.filter((item) => item.isActive).length,
     inactive: emailTemplates.filter((item) => !item.isActive).length,
     withHtml: emailTemplates.filter((item) => Boolean(item.htmlBody?.trim())).length,
+  };
+
+  const billingRuleStats = {
+    total: billingRules.length,
+    active: billingRules.filter((item) => item.isActive).length,
+    inactive: billingRules.filter((item) => !item.isActive).length,
+    actions: new Set(billingRules.map((item) => item.actionType)).size,
+  };
+
+  const billingStats = {
+    balance: billingBalance?.balanceCredits ?? 0,
+    reserved: billingBalance?.reservedCredits ?? 0,
+    available: billingBalance?.availableCredits ?? 0,
+    ledger: billingLedger.length,
+  };
+
+  const workflowCostStats = {
+    total: workflowCosts.length,
+    active: workflowCosts.filter((item) => ['queued', 'running', 'waiting'].includes(item.workflowStatus)).length,
+    succeeded: workflowCosts.filter((item) => item.workflowStatus === 'succeeded').length,
+    charged: workflowCosts.reduce((sum, item) => sum + (item.finalCredits ?? 0), 0),
   };
 
   const userStats = {
@@ -851,6 +1180,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     setUserError(null);
     const items = await listAdminUsers(userSearch.trim());
     setUsers(items);
+    setBillingUsers(items);
     if (focusId && items.some((item) => item.id === focusId)) {
       setSelectedUserId(focusId);
     } else if (items.length > 0) {
@@ -873,6 +1203,38 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
       setSelectedTemplateKey(null);
       setEmailTemplateMode('new');
       setEmailTemplateForm(EMPTY_EMAIL_TEMPLATE_FORM);
+    }
+  };
+
+  const reloadBillingRules = async (focusId?: string) => {
+    setBillingRuleError(null);
+    const items = await listBillingRules();
+    setBillingRules(items);
+    if (focusId && items.some((item) => item.id === focusId)) {
+      setSelectedBillingRuleId(focusId);
+    } else if (items.length > 0) {
+      setSelectedBillingRuleId(items[0].id);
+    } else {
+      setSelectedBillingRuleId(null);
+      setBillingRuleMode('new');
+      setBillingRuleForm(EMPTY_BILLING_RULE_FORM);
+    }
+  };
+
+  const reloadBillingDetails = async (userId: string) => {
+    setBillingError(null);
+    setBillingDetailLoading(true);
+    try {
+      const [balance, ledger, reservations] = await Promise.all([
+        getBillingBalance(userId),
+        listBillingLedger(userId, 50, 0),
+        listBillingReservations(userId, 50, 0),
+      ]);
+      setBillingBalance(balance);
+      setBillingLedger(ledger);
+      setBillingReservations(reservations);
+    } finally {
+      setBillingDetailLoading(false);
     }
   };
 
@@ -1092,6 +1454,106 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     }
   };
 
+  const saveBillingRule = async () => {
+    setBillingRuleSaving(true);
+    setBillingRuleError(null);
+
+    const payloadBase = {
+      actionType: billingRuleForm.actionType.trim(),
+      provider: normalizeMaybe(billingRuleForm.provider),
+      model: normalizeMaybe(billingRuleForm.model),
+      version: Number.parseInt(billingRuleForm.version, 10),
+      unitType: billingRuleForm.unitType.trim(),
+      baseFeeCredits: Number.parseFloat(billingRuleForm.baseFeeCredits),
+      ratePerUnitCredits: Number.parseFloat(billingRuleForm.ratePerUnitCredits),
+      minCredits: Number.parseFloat(billingRuleForm.minCredits),
+      maxCredits: billingRuleForm.maxCredits.trim() ? Number.parseFloat(billingRuleForm.maxCredits) : null,
+      multiplier: Number.parseFloat(billingRuleForm.multiplier),
+      isActive: billingRuleForm.isActive,
+      effectiveFrom: new Date(billingRuleForm.effectiveFrom || new Date().toISOString()).toISOString(),
+    };
+
+    if (
+      Number.isNaN(payloadBase.version) ||
+      Number.isNaN(payloadBase.baseFeeCredits) ||
+      Number.isNaN(payloadBase.ratePerUnitCredits) ||
+      Number.isNaN(payloadBase.minCredits) ||
+      Number.isNaN(payloadBase.multiplier) ||
+      (payloadBase.maxCredits !== null && Number.isNaN(payloadBase.maxCredits))
+    ) {
+      setBillingRuleError('Please enter valid numeric values.');
+      setBillingRuleSaving(false);
+      return;
+    }
+
+    try {
+      if (billingRuleMode === 'new') {
+        const created = await createBillingRule(payloadBase satisfies BillingRuleInput);
+        setBillingRuleMode('view');
+        await reloadBillingRules(created.id);
+      } else {
+        if (!selectedBillingRuleId) throw new Error('No billing rule selected');
+        const updated = await updateBillingRule(selectedBillingRuleId, payloadBase satisfies BillingRuleUpdateInput);
+        setBillingRuleMode('view');
+        await reloadBillingRules(updated.id);
+      }
+    } catch (err) {
+      setBillingRuleError(err instanceof Error ? err.message : 'Failed to save billing rule');
+    } finally {
+      setBillingRuleSaving(false);
+    }
+  };
+
+  const deleteBillingRuleItem = async () => {
+    if (!selectedBillingRuleId) return;
+    if (!window.confirm(`Delete billing rule "${selectedBillingRule?.actionType ?? selectedBillingRuleId}"?`)) return;
+
+    setBillingRuleSaving(true);
+    setBillingRuleError(null);
+    try {
+      await deleteBillingRule(selectedBillingRuleId);
+      const remaining = billingRules.filter((item) => item.id !== selectedBillingRuleId);
+      setBillingRules(remaining);
+      if (remaining.length > 0) {
+        setSelectedBillingRuleId(remaining[0].id);
+      } else {
+        setBillingRuleMode('new');
+        setBillingRuleForm(EMPTY_BILLING_RULE_FORM);
+      }
+    } catch (err) {
+      setBillingRuleError(err instanceof Error ? err.message : 'Failed to delete billing rule');
+    } finally {
+      setBillingRuleSaving(false);
+    }
+  };
+
+  const saveBillingTopUp = async () => {
+    if (!selectedBillingUserId) return;
+
+    setBillingSaving(true);
+    setBillingError(null);
+
+    const credits = Number.parseFloat(billingTopUpForm.credits);
+    if (Number.isNaN(credits) || credits <= 0) {
+      setBillingError('Credits must be greater than zero.');
+      setBillingSaving(false);
+      return;
+    }
+
+    try {
+      await topUpBillingBalance({
+        requestedByUserId: selectedBillingUserId,
+        credits,
+        reason: normalizeMaybe(billingTopUpForm.reason),
+      });
+      await reloadBillingDetails(selectedBillingUserId);
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : 'Failed to top up balance');
+    } finally {
+      setBillingSaving(false);
+    }
+  };
+
   const deleteEmailTemplateItem = async () => {
     if (!selectedTemplateKey) return;
     if (!window.confirm(`Delete email template "${selectedTemplate?.title ?? selectedTemplateKey}"?`)) return;
@@ -1116,7 +1578,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     }
   };
 
-  if (userLoading || promptLoading || providerLoading || runtimeSettingsLoading || emailTemplateLoading) return <PageSkeleton />;
+  if (userLoading || billingLoading || promptLoading || providerLoading || runtimeSettingsLoading || emailTemplateLoading || billingRuleLoading || workflowCostsLoading) return <PageSkeleton />;
 
   const renderUserPanel = () => {
     const toggleRole = (roleKey: string) => {
@@ -2179,6 +2641,823 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     </div>
   );
 
+  const renderBillingRulesPanel = () => {
+    const filteredRules = billingRules.filter((rule) => {
+      const haystack = [
+        rule.actionType,
+        rule.provider ?? '',
+        rule.model ?? '',
+        rule.unitType,
+        String(rule.version),
+      ].join(' ').toLowerCase();
+      const matchesSearch = haystack.includes(billingRuleSearch.toLowerCase());
+      const matchesStatus =
+        billingRuleStatusFilter === 'all' ? true : billingRuleStatusFilter === 'active' ? rule.isActive : !rule.isActive;
+      return matchesSearch && matchesStatus;
+    });
+
+    return (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-text-primary">Billing rules</h2>
+                <p className="text-[11px] text-text-muted">Manage credits, unit rates, and model-specific pricing.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void reloadBillingRules(selectedBillingRuleId ?? undefined).catch((err) => {
+                  setBillingRuleError(err instanceof Error ? err.message : 'Failed to refresh billing rules');
+                })}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-input px-3.5 py-2 text-[12px] font-semibold text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={billingRuleSearch}
+                  onChange={(e) => setBillingRuleSearch(e.target.value)}
+                  placeholder="Search by action, provider, model..."
+                  className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Filter size={13} className="text-text-muted" />
+                {(['all', 'active', 'inactive'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setBillingRuleStatusFilter(value)}
+                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
+                      billingRuleStatusFilter === value
+                        ? 'bg-accent text-bg-primary'
+                        : 'border border-border bg-bg-input text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(100vh-310px)] overflow-y-auto p-3">
+            {filteredRules.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                <div className="text-[13px] font-medium text-text-primary">No billing rules match your filters.</div>
+                <div className="mt-1 text-[11px] text-text-muted">Create a rule or loosen the search criteria.</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredRules.map((rule) => {
+                  const isSelected = rule.id === selectedBillingRuleId && billingRuleMode !== 'new';
+                  return (
+                    <button
+                      key={rule.id}
+                      type="button"
+                      onClick={() => {
+                        setBillingRuleMode('view');
+                        setSelectedBillingRuleId(rule.id);
+                        setBillingRuleError(null);
+                      }}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]'
+                          : 'border-border bg-bg-input/40 hover:border-border/80 hover:bg-bg-input'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[12px] font-semibold text-text-primary">{rule.actionType}</div>
+                          <div className="mt-0.5 truncate text-[11px] text-text-muted">
+                            {rule.provider ?? 'Any provider'}{rule.model ? ` • ${rule.model}` : ''}
+                          </div>
+                        </div>
+                        <Badge tone={rule.isActive ? 'accent' : 'muted'}>{rule.isActive ? 'Active' : 'Inactive'}</Badge>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge>{rule.unitType}</Badge>
+                        <Badge>v{rule.version}</Badge>
+                      </div>
+                      <div className="mt-3 line-clamp-2 text-[11px] leading-5 text-text-secondary">
+                        Base {formatCredits(rule.baseFeeCredits)} credits, rate {formatCredits(rule.ratePerUnitCredits)} per unit, minimum {formatCredits(rule.minCredits)}.
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="min-h-[760px] rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[16px] font-semibold text-text-primary">
+                    {billingRuleMode === 'new' ? 'Create billing rule' : selectedBillingRule?.actionType ?? 'Select a billing rule'}
+                  </h2>
+                  {selectedBillingRule && billingRuleMode === 'view' && (
+                    <Badge tone={selectedBillingRule.isActive ? 'accent' : 'muted'}>{selectedBillingRule.isActive ? 'Active' : 'Inactive'}</Badge>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                  {billingRuleMode === 'new' ? (
+                    <span>Define a pricing rule for an action or model.</span>
+                  ) : selectedBillingRule ? (
+                    <>
+                      <span>{selectedBillingRule.provider ?? 'Any provider'}</span>
+                      <span>•</span>
+                      <span>Updated {formatDateTime(selectedBillingRule.updatedAt)}</span>
+                    </>
+                  ) : (
+                    <span>No billing rule selected.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {billingRuleMode === 'view' && selectedBillingRule && (
+                  <button
+                    type="button"
+                    onClick={deleteBillingRuleItem}
+                    disabled={billingRuleSaving}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3.5 py-2 text-[12px] font-semibold text-red-200 transition-colors hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={saveBillingRule}
+                  disabled={billingRuleSaving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {billingRuleSaving ? <RefreshCw size={14} className="animate-spin" /> : <CircleCheck size={14} />}
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <StatCard label="Total" value={String(billingRuleStats.total)} icon={<Database size={14} />} />
+              <StatCard label="Active" value={String(billingRuleStats.active)} icon={<CircleCheck size={14} />} accent />
+              <StatCard label="Inactive" value={String(billingRuleStats.inactive)} icon={<CircleDashed size={14} />} />
+              <StatCard label="Actions" value={String(billingRuleStats.actions)} icon={<Layers3 size={14} />} />
+            </div>
+          </div>
+
+          <div className="p-5">
+            {billingRuleError && (
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                <div>{billingRuleError}</div>
+              </div>
+            )}
+
+            {billingRuleDetailLoading ? (
+              <div className="grid gap-4">
+                <div className="h-28 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+                <div className="h-64 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <Field label="Action type" helper="Required">
+                    <Input value={billingRuleForm.actionType} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, actionType: value }))} placeholder="youtube.summary" />
+                  </Field>
+                  <Field label="Provider">
+                    <Input value={billingRuleForm.provider} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, provider: value }))} placeholder="OpenAI" />
+                  </Field>
+                  <Field label="Model">
+                    <Input value={billingRuleForm.model} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, model: value }))} placeholder="gpt-4.1-mini" />
+                  </Field>
+                  <Field label="Version">
+                    <Input value={billingRuleForm.version} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, version: value }))} placeholder="1" />
+                  </Field>
+                  <Field label="Unit type">
+                    <select
+                      value={billingRuleForm.unitType}
+                      onChange={(e) => setBillingRuleForm((cur) => ({ ...cur, unitType: e.target.value }))}
+                      className="w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors focus:border-accent/60 focus:bg-bg-card"
+                    >
+                      <option value="token">Token</option>
+                      <option value="minute">Minute</option>
+                      <option value="second">Second</option>
+                      <option value="mb">MB</option>
+                      <option value="item">Item</option>
+                      <option value="call">Call</option>
+                      <option value="fixed">Fixed</option>
+                    </select>
+                  </Field>
+                  <Field label="Effective from">
+                    <input
+                      type="datetime-local"
+                      value={billingRuleForm.effectiveFrom}
+                      onChange={(e) => setBillingRuleForm((cur) => ({ ...cur, effectiveFrom: e.target.value }))}
+                      className="w-full rounded-xl border border-border bg-bg-input px-3.5 py-2.5 text-[13px] text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/60 focus:bg-bg-card"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <Field label="Base fee credits">
+                    <Input value={billingRuleForm.baseFeeCredits} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, baseFeeCredits: value }))} placeholder="0" />
+                  </Field>
+                  <Field label="Rate per unit credits">
+                    <Input value={billingRuleForm.ratePerUnitCredits} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, ratePerUnitCredits: value }))} placeholder="0.0025" />
+                  </Field>
+                  <Field label="Minimum credits">
+                    <Input value={billingRuleForm.minCredits} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, minCredits: value }))} placeholder="0" />
+                  </Field>
+                  <Field label="Maximum credits">
+                    <Input value={billingRuleForm.maxCredits} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, maxCredits: value }))} placeholder="Optional" />
+                  </Field>
+                  <Field label="Multiplier">
+                    <Input value={billingRuleForm.multiplier} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, multiplier: value }))} placeholder="1" />
+                  </Field>
+                  <Field label="Active">
+                    <div className="flex h-full items-center gap-3 rounded-xl border border-border bg-bg-input px-3.5 py-2.5">
+                      <Toggle checked={billingRuleForm.isActive} onChange={(value) => setBillingRuleForm((cur) => ({ ...cur, isActive: value }))} />
+                      <div>
+                        <div className="text-[12px] font-medium text-text-primary">{billingRuleForm.isActive ? 'Enabled' : 'Disabled'}</div>
+                        <div className="text-[11px] text-text-muted">Inactive rules are kept for history and future versioning.</div>
+                      </div>
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                      <KeyRound size={14} className="text-accent" />
+                      Rule guidance
+                    </div>
+                    <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                      <div><span className="text-text-primary">Action type</span> is the workflow or action identifier, like <span className="text-text-primary">youtube.summary</span>.</div>
+                      <div><span className="text-text-primary">Unit type</span> controls how usage is measured: token, minute, second, MB, item, call, or fixed.</div>
+                      <div><span className="text-text-primary">Multiplier</span> lets you add margin or risk buffer on top of provider cost.</div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                      <Shield size={14} className="text-accent" />
+                      Billing behavior
+                    </div>
+                    <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                      <div>Rules are used later by the billing engine to price usage events.</div>
+                      <div>Keep versions incrementing when changing the pricing formula.</div>
+                      <div>Effective dates let you change prices without losing history.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderBillingPanel = () => {
+    const userInitials = (user: AdminUserResponse | null) => {
+      if (!user) return 'U';
+      const source = user.displayName?.trim() || user.email;
+      const parts = source.split(/[\s@._-]+/).filter(Boolean);
+      return (parts.slice(0, 2).map((part) => part[0]).join('') || 'U').toUpperCase();
+    };
+
+    return (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-text-primary">User billing</h2>
+                <p className="text-[11px] text-text-muted">Inspect balance, ledger, reservations, and top up credits.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedBillingUserId) return;
+                  void reloadBillingDetails(selectedBillingUserId).catch((err) => {
+                    setBillingError(err instanceof Error ? err.message : 'Failed to refresh billing details');
+                  });
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-input px-3.5 py-2 text-[12px] font-semibold text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={billingUserSearch}
+                  onChange={(e) => setBillingUserSearch(e.target.value)}
+                  placeholder="Search by email, name, role..."
+                  className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Filter size={13} className="text-text-muted" />
+                {(['all', 'active', 'disabled', 'deleted'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setBillingUserStatusFilter(value)}
+                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
+                      billingUserStatusFilter === value
+                        ? 'bg-accent text-bg-primary'
+                        : 'border border-border bg-bg-input text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(100vh-310px)] overflow-y-auto p-3">
+            {filteredBillingUsers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                <div className="text-[13px] font-medium text-text-primary">No users match your filters.</div>
+                <div className="mt-1 text-[11px] text-text-muted">Try a different search or status filter.</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredBillingUsers.map((user) => {
+                  const isSelected = user.id === selectedBillingUserId;
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedBillingUserId(user.id);
+                        setBillingTopUpForm(EMPTY_BILLING_TOPUP_FORM);
+                      }}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]'
+                          : 'border-border bg-bg-input/40 hover:border-border/80 hover:bg-bg-input'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-bg-card text-[12px] font-bold text-accent">
+                          {userInitials(user)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-[12px] font-semibold text-text-primary">{user.displayName ?? user.email}</div>
+                              <div className="mt-0.5 truncate text-[11px] text-text-muted">{user.email}</div>
+                            </div>
+                            <Badge tone={user.status === 'active' ? 'accent' : 'muted'}>{user.status}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {user.roles.slice(0, 3).map((role) => (
+                              <Badge key={role}>{role}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="min-h-[760px] rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[16px] font-semibold text-text-primary">
+                    {selectedBillingUser ? selectedBillingUser.displayName ?? selectedBillingUser.email : 'Select a user'}
+                  </h2>
+                  {selectedBillingUser && <Badge tone={selectedBillingUser.status === 'active' ? 'accent' : 'muted'}>{selectedBillingUser.status}</Badge>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                  {selectedBillingUser ? (
+                    <>
+                      <span>{selectedBillingUser.email}</span>
+                      <span>•</span>
+                      <span>Updated {formatDateTime(selectedBillingUser.updatedAt)}</span>
+                    </>
+                  ) : (
+                    <span>No user selected.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveBillingTopUp}
+                  disabled={billingSaving || !selectedBillingUser}
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {billingSaving ? <RefreshCw size={14} className="animate-spin" /> : <CircleCheck size={14} />}
+                  Top up
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <StatCard label="Balance" value={formatCredits(billingStats.balance)} icon={<Database size={14} />} />
+              <StatCard label="Reserved" value={formatCredits(billingStats.reserved)} icon={<Clock3 size={14} />} />
+              <StatCard label="Available" value={formatCredits(billingStats.available)} icon={<CircleCheck size={14} />} accent />
+              <StatCard label="Ledger" value={String(billingStats.ledger)} icon={<Layers3 size={14} />} />
+            </div>
+          </div>
+
+          <div className="p-5">
+            {billingDetailLoading ? (
+              <div className="grid gap-4">
+                <div className="h-28 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+                <div className="h-64 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                      <KeyRound size={14} className="text-accent" />
+                      Top up balance
+                    </div>
+                    <div className="mt-4 grid gap-4">
+                      <Field label="Credits">
+                        <Input value={billingTopUpForm.credits} onChange={(value) => setBillingTopUpForm((cur) => ({ ...cur, credits: value }))} placeholder="50" />
+                      </Field>
+                      <Field label="Reason">
+                        <Input value={billingTopUpForm.reason} onChange={(value) => setBillingTopUpForm((cur) => ({ ...cur, reason: value }))} placeholder="Manual top up" />
+                      </Field>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                      <Shield size={14} className="text-accent" />
+                      Current account
+                    </div>
+                    <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                      <div>Balance and reservations are fetched from the billing wallet.</div>
+                      <div>Reserved credits are blocked for active workflows.</div>
+                      <div>Top-up writes a ledger entry immediately.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[12px] font-semibold text-text-primary">Active reservations</div>
+                      <Badge tone="accent">{billingReservations.length}</Badge>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {billingReservations.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-[11px] text-text-muted">No reservations.</div>
+                      ) : (
+                        billingReservations.slice(0, 5).map((reservation) => (
+                          <div key={reservation.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-[12px] font-semibold text-text-primary">{reservation.sourceType}</div>
+                                <div className="mt-0.5 truncate text-[11px] text-text-muted">{reservation.reason ?? 'No reason set'}</div>
+                              </div>
+                              <Badge tone={reservation.status === 'active' ? 'accent' : 'muted'}>{reservation.status}</Badge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
+                              <span>{formatCredits(reservation.estimatedCredits)} credits</span>
+                              <span>•</span>
+                              <span>{formatDateTime(reservation.createdAt)}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[12px] font-semibold text-text-primary">Ledger</div>
+                      <Badge tone="accent">{billingLedger.length}</Badge>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {billingLedger.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-[11px] text-text-muted">No ledger entries.</div>
+                      ) : (
+                        billingLedger.slice(0, 6).map((entry) => (
+                          <div key={entry.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-[12px] font-semibold text-text-primary">{entry.entryType}</div>
+                                <div className="mt-0.5 truncate text-[11px] text-text-muted">{entry.reason ?? 'No reason set'}</div>
+                              </div>
+                              <Badge tone={entry.entryType === 'topup' ? 'accent' : 'muted'}>{formatCredits(entry.amountCredits)}</Badge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
+                              <span>{entry.sourceType ?? 'manual'}</span>
+                              <span>•</span>
+                              <span>{formatDateTime(entry.createdAt)}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderWorkflowCostsPanel = () => {
+    const userInitials = (item: WorkflowCostResponse | null) => {
+      if (!item) return 'W';
+      const source = item.requestedByUserDisplayName?.trim() || item.requestedByUserEmail || item.workflowId;
+      const parts = source.split(/[\s@._-]+/).filter(Boolean);
+      return (parts.slice(0, 2).map((part) => part[0]).join('') || 'W').toUpperCase();
+    };
+
+    return (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-text-primary">Workflow costs</h2>
+                <p className="text-[11px] text-text-muted">Track estimated and final charge per workflow.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkflowCostsError(null);
+                  void listWorkflowCosts(100, 0).then((items) => {
+                    setWorkflowCosts(items);
+                    if (items.length === 0) {
+                      setSelectedWorkflowCostId(null);
+                    }
+                  }).catch((err) => {
+                    setWorkflowCostsError(err instanceof Error ? err.message : 'Failed to refresh workflow costs');
+                  });
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-input px-3.5 py-2 text-[12px] font-semibold text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={workflowCostSearch}
+                  onChange={(e) => setWorkflowCostSearch(e.target.value)}
+                  placeholder="Search by user, workflow, source or ID..."
+                  className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Filter size={13} className="text-text-muted" />
+                {(['all', 'queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'dead'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setWorkflowCostStatusFilter(value)}
+                    className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
+                      workflowCostStatusFilter === value
+                        ? 'bg-accent text-bg-primary'
+                        : 'border border-border bg-bg-input text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(100vh-310px)] overflow-y-auto p-3">
+            {filteredWorkflowCosts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                <div className="text-[13px] font-medium text-text-primary">No workflows match your filters.</div>
+                <div className="mt-1 text-[11px] text-text-muted">Try a different search or status filter.</div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredWorkflowCosts.map((item) => {
+                  const isSelected = item.workflowId === selectedWorkflowCostId;
+                  return (
+                    <button
+                      key={item.workflowId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWorkflowCostId(item.workflowId);
+                        setWorkflowCostsError(null);
+                      }}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]'
+                          : 'border-border bg-bg-input/40 hover:border-border/80 hover:bg-bg-input'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-bg-card text-[12px] font-bold text-accent">
+                          {userInitials(item)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-[12px] font-semibold text-text-primary">
+                                {item.requestedByUserDisplayName ?? item.requestedByUserEmail ?? 'System workflow'}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] text-text-muted">
+                                {item.workflowType} • {item.sourceLabel ?? item.workflowId}
+                              </div>
+                            </div>
+                            <Badge tone={item.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{item.workflowStatus}</Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Badge>{formatCredits(item.estimatedCredits)} est</Badge>
+                            <Badge tone={item.finalCredits !== null ? 'accent' : 'muted'}>
+                              {item.finalCredits !== null ? `${formatCredits(item.finalCredits)} final` : 'Open'}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="min-h-[760px] rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[16px] font-semibold text-text-primary">
+                    {selectedWorkflowCost
+                      ? selectedWorkflowCost.requestedByUserDisplayName ?? selectedWorkflowCost.requestedByUserEmail ?? 'Workflow cost'
+                      : 'Select a workflow'}
+                  </h2>
+                  {selectedWorkflowCost && <Badge tone={selectedWorkflowCost.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{selectedWorkflowCost.workflowStatus}</Badge>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                  {selectedWorkflowCost ? (
+                    <>
+                      <span>{selectedWorkflowCost.workflowType}</span>
+                      <span>•</span>
+                      <span>{selectedWorkflowCost.sourceLabel ?? selectedWorkflowCost.workflowId}</span>
+                      <span>•</span>
+                      <span>Created {formatDateTime(selectedWorkflowCost.createdAt)}</span>
+                    </>
+                  ) : (
+                    <span>No workflow selected.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <StatCard label="Total" value={String(workflowCostStats.total)} icon={<Layers3 size={14} />} />
+              <StatCard label="Succeeded" value={String(workflowCostStats.succeeded)} icon={<CircleCheck size={14} />} accent />
+              <StatCard label="Active" value={String(workflowCostStats.active)} icon={<Clock3 size={14} />} />
+              <StatCard label="Charged" value={formatCredits(workflowCostStats.charged)} icon={<Database size={14} />} />
+            </div>
+          </div>
+
+          <div className="p-5">
+            {workflowCostsLoading ? (
+              <div className="grid gap-4">
+                <div className="h-28 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+                <div className="h-64 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                      <Database size={14} className="text-accent" />
+                      Cost snapshot
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] text-text-muted">
+                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                        <div className="text-text-muted">Estimated</div>
+                        <div className="mt-1 text-[16px] font-semibold text-text-primary">
+                          {selectedWorkflowCost ? formatCredits(selectedWorkflowCost.estimatedCredits) : '—'}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                        <div className="text-text-muted">Final</div>
+                        <div className="mt-1 text-[16px] font-semibold text-text-primary">
+                          {selectedWorkflowCost?.finalCredits !== null && selectedWorkflowCost?.finalCredits !== undefined
+                            ? formatCredits(selectedWorkflowCost.finalCredits)
+                            : 'Open'}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                        <div className="text-text-muted">Reservation</div>
+                        <div className="mt-1 text-[12px] font-semibold text-text-primary">
+                          {selectedWorkflowCost?.reservationStatus ?? '—'}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                        <div className="text-text-muted">Source type</div>
+                        <div className="mt-1 text-[12px] font-semibold text-text-primary">
+                          {selectedWorkflowCost?.sourceType ?? '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
+                      <Shield size={14} className="text-accent" />
+                      Lifecycle
+                    </div>
+                    <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                      <div>Workflows reserve credits when they are created.</div>
+                      <div>When a workflow finishes, the reservation settles or releases.</div>
+                      <div>Final credits are written only once the workflow has usage data.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[12px] font-semibold text-text-primary">Workflow details</div>
+                      {selectedWorkflowCost && <Badge tone={selectedWorkflowCost.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{selectedWorkflowCost.workflowStatus}</Badge>}
+                    </div>
+                    {selectedWorkflowCost ? (
+                      <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                        <div><span className="text-text-primary">Workflow ID:</span> {selectedWorkflowCost.workflowId}</div>
+                        <div><span className="text-text-primary">User:</span> {selectedWorkflowCost.requestedByUserDisplayName ?? selectedWorkflowCost.requestedByUserEmail ?? 'System'}</div>
+                        <div><span className="text-text-primary">Email:</span> {selectedWorkflowCost.requestedByUserEmail ?? '—'}</div>
+                        <div><span className="text-text-primary">Source:</span> {selectedWorkflowCost.sourceLabel ?? '—'}</div>
+                        <div><span className="text-text-primary">Created:</span> {formatDateTime(selectedWorkflowCost.createdAt)}</div>
+                        <div><span className="text-text-primary">Started:</span> {formatDateTime(selectedWorkflowCost.startedAt)}</div>
+                        <div><span className="text-text-primary">Finished:</span> {formatDateTime(selectedWorkflowCost.finishedAt)}</div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-[11px] text-text-muted">Select a workflow on the left to inspect cost details.</div>
+                    )}
+                  </section>
+
+                  <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[12px] font-semibold text-text-primary">Reservation details</div>
+                      {selectedWorkflowCost && <Badge tone={selectedWorkflowCost.reservationStatus === 'settled' ? 'accent' : 'muted'}>{selectedWorkflowCost.reservationStatus ?? 'none'}</Badge>}
+                    </div>
+                    {selectedWorkflowCost ? (
+                      <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                        <div><span className="text-text-primary">Reservation ID:</span> {selectedWorkflowCost.reservationId ?? '—'}</div>
+                        <div><span className="text-text-primary">Estimated:</span> {formatCredits(selectedWorkflowCost.estimatedCredits)} credits</div>
+                        <div><span className="text-text-primary">Final:</span> {selectedWorkflowCost.finalCredits !== null ? `${formatCredits(selectedWorkflowCost.finalCredits)} credits` : 'Open'}</div>
+                        <div><span className="text-text-primary">Reason:</span> {selectedWorkflowCost.reason ?? '—'}</div>
+                        <div><span className="text-text-primary">Settled:</span> {formatDateTime(selectedWorkflowCost.settledAt)}</div>
+                        <div><span className="text-text-primary">Released:</span> {formatDateTime(selectedWorkflowCost.releasedAt)}</div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-[11px] text-text-muted">Reservation data appears after the workflow creates or settles a charge.</div>
+                    )}
+                  </section>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  void renderWorkflowCostsPanel;
+
   const renderRuntimeSettingsPanel = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <section className="rounded-3xl border border-border bg-bg-card/90 overflow-hidden">
@@ -2320,22 +3599,34 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   const currentTitle =
     section === 'users'
       ? 'User management'
+      : section === 'billing'
+        ? 'User billing'
       : section === 'prompts'
         ? 'Prompt management'
         : section === 'email-templates'
           ? 'Email template management'
         : section === 'search-providers'
         ? 'Search provider management'
+        : section === 'billing-rules'
+        ? 'Billing rules'
+        : section === 'workflow-costs'
+        ? 'Workflow costs'
         : 'Runtime settings';
   const currentDescription =
     section === 'users'
       ? 'Search users, inspect access, and edit profile data and roles.'
+      : section === 'billing'
+        ? 'Search a user, inspect credits, review transactions, and add balance.'
       : section === 'prompts'
         ? 'Scan, edit, archive, and delete prompt templates.'
         : section === 'email-templates'
           ? 'View, edit, add, and remove email templates used by the worker.'
-        : section === 'search-providers'
+      : section === 'search-providers'
         ? 'Add, review, and remove search-provider keys.'
+        : section === 'billing-rules'
+        ? 'Configure pricing rules for workflow billing and usage metering.'
+        : section === 'workflow-costs'
+        ? 'Review workflow charges, reservation state, and final credits by user.'
         : 'Choose active email and transcription providers.';
 
   const currentHeaderStats = section === 'users'
@@ -2345,6 +3636,13 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         { label: 'Disabled', value: String(userStats.disabled), icon: <CircleDashed size={14} /> },
         { label: 'Deleted', value: String(userStats.deleted), icon: <Trash2 size={14} /> },
       ]
+    : section === 'billing'
+      ? [
+          { label: 'Balance', value: formatCredits(billingStats.balance), icon: <Database size={14} /> },
+          { label: 'Reserved', value: formatCredits(billingStats.reserved), icon: <Clock3 size={14} /> },
+          { label: 'Available', value: formatCredits(billingStats.available), icon: <CircleCheck size={14} />, accent: true },
+          { label: 'Ledger', value: String(billingStats.ledger), icon: <Layers3 size={14} /> },
+        ]
     : section === 'prompts'
     ? [
         { label: 'Total', value: String(promptStats.total), icon: <Layers3 size={14} /> },
@@ -2361,11 +3659,25 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         ]
     : section === 'search-providers'
       ? [
-          { label: 'Total', value: String(providerStats.total), icon: <Server size={14} /> },
+        { label: 'Total', value: String(providerStats.total), icon: <Server size={14} /> },
         { label: 'Active', value: String(providerStats.active), icon: <CircleCheck size={14} />, accent: true },
         { label: 'Inactive', value: String(providerStats.inactive), icon: <CircleDashed size={14} /> },
         { label: 'Quota', value: formatQuota(providerStats.quota), icon: <KeyRound size={14} /> },
       ]
+    : section === 'billing-rules'
+      ? [
+          { label: 'Total', value: String(billingRuleStats.total), icon: <Database size={14} /> },
+          { label: 'Active', value: String(billingRuleStats.active), icon: <CircleCheck size={14} />, accent: true },
+          { label: 'Inactive', value: String(billingRuleStats.inactive), icon: <CircleDashed size={14} /> },
+          { label: 'Actions', value: String(billingRuleStats.actions), icon: <Layers3 size={14} /> },
+        ]
+    : section === 'workflow-costs'
+      ? [
+          { label: 'Total', value: String(workflowCostStats.total), icon: <Layers3 size={14} /> },
+          { label: 'Succeeded', value: String(workflowCostStats.succeeded), icon: <CircleCheck size={14} />, accent: true },
+          { label: 'Active', value: String(workflowCostStats.active), icon: <Clock3 size={14} /> },
+          { label: 'Charged', value: formatCredits(workflowCostStats.charged), icon: <Database size={14} /> },
+        ]
       : [
         { label: 'Email', value: runtimeSettings.emailProvider, icon: <Server size={14} /> },
         { label: 'From', value: runtimeSettings.emailFromEmail, icon: <KeyRound size={14} />, accent: true },
@@ -2413,6 +3725,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               </button>
               <button
                 type="button"
+                onClick={() => changeSection('billing')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'billing' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <Database size={16} />
+                User billing
+              </button>
+              <button
+                type="button"
                 onClick={() => changeSection('email-templates')}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
                   section === 'email-templates' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
@@ -2430,6 +3752,26 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               >
                 <Server size={16} />
                 Search providers
+              </button>
+              <button
+                type="button"
+                onClick={() => changeSection('billing-rules')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'billing-rules' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <Database size={16} />
+                Billing rules
+              </button>
+              <button
+                type="button"
+                onClick={() => changeSection('workflow-costs')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'workflow-costs' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <Layers3 size={16} />
+                Workflow costs
               </button>
               <button
                 type="button"
@@ -2469,11 +3811,29 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                         { label: 'Role assignments', value: 'Multi-role access', icon: <UserCog size={14} /> },
                         { label: 'Session insight', value: 'Login and activity state', icon: <Server size={14} /> },
                       ]
+                    : section === 'billing'
+                      ? [
+                          { label: 'Balance', value: 'Credits, reserved, available', icon: <Database size={14} /> },
+                          { label: 'Transactions', value: 'Ledger and reservations', icon: <Layers3 size={14} /> },
+                          { label: 'Top ups', value: 'Manual account funding', icon: <KeyRound size={14} /> },
+                        ]
                   : section === 'search-providers'
                     ? [
                         { label: 'Search keys', value: 'Manage API keys', icon: <KeyRound size={14} /> },
                         { label: 'Usage tracking', value: 'Monthly quota view', icon: <Database size={14} /> },
                         { label: 'Admin actions', value: 'Create / edit / delete', icon: <Shield size={14} /> },
+                      ]
+                    : section === 'billing-rules'
+                    ? [
+                        { label: 'Pricing rules', value: 'Model and workflow charges', icon: <Database size={14} /> },
+                        { label: 'Versioning', value: 'Keep historical pricing', icon: <Archive size={14} /> },
+                        { label: 'Active window', value: 'Effective dates and state', icon: <Clock3 size={14} /> },
+                      ]
+                    : section === 'workflow-costs'
+                    ? [
+                        { label: 'Workflow ledger', value: 'Estimated and final credits', icon: <Database size={14} /> },
+                        { label: 'Reservation state', value: 'Active, settled, or released', icon: <Clock3 size={14} /> },
+                        { label: 'Per-user view', value: 'Charge history by account', icon: <Users size={14} /> },
                       ]
                     : [
                         { label: 'Runtime providers', value: 'Email and transcription', icon: <Settings2 size={14} /> },
@@ -2533,6 +3893,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                 )}
                 {renderUserPanel()}
               </>
+            ) : section === 'billing' ? (
+              <>
+                {billingError && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>{billingError}</div>
+                  </div>
+                )}
+                {renderBillingPanel()}
+              </>
             ) : section === 'prompts' ? (
               <>
                 {promptError && (
@@ -2562,6 +3932,26 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                   </div>
                 )}
                 {renderProviderPanel()}
+              </>
+            ) : section === 'billing-rules' ? (
+              <>
+                {billingRuleError && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>{billingRuleError}</div>
+                  </div>
+                )}
+                {renderBillingRulesPanel()}
+              </>
+            ) : section === 'workflow-costs' ? (
+              <>
+                {workflowCostsError && (
+                  <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
+                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
+                    <div>{workflowCostsError}</div>
+                  </div>
+                )}
+                {renderWorkflowCostsPanel()}
               </>
             ) : (
               <>

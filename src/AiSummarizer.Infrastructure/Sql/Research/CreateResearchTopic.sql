@@ -1,6 +1,7 @@
 insert into research_topics (
     id,
     requested_by_user_id,
+    project_id,
     name,
     description,
     frequency,
@@ -15,6 +16,7 @@ insert into research_topics (
 values (
     @id,
     @requested_by_user_id,
+    @project_id,
     @name,
     @description,
     @frequency,

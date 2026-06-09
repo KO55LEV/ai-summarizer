@@ -32,3 +32,9 @@ public interface IWorkflowsService
     Task<IReadOnlyList<WorkflowStepDto>> ListStepsAsync(Guid workflowId, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkflowEventDto>> ListEventsAsync(Guid workflowId, int limit, int offset, CancellationToken cancellationToken);
 }
+
+public interface IAdminWorkflowCostsService
+{
+    Task<IReadOnlyList<WorkflowCostDto>> ListAsync(int limit, int offset, CancellationToken cancellationToken);
+    Task<WorkflowCostDto> GetAsync(Guid workflowId, CancellationToken cancellationToken);
+}

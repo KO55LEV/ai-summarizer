@@ -2,15 +2,19 @@ namespace AiSummarizer.Api.Research;
 
 public sealed record CreateResearchTopicRequest(
     Guid? RequestedByUserId,
+    Guid? ProjectId,
     string Name,
     string? Description,
     string Frequency,
+    string? Status,
     TimeOnly? DeliveryTime,
     IReadOnlyList<string> Sources,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Outputs);
 
 public sealed record UpdateResearchTopicRequest(
+    Guid? RequestedByUserId,
+    Guid? ProjectId,
     string Name,
     string? Description,
     string Frequency,
@@ -47,9 +51,13 @@ public sealed record StartResearchTopicRunRequest(
     bool ForceRun);
 
 public sealed record StartResearchTopicRunResponse(
-    Guid JobId,
+    Guid? JobId,
     Guid TopicId,
-    string JobType);
+    Guid? ExistingRunId,
+    string JobType,
+    string Status,
+    DateTimeOffset CreatedAt,
+    string Message);
 
 public sealed record ResearchTopicRunResponse(
     Guid Id,

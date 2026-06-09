@@ -4,6 +4,7 @@ public sealed record NoteTextVersion
 {
     public Guid Id { get; init; }
     public Guid NoteId { get; init; }
+    public Guid? SourceAssetId { get; init; }
     public Guid? SourceRunId { get; init; }
     public NoteTextVersionKind VersionKind { get; init; } = NoteTextVersionKind.Original;
     public string Text { get; init; } = string.Empty;

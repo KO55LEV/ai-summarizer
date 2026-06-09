@@ -8,6 +8,7 @@ using AiSummarizer.Application.Reasoning;
 using AiSummarizer.Application.Projects;
 using AiSummarizer.Domain.Jobs;
 using AiSummarizer.Domain.Notes;
+using AiSummarizer.Infrastructure.Storage;
 using Microsoft.Extensions.Options;
 
 namespace AiSummarizer.Worker.JobsProcessing.Handlers;
@@ -197,7 +198,7 @@ public sealed class TelegramIngestJobHandler(
             return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new { noteId = state.NoteId, processed = true, media = false }));
         }
 
-        var storageRoot = NormalizeStorageRoot(storageOptions.Value.RootPath);
+        var storageRoot = StoragePathResolver.ResolveRoot(storageOptions.Value.RootPath, "data");
         var telegramDirectory = Path.Combine(storageRoot, "telegram", telegramUserId.ToString(CultureInfo.InvariantCulture), messageId.ToString(CultureInfo.InvariantCulture));
         Directory.CreateDirectory(telegramDirectory);
 
@@ -876,18 +877,6 @@ public sealed class TelegramIngestJobHandler(
 
     private static string BuildStorageKey(string channel, long telegramUserId, long messageId, string fileName)
         => $"{channel}/{telegramUserId}/{messageId}/{fileName}";
-
-    private static string NormalizeStorageRoot(string rootPath)
-    {
-        if (string.IsNullOrWhiteSpace(rootPath))
-        {
-            rootPath = Path.Combine(AppContext.BaseDirectory, "data");
-        }
-
-        var normalized = Path.GetFullPath(rootPath);
-        Directory.CreateDirectory(normalized);
-        return normalized;
-    }
 
     private static string? NormalizeNullable(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 

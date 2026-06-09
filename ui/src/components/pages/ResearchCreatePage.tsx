@@ -22,8 +22,9 @@ import {
   ArrowRight,
   CheckCircle2,
 } from 'lucide-react';
-import { createResearchTopic } from '../../api/research';
+import { createResearchTopic, updateResearchTopic } from '../../api/research';
 import { getCurrentUserId } from '../../config/currentUser';
+import type { ResearchTopic } from '../../api/types';
 
 const SOURCE_OPTIONS = [
   { id: 'web', label: 'Web Search', icon: <Globe size={16} />, description: 'Search the open web for recent signals and context.' },
@@ -52,17 +53,20 @@ const DELIVERY_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '1
 
 interface ResearchCreatePageProps {
   onBack: () => void;
+  topic?: ResearchTopic | null;
 }
 
-export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [sources, setSources] = useState<string[]>(['web', 'news']);
-  const [frequency, setFrequency] = useState<'hourly' | 'daily' | 'weekly' | 'monthly'>('daily');
-  const [deliveryTime, setDeliveryTime] = useState('08:00');
+export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
+  const isEdit = Boolean(topic);
+  const [name, setName] = useState(topic?.name ?? '');
+  const [description, setDescription] = useState(topic?.description ?? '');
+  const [sources, setSources] = useState<string[]>(topic?.sources ?? ['web', 'news']);
+  const [frequency, setFrequency] = useState<'hourly' | 'daily' | 'weekly' | 'monthly'>(topic?.frequency ?? 'daily');
+  const [status, setStatus] = useState<'active' | 'paused' | 'draft'>(topic?.status ?? 'active');
+  const [deliveryTime, setDeliveryTime] = useState(topic?.deliveryTime ?? '08:00');
   const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [outputs, setOutputs] = useState<string[]>(['briefing', 'structured']);
+  const [tags, setTags] = useState<string[]>(topic?.tags ?? []);
+  const [outputs, setOutputs] = useState<string[]>(topic?.outputs?.length ? topic.outputs : ['briefing', 'structured']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,19 +106,35 @@ export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
     setError(null);
 
     try {
-      await createResearchTopic({
-        requestedByUserId: getCurrentUserId(),
-        name: name.trim(),
-        description: description.trim() || undefined,
-        frequency,
-        deliveryTime,
-        sources,
-        tags,
-        outputs,
-      });
+      if (topic) {
+        await updateResearchTopic(topic.id, {
+          projectId: topic.projectId,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          frequency,
+          status,
+          deliveryTime,
+          sources,
+          tags,
+          outputs,
+        });
+      } else {
+        await createResearchTopic({
+          requestedByUserId: getCurrentUserId(),
+          projectId: null,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          frequency,
+          status,
+          deliveryTime,
+          sources,
+          tags,
+          outputs,
+        });
+      }
       onBack();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Failed to create topic');
+      setError(createError instanceof Error ? createError.message : `Failed to ${isEdit ? 'update' : 'create'} topic`);
     } finally {
       setIsSubmitting(false);
     }
@@ -152,7 +172,7 @@ export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
               Research Studio
             </div>
             <h1 className="text-[28px] font-semibold tracking-tight text-[var(--color-text-primary)]">
-              New research topic
+              {isEdit ? 'Edit research topic' : 'New research topic'}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">
               Define what to watch, how often to watch it, and what the system should produce:
@@ -306,6 +326,22 @@ export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
                 </Field>
               </PanelCard>
 
+              <PanelCard title="Status">
+                <Field label="Topic status" helper="Active topics are picked up by the scheduler.">
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as typeof status)}
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)]"
+                  >
+                    <option value="active">Active</option>
+                    <option value="paused">Paused</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </Field>
+              </PanelCard>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-2">
               <PanelCard title="Tags">
                 <Field label="Keywords" helper="Press Enter or comma to add keywords.">
                   <div className="mb-3 flex flex-wrap gap-2">
@@ -368,7 +404,7 @@ export function ResearchCreatePage({ onBack }: ResearchCreatePageProps) {
                     cursor: isValid && !isSubmitting ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  {isSubmitting ? 'Creating...' : 'Create topic'}
+                  {isSubmitting ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save changes' : 'Create topic')}
                   <ArrowRight size={15} />
                 </button>
               </div>

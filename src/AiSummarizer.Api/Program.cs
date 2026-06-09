@@ -24,7 +24,6 @@ builder.Services.AddInfrastructure(
     builder.Configuration);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<UsersOptions>>().Value);
 builder.Services.AddScoped<IUsersService, UsersService>();
-builder.Services.AddScoped<IJobsService, JobsService>();
 builder.Services.AddScoped<IWorkflowsService, WorkflowsService>();
 
 var app = builder.Build();

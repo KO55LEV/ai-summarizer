@@ -3,6 +3,8 @@
     "name": "Researcher Pro",
     "email": "researcher.pro@example.com",
     "initials": "RS",
+    "avatarUrl": null,
+    "status": "active",
     "plan": "pro",
     "memberSince": "Jan 2026"
   },

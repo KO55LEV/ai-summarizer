@@ -19,5 +19,6 @@ select
 from todo_items
 where (@requested_by_user_id is null or requested_by_user_id = @requested_by_user_id)
   and (@project_id is null or project_id = @project_id)
+  and (@bucket is null or bucket = @bucket)
   and (@cadence is null or cadence = @cadence)
   and (@status is null or status = @status);

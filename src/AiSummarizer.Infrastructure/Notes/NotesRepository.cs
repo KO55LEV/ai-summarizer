@@ -42,6 +42,9 @@ public sealed class NotesRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
     public Task<Note?> GetNoteByIdAsync(Guid noteId, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("Notes/GetNoteById.sql", cmd => cmd.Parameters.AddWithValue("note_id", noteId), null, cancellationToken, MapNote);
 
+    public Task<NoteAsset?> GetNoteAssetByIdAsync(Guid noteAssetId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Notes/GetNoteAssetById.sql", cmd => cmd.Parameters.AddWithValue("note_asset_id", noteAssetId), null, cancellationToken, MapNoteAsset);
+
     public Task<IReadOnlyList<Note>> ListNotesAsync(Guid? requestedByUserId, Guid? projectId, int limit, int offset, CancellationToken cancellationToken)
         => QueryManyAsync("Notes/ListNotes.sql", cmd =>
         {
@@ -285,6 +288,7 @@ public sealed class NotesRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
     {
         command.Parameters.AddWithValue("id", noteTextVersion.Id);
         command.Parameters.AddWithValue("note_id", noteTextVersion.NoteId);
+        command.Parameters.AddWithValue("source_asset_id", (object?)noteTextVersion.SourceAssetId ?? DBNull.Value);
         command.Parameters.AddWithValue("source_run_id", (object?)noteTextVersion.SourceRunId ?? DBNull.Value);
         command.Parameters.AddWithValue("version_kind", noteTextVersion.VersionKind.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("text", noteTextVersion.Text);
@@ -299,6 +303,7 @@ public sealed class NotesRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
         command.Parameters.AddWithValue("id", run.Id);
         command.Parameters.AddWithValue("note_id", run.NoteId);
         command.Parameters.AddWithValue("job_id", (object?)run.JobId ?? DBNull.Value);
+        command.Parameters.AddWithValue("source_asset_id", (object?)run.SourceAssetId ?? DBNull.Value);
         command.Parameters.AddWithValue("stage", run.Stage.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("status", run.Status.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("provider", (object?)run.Provider ?? DBNull.Value);
@@ -413,6 +418,7 @@ public sealed class NotesRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
         {
             Id = reader.GetGuid(reader.GetOrdinal("id")),
             NoteId = reader.GetGuid(reader.GetOrdinal("note_id")),
+            SourceAssetId = reader.IsDBNull(reader.GetOrdinal("source_asset_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_asset_id")),
             SourceRunId = reader.IsDBNull(reader.GetOrdinal("source_run_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_run_id")),
             VersionKind = Enum.Parse<NoteTextVersionKind>(reader.GetString(reader.GetOrdinal("version_kind")), true),
             Text = reader.GetString(reader.GetOrdinal("text")),
@@ -429,6 +435,7 @@ public sealed class NotesRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             Id = reader.GetGuid(reader.GetOrdinal("id")),
             NoteId = reader.GetGuid(reader.GetOrdinal("note_id")),
             JobId = reader.IsDBNull(reader.GetOrdinal("job_id")) ? null : reader.GetGuid(reader.GetOrdinal("job_id")),
+            SourceAssetId = reader.IsDBNull(reader.GetOrdinal("source_asset_id")) ? null : reader.GetGuid(reader.GetOrdinal("source_asset_id")),
             Stage = Enum.Parse<NoteProcessingStage>(reader.GetString(reader.GetOrdinal("stage")), true),
             Status = Enum.Parse<NoteProcessingStatus>(reader.GetString(reader.GetOrdinal("status")), true),
             Provider = reader.IsDBNull(reader.GetOrdinal("provider")) ? null : reader.GetString(reader.GetOrdinal("provider")),

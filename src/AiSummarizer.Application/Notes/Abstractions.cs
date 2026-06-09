@@ -11,6 +11,7 @@ public interface INotesRepository
     Task<Note> CreateNoteAsync(Note note, DbTransaction? transaction, CancellationToken cancellationToken);
     Task<Note> UpdateNoteAsync(Note note, DbTransaction? transaction, CancellationToken cancellationToken);
     Task DeleteNoteAsync(Guid noteId, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<NoteAsset?> GetNoteAssetByIdAsync(Guid noteAssetId, CancellationToken cancellationToken);
     Task<NoteInput?> GetNoteInputByIdAsync(Guid noteInputId, CancellationToken cancellationToken);
     Task<NoteInput?> GetNoteInputByExternalIdentityAsync(string sourceChannel, string externalSourceId, string externalMessageId, CancellationToken cancellationToken);
     Task<IReadOnlyList<NoteInput>> ListNoteInputsAsync(Guid noteId, CancellationToken cancellationToken);
@@ -33,6 +34,13 @@ public interface INotesRepository
     Task RevokeUserTelegramAccountAsync(Guid userTelegramAccountId, DateTimeOffset revokedAt, DbTransaction? transaction, CancellationToken cancellationToken);
 }
 
+public interface INoteAssetStorage
+{
+    Task<NoteAssetStorageResult> SaveAsync(NoteAssetStorageRequest request, Stream content, CancellationToken cancellationToken);
+    Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken);
+    Task DeleteAsync(string storageKey, CancellationToken cancellationToken);
+}
+
 public interface INotesService
 {
     Task<NotesListDto> ListNotesAsync(Guid? requestedByUserId, Guid? projectId, int limit, int offset, CancellationToken cancellationToken);
@@ -42,6 +50,7 @@ public interface INotesService
     Task DeleteNoteAsync(Guid noteId, CancellationToken cancellationToken);
     Task<NoteInputDto> AddNoteInputAsync(CreateNoteInputCommand command, CancellationToken cancellationToken);
     Task<NoteAssetDto> AddNoteAssetAsync(CreateNoteAssetCommand command, CancellationToken cancellationToken);
+    Task<NoteAssetDto> UploadNoteAssetAsync(UploadNoteAssetCommand command, CancellationToken cancellationToken);
     Task<NoteTextVersionDto> AddNoteTextVersionAsync(CreateNoteTextVersionCommand command, CancellationToken cancellationToken);
     Task<NoteProcessingRunDto> AddNoteProcessingRunAsync(CreateNoteProcessingRunCommand command, CancellationToken cancellationToken);
     Task<IReadOnlyList<NoteInputDto>> ListNoteInputsAsync(Guid noteId, CancellationToken cancellationToken);

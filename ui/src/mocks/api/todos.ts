@@ -4,7 +4,31 @@ import { getMockProjects } from './projects';
 import data from '../data/todos.json';
 import { delay } from './delay';
 
-let todos: TodoItem[] = ((data as TodoListData).items ?? []).map((item) => ({ ...item }));
+function inferBucket(item: { bucket?: string | null; status?: string | null; dueAt?: string | null }): 'today' | 'next' | 'later' {
+  if (item.bucket === 'today' || item.bucket === 'next' || item.bucket === 'later') {
+    return item.bucket;
+  }
+
+  if (item.status === 'done') {
+    return 'today';
+  }
+
+  if (item.dueAt) {
+    const due = new Date(item.dueAt);
+    if (!Number.isNaN(due.getTime())) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return due.getTime() <= today.getTime() ? 'today' : 'next';
+    }
+  }
+
+  return 'today';
+}
+
+let todos: TodoItem[] = ((data as TodoListData).items ?? []).map((item) => ({
+  ...item,
+  bucket: inferBucket(item),
+}));
 
 function normalize(value?: string | null): string | null {
   return value && value.trim() ? value.trim() : null;
@@ -33,11 +57,12 @@ async function enrich(items: TodoItem[]): Promise<TodoItem[]> {
   }));
 }
 
-export async function getMockTodos(request: { requestedByUserId?: string; projectId?: string; cadence?: string; status?: string; limit?: number; offset?: number } = {}): Promise<TodoListData> {
+export async function getMockTodos(request: { requestedByUserId?: string; projectId?: string; bucket?: string; cadence?: string; status?: string; limit?: number; offset?: number } = {}): Promise<TodoListData> {
   await delay();
   const filtered = todos.filter((item) => {
     if (request.requestedByUserId && item.requestedByUserId !== request.requestedByUserId) return false;
     if (request.projectId && item.projectId !== request.projectId) return false;
+    if (request.bucket && item.bucket !== request.bucket) return false;
     if (request.cadence && item.cadence !== request.cadence) return false;
     if (request.status && item.status !== request.status) return false;
     return true;
@@ -61,6 +86,7 @@ export async function createMockTodo(request: CreateTodoRequest): Promise<TodoIt
     requestedByUserId: request.requestedByUserId ?? null,
     projectId: request.projectId ?? null,
     projectName,
+    bucket: inferBucket({ bucket: request.bucket, status: request.status, dueAt: request.dueAt }),
     title: request.title,
     description: normalize(request.description),
     cadence: request.cadence,
@@ -91,6 +117,12 @@ export async function updateMockTodo(todoId: string, request: UpdateTodoRequest)
     ...todos[index],
     projectId: request.projectId ?? null,
     projectName,
+    bucket: inferBucket({
+      ...todos[index],
+      bucket: request.bucket ?? todos[index].bucket,
+      status: request.status ?? todos[index].status,
+      dueAt: request.dueAt ?? todos[index].dueAt,
+    }),
     title: request.title,
     description: normalize(request.description),
     cadence: request.cadence,

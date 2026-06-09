@@ -329,17 +329,21 @@ public sealed class TranscriptsController(
 
     private static string DeriveDisplayStatus(PublicRequestRun run)
     {
-        var transcript = TryGetTranscript(run.Response);
-        if (transcript is not null)
-        {
-            return "completed";
-        }
-
         var workflow = TryGetWorkflow(run.Response);
         if (workflow is not null)
         {
             var workflowStatus = GetStringProperty(workflow.Value, "status");
-            return NormalizeStatus(workflowStatus);
+            var normalizedWorkflowStatus = NormalizeStatus(workflowStatus);
+            if (normalizedWorkflowStatus != "unknown")
+            {
+                return normalizedWorkflowStatus;
+            }
+        }
+
+        var transcript = TryGetTranscript(run.Response);
+        if (transcript is not null)
+        {
+            return "completed";
         }
 
         return NormalizeStatus(run.Status);

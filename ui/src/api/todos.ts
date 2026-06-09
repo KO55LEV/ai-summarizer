@@ -5,6 +5,7 @@ import type { TodoItem, TodoListData } from './types';
 export interface CreateTodoRequest {
   requestedByUserId?: string | null;
   projectId?: string | null;
+  bucket?: 'today' | 'next' | 'later' | string | null;
   title: string;
   description?: string | null;
   cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | string;
@@ -16,6 +17,7 @@ export interface CreateTodoRequest {
 
 export interface UpdateTodoRequest {
   projectId?: string | null;
+  bucket?: 'today' | 'next' | 'later' | string | null;
   title: string;
   description?: string | null;
   cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | string;
@@ -28,6 +30,7 @@ export interface UpdateTodoRequest {
 export interface GetTodosRequest {
   requestedByUserId?: string;
   projectId?: string;
+  bucket?: string;
   cadence?: string;
   status?: string;
   limit?: number;
@@ -42,6 +45,7 @@ export async function getTodos(request: GetTodosRequest = {}): Promise<TodoListD
   const params = new URLSearchParams();
   params.set('requestedByUserId', request.requestedByUserId ?? getCurrentUserId());
   if (request.projectId) params.set('projectId', request.projectId);
+  if (request.bucket) params.set('bucket', request.bucket);
   if (request.cadence) params.set('cadence', request.cadence);
   if (request.status) params.set('status', request.status);
   if (request.limit !== undefined) params.set('limit', String(request.limit));

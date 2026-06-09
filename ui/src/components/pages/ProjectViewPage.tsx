@@ -8,10 +8,12 @@ import {
   FolderKanban,
   Layers3,
   Lightbulb,
+  Link2,
   MessageSquareQuote,
   MoreVertical,
   Play,
   Plus,
+  CalendarDays,
   Search,
   Settings,
   Sparkles,
@@ -19,18 +21,22 @@ import {
   Target,
   UserPlus,
   Circle,
+  Trash2,
+  GripVertical,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { getCurrentUserId } from '../../config/currentUser';
 import { getNotes, type NoteResponse } from '../../api/notes';
 import { getProject, type ProjectResponse } from '../../api/projects';
 import { getResearchList } from '../../api/research';
-import { getTodos } from '../../api/todos';
+import { createTodo, deleteTodo, getTodos, updateTodo } from '../../api/todos';
 import type { ResearchTopic as ApiResearchTopic, TodoItem } from '../../api/types';
 
 type ProjectTab = 'overview' | 'notes' | 'research' | 'videos' | 'tasks';
 type QuickFilter = 'all' | 'starred' | 'in-progress' | 'completed';
+type TaskBucket = 'today' | 'next' | 'later';
+type TaskDropTarget = TaskBucket | 'done';
+type CompletedFilter = 'today' | 'all';
 
 const VIDEO_INPUT_KINDS = new Set(['audio', 'file', 'mixed']);
 
@@ -76,36 +82,6 @@ function projectStatusStyles(status: string): string {
       return 'bg-amber-500/15 text-amber-300 border-amber-500/20';
     case 'deleted':
       return 'bg-rose-500/15 text-rose-300 border-rose-500/20';
-    default:
-      return 'bg-bg-input text-text-secondary border-border';
-  }
-}
-
-function todoStatusLabel(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'doing':
-      return 'In progress';
-    case 'blocked':
-      return 'Blocked';
-    case 'done':
-      return 'Completed';
-    case 'archived':
-      return 'Archived';
-    default:
-      return 'Open';
-  }
-}
-
-function todoStatusStyles(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'doing':
-      return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20';
-    case 'blocked':
-      return 'bg-amber-500/15 text-amber-300 border-amber-500/20';
-    case 'done':
-      return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20';
-    case 'archived':
-      return 'bg-bg-input text-text-secondary border-border';
     default:
       return 'bg-bg-input text-text-secondary border-border';
   }
@@ -169,14 +145,89 @@ function compareUpdatedDesc(a: { updatedAt: string }, b: { updatedAt: string }):
   return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
 }
 
-function compareCreatedDesc(a: { createdAt: string }, b: { createdAt: string }): number {
-  return Date.parse(b.createdAt) - Date.parse(a.createdAt);
-}
-
 function compareAnyUpdatedDesc(a: { updatedAt?: string | null; createdAt?: string | null; date?: string | null }, b: { updatedAt?: string | null; createdAt?: string | null; date?: string | null }): number {
   const aTime = Date.parse(a.updatedAt ?? a.createdAt ?? a.date ?? '');
   const bTime = Date.parse(b.updatedAt ?? b.createdAt ?? b.date ?? '');
   return bTime - aTime;
+}
+
+function isSameDay(value: string | null | undefined, other = new Date()): boolean {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return (
+    date.getFullYear() === other.getFullYear() &&
+    date.getMonth() === other.getMonth() &&
+    date.getDate() === other.getDate()
+  );
+}
+
+function isBeforeToday(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date.getTime() < today.getTime();
+}
+
+function formatShortMonthDay(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+}
+
+function normalizeTaskBucket(value?: string | null): TaskBucket {
+  if (value === 'next' || value === 'later') return value;
+  return 'today';
+}
+
+function bucketLabel(bucket: TaskBucket): string {
+  return bucket.charAt(0).toUpperCase() + bucket.slice(1);
+}
+
+function taskDueBadge(todo: TodoItem): string | null {
+  if (todo.status === 'done') {
+    return todo.completedAt ? formatShortMonthDay(todo.completedAt) : 'Done';
+  }
+  if (!todo.dueAt) return null;
+  if (isSameDay(todo.dueAt)) return 'Due today';
+  if (isBeforeToday(todo.dueAt)) return 'Overdue';
+  return `Due ${formatShortMonthDay(todo.dueAt)}`;
+}
+
+function sortTasksForDisplay(a: TodoItem, b: TodoItem): number {
+  const aDone = a.status === 'done';
+  const bDone = b.status === 'done';
+  if (aDone !== bDone) return aDone ? 1 : -1;
+
+  if (aDone && bDone) {
+    const aCompleted = a.completedAt ? Date.parse(a.completedAt) : Number.NEGATIVE_INFINITY;
+    const bCompleted = b.completedAt ? Date.parse(b.completedAt) : Number.NEGATIVE_INFINITY;
+    if (aCompleted !== bCompleted) return bCompleted - aCompleted;
+  } else {
+    const bucketRank = (bucket: TaskBucket): number => {
+      switch (bucket) {
+        case 'today':
+          return 0;
+        case 'next':
+          return 1;
+        case 'later':
+          return 2;
+      }
+    };
+    const aBucket = bucketRank(normalizeTaskBucket(a.bucket));
+    const bBucket = bucketRank(normalizeTaskBucket(b.bucket));
+    if (aBucket !== bBucket) return aBucket - bBucket;
+
+    const aDue = a.dueAt ? Date.parse(a.dueAt) : Number.POSITIVE_INFINITY;
+    const bDue = b.dueAt ? Date.parse(b.dueAt) : Number.POSITIVE_INFINITY;
+    if (aDue !== bDue) return aDue - bDue;
+  }
+
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+  return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
 }
 
 function StatusChip({ label, className }: { label: string; className: string }) {
@@ -288,6 +339,136 @@ function ItemRow({
   );
 }
 
+function TaskRow({
+  todo,
+  projectName,
+  dueLabel,
+  index,
+  total,
+  onToggle,
+  onMove,
+  onDelete,
+  onDragStart,
+  dragging,
+}: {
+  todo: TodoItem;
+  projectName: string;
+  dueLabel: string | null;
+  index: number;
+  total: number;
+  onToggle: () => void;
+  onMove: (bucket: TaskBucket) => void;
+  onDelete: () => void;
+  onDragStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  dragging: boolean;
+}) {
+  const done = todo.status === 'done';
+
+  return (
+    <div className={`flex items-center gap-3 px-4 py-3.5 ${index < total - 1 ? 'border-b border-border' : ''} ${dragging ? 'opacity-50' : ''}`}>
+      <button
+        type="button"
+        onPointerDown={onDragStart}
+        className="touch-none rounded-full p-1 text-text-muted transition-colors hover:bg-bg-card-hover hover:text-text-primary"
+        aria-label="Drag to move task"
+      >
+        <GripVertical size={14} />
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
+          done
+            ? 'border-accent/40 bg-accent text-bg-primary'
+            : 'border-border bg-bg-card text-text-muted hover:border-accent/40 hover:bg-accent/10'
+        }`}
+        aria-label={done ? 'Mark task as open' : 'Mark task as done'}
+      >
+        {done ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+      </button>
+
+      <div className="min-w-0 flex-1">
+        <div className={`truncate text-[13px] font-medium ${done ? 'text-text-muted line-through' : 'text-text-primary'}`}>
+          {todo.title}
+        </div>
+        {todo.description ? <div className="mt-0.5 truncate text-[11px] text-text-secondary">{todo.description}</div> : null}
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
+          <Link2 size={11} />
+          <span className="truncate">linked to: {projectName}</span>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-3">
+        {dueLabel ? (
+          <span
+            className={`rounded-full border px-2.5 py-1 text-[11px] ${
+              done
+                ? 'border-border bg-bg-card text-text-muted'
+                : dueLabel === 'Due today'
+                  ? 'border-accent/30 bg-accent/10 text-accent'
+                  : dueLabel === 'Overdue'
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                    : 'border-border bg-bg-card text-text-secondary'
+            }`}
+          >
+            {dueLabel}
+          </span>
+        ) : null}
+
+        <span className="hidden items-center gap-2 text-[12px] text-text-secondary lg:inline-flex">
+          <span className="h-2.5 w-2.5 rounded-full bg-accent/80" />
+          {projectName}
+        </span>
+
+        <details className="relative z-20">
+          <summary className="list-none cursor-pointer rounded-full p-1.5 text-text-muted transition-colors hover:bg-bg-card-hover hover:text-text-primary">
+            <MoreVertical size={14} />
+          </summary>
+          <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-2xl border border-border bg-bg-secondary p-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.35)]">
+            {(['today', 'next', 'later'] as const).map((bucket) => (
+              <button
+                key={bucket}
+                type="button"
+                onClick={(event) => {
+                  (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                  onMove(bucket);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-text-secondary hover:bg-bg-card-hover hover:text-text-primary"
+              >
+                <Clock3 size={13} />
+                Move to {bucket.charAt(0).toUpperCase() + bucket.slice(1)}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={(event) => {
+                (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                onToggle();
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-text-secondary hover:bg-bg-card-hover hover:text-text-primary"
+            >
+              {done ? <Circle size={13} /> : <CheckCircle2 size={13} />}
+              {done ? 'Reopen' : 'Mark done'}
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                onDelete();
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-rose-300 hover:bg-rose-500/10"
+            >
+              <Trash2 size={13} />
+              Delete
+            </button>
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectViewPage({
   projectId,
   onBack,
@@ -307,6 +488,15 @@ export default function ProjectViewPage({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [taskDraft, setTaskDraft] = useState('');
+  const [taskBucket, setTaskBucket] = useState<TaskBucket>('today');
+  const [completedFilter, setCompletedFilter] = useState<CompletedFilter>('today');
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const dragStateRef = useRef<{ todo: TodoItem; pointerId: number } | null>(null);
+  const [draggingTodoId, setDraggingTodoId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [dropTarget, setDropTarget] = useState<TaskDropTarget | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -379,7 +569,49 @@ export default function ProjectViewPage({
   const noteItems = useMemo(() => notes.slice().sort(compareUpdatedDesc).slice(0, 4), [notes]);
   const researchItems = useMemo(() => researchTopics.slice().sort(compareUpdatedDesc).slice(0, 4), [researchTopics]);
   const videoItems = useMemo(() => notes.filter(isVideoNote).slice().sort(compareUpdatedDesc).slice(0, 3), [notes]);
-  const taskItems = useMemo(() => todos.slice().sort((a, b) => (a.sortOrder - b.sortOrder) || compareCreatedDesc(a, b)).slice(0, 5), [todos]);
+  const taskSections = useMemo(() => {
+    const sorted = [...todos].sort(sortTasksForDisplay);
+    const today = sorted.filter((todo) => todo.status !== 'done' && normalizeTaskBucket(todo.bucket) === 'today');
+    const next = sorted.filter((todo) => todo.status !== 'done' && normalizeTaskBucket(todo.bucket) === 'next');
+    const later = sorted.filter((todo) => todo.status !== 'done' && normalizeTaskBucket(todo.bucket) === 'later');
+    const done = sorted.filter((todo) => todo.status === 'done');
+    const doneToday = done.filter((todo) => todo.completedAt && isSameDay(todo.completedAt));
+    return [
+      { id: 'today' as const, label: 'Today', description: 'Tasks due today', icon: <span className="text-[15px]">☀</span>, count: today.length, items: today },
+      { id: 'next' as const, label: 'Upcoming', description: 'Tasks coming up next', icon: <CalendarDays size={15} />, count: next.length, items: next },
+      { id: 'later' as const, label: 'Later', icon: <Clock3 size={15} />, count: later.length, items: later },
+      {
+        id: 'done' as const,
+        label: completedFilter === 'today' ? 'Done today' : 'Completed',
+        description: 'Completed tasks',
+        icon: <CheckCircle2 size={15} />,
+        count: completedFilter === 'today' ? doneToday.length : done.length,
+        items: completedFilter === 'today' ? doneToday : done,
+        headerRight: (
+          <div className="inline-flex rounded-full border border-border bg-bg-primary/65 p-1">
+            <button
+              type="button"
+              onClick={() => setCompletedFilter('today')}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                completedFilter === 'today' ? 'bg-accent text-bg-primary' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Today only
+            </button>
+            <button
+              type="button"
+              onClick={() => setCompletedFilter('all')}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                completedFilter === 'all' ? 'bg-accent text-bg-primary' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              All completed
+            </button>
+          </div>
+        ),
+      },
+    ];
+  }, [completedFilter, todos]);
   const activityItems = useMemo(() => {
     const noteEntries = notes.map((note) => ({
       id: `note-${note.id}`,
@@ -508,6 +740,195 @@ export default function ProjectViewPage({
   const showResearch = isOverview || activeTab === 'research';
   const showVideos = isOverview || activeTab === 'videos';
   const showTasks = isOverview || activeTab === 'tasks';
+  const projectTaskCount = todos.length;
+  const projectDoneCount = todos.filter((todo) => todo.status === 'done').length;
+
+  const handleAddTask = async () => {
+    const title = taskDraft.trim();
+    if (!title || taskSaving) return;
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      await createTodo({
+        requestedByUserId: getCurrentUserId(),
+        projectId,
+        bucket: taskBucket,
+        title,
+        description: null,
+        cadence: 'target',
+        status: 'open',
+        priority: 'medium',
+        dueAt: null,
+        sortOrder: 0,
+      });
+      setTaskDraft('');
+      setTaskBucket('today');
+      const todoList = await getTodos({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 });
+      setTodos(todoList.items);
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : 'Failed to create task');
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  const handleToggleTask = async (todo: TodoItem) => {
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      await updateTodo(todo.id, {
+        projectId: todo.projectId,
+        bucket: todo.bucket,
+        title: todo.title,
+        description: todo.description ?? '',
+        cadence: todo.cadence,
+        status: todo.status === 'done' ? 'open' : 'done',
+        priority: todo.priority,
+        dueAt: todo.dueAt,
+        sortOrder: todo.sortOrder,
+      });
+      const todoList = await getTodos({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 });
+      setTodos(todoList.items);
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : 'Failed to update task');
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  const handleMoveTask = async (todo: TodoItem, target: TaskDropTarget) => {
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      await updateTodo(todo.id, {
+        projectId: todo.projectId,
+        bucket: target === 'done' ? todo.bucket : target,
+        title: todo.title,
+        description: todo.description ?? '',
+        cadence: todo.cadence,
+        status: target === 'done' ? 'done' : todo.status === 'done' ? 'open' : todo.status,
+        priority: todo.priority,
+        dueAt: todo.dueAt,
+        sortOrder: todo.sortOrder,
+      });
+      const todoList = await getTodos({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 });
+      setTodos(todoList.items);
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : 'Failed to update task');
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  const handleMoveTaskBucket = async (todo: TodoItem, bucket: TaskBucket) => {
+    await handleMoveTask(todo, bucket);
+  };
+
+  const handleDeleteTask = async (todoId: string) => {
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      await deleteTodo(todoId);
+      const todoList = await getTodos({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 });
+      setTodos(todoList.items);
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : 'Failed to delete task');
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  const clearDragState = () => {
+    dragStateRef.current = null;
+    setDraggingTodoId(null);
+    setDragPosition(null);
+    setDropTarget(null);
+  };
+
+  const getDropTargetFromPoint = (clientX: number, clientY: number): TaskDropTarget | null => {
+    const element = document.elementFromPoint(clientX, clientY);
+    const zone = element?.closest<HTMLElement>('[data-task-dropzone]');
+    const value = zone?.dataset.taskDropzone;
+    if (value === 'today' || value === 'next' || value === 'later' || value === 'done') {
+      return value;
+    }
+    return null;
+  };
+
+  const beginDrag = (todo: TodoItem, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    dragStateRef.current = { todo, pointerId: event.pointerId };
+    setDraggingTodoId(todo.id);
+    setDragPosition({ x: event.clientX, y: event.clientY });
+    setDropTarget(todo.status === 'done' ? 'done' : normalizeTaskBucket(todo.bucket));
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      if (!dragStateRef.current || moveEvent.pointerId !== dragStateRef.current.pointerId) return;
+      setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
+      setDropTarget(getDropTargetFromPoint(moveEvent.clientX, moveEvent.clientY));
+    };
+
+    const finishDrag = (endEvent: PointerEvent) => {
+      if (!dragStateRef.current || endEvent.pointerId !== dragStateRef.current.pointerId) return;
+      const draggedTodo = dragStateRef.current.todo;
+      const target = getDropTargetFromPoint(endEvent.clientX, endEvent.clientY);
+
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', finishDrag);
+      window.removeEventListener('pointercancel', finishDrag);
+      clearDragState();
+
+      if (target) {
+        void handleMoveTask(draggedTodo, target);
+      }
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', finishDrag);
+    window.addEventListener('pointercancel', finishDrag);
+  };
+
+  const handleClearCompleted = async () => {
+    const completedTasks = todos.filter((todo) => todo.status === 'done');
+    if (completedTasks.length === 0 || taskSaving) return;
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      await Promise.all(
+        completedTasks.map((todo) =>
+          updateTodo(todo.id, {
+            projectId: todo.projectId,
+            bucket: todo.bucket,
+            title: todo.title,
+            description: todo.description ?? '',
+            cadence: todo.cadence,
+            status: 'archived',
+            priority: todo.priority,
+            dueAt: todo.dueAt,
+            sortOrder: todo.sortOrder,
+          }),
+        ),
+      );
+      const todoList = await getTodos({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 });
+      setTodos(todoList.items);
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : 'Failed to clear completed tasks');
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  void taskError;
+  void taskSections;
+  void projectTaskCount;
+  void projectDoneCount;
+  void handleAddTask;
+  void handleToggleTask;
+  void handleClearCompleted;
 
   return (
     <main className="flex-1 overflow-y-auto bg-bg-primary">
@@ -682,32 +1103,124 @@ export default function ProjectViewPage({
             )}
 
             {showTasks && (
-              <SectionCard title="Tasks" actionLabel="View all" onAction={() => navigateTo('/todo')}>
-                <div className="divide-y divide-border">
-                  {taskItems.length === 0 ? (
-                    <div className="px-1 py-6 text-center text-[12px] text-text-muted">No tasks in this project yet.</div>
-                  ) : (
-                    taskItems.map((todo) => (
-                      <ItemRow
-                        key={todo.id}
-                        icon={todo.status === 'done' ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-                        title={todo.title}
-                        meta={`${todo.priority} priority${todo.description ? ` · ${todo.description}` : ''}`}
-                        time={todo.dueAt ? formatShortDate(todo.dueAt) : formatRelative(todo.updatedAt)}
-                        trailing={<StatusChip label={todoStatusLabel(todo.status)} className={todoStatusStyles(todo.status)} />}
-                      />
-                    ))
-                  )}
+              <section className="rounded-[24px] border border-border bg-bg-card p-4 sm:p-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div>
+                    <h2 className="text-[16px] font-semibold text-text-primary sm:text-[18px]">Tasks</h2>
+                    <p className="mt-1 text-[12px] text-text-secondary sm:text-[13px]">
+                      Keep the project work visible, grouped, and easy to clear.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                    <span className="rounded-full border border-border bg-bg-primary/65 px-2.5 py-1">{projectDoneCount} done</span>
+                    <span className="rounded-full border border-border bg-bg-primary/65 px-2.5 py-1">{projectTaskCount} total</span>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => navigateTo('/todo')}
-                  className="mt-2 inline-flex items-center gap-2 text-[11px] font-medium text-accent hover:text-accent-hover"
-                >
-                  <Plus size={12} />
-                  Add new task
-                </button>
-              </SectionCard>
+
+                <div className="mt-4 flex flex-col gap-3 xl:flex-row">
+                  <label className="flex flex-1 items-center gap-3 rounded-2xl border border-border bg-bg-primary/65 px-4 py-3">
+                    <Plus size={16} className="shrink-0 text-text-muted" />
+                    <input
+                      value={taskDraft}
+                      onChange={(e) => setTaskDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleAddTask();
+                        }
+                      }}
+                      placeholder="Add a task for this project..."
+                      className="w-full bg-transparent text-[13px] text-text-primary outline-none placeholder:text-text-muted"
+                    />
+                  </label>
+                  <select
+                    value={taskBucket}
+                    onChange={(e) => setTaskBucket(e.target.value as TaskBucket)}
+                    className="rounded-2xl border border-border bg-bg-card px-4 py-3 text-[13px] text-text-secondary outline-none transition-colors hover:bg-bg-card-hover"
+                  >
+                    <option value="today">Today</option>
+                    <option value="next">Next</option>
+                    <option value="later">Later</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void handleAddTask()}
+                    disabled={taskSaving || !taskDraft.trim()}
+                    className="inline-flex items-center justify-center rounded-2xl border border-border bg-bg-input px-5 py-3 text-[13px] font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60 xl:w-[112px]"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {taskError && (
+                  <div className="mt-3 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-[12px] text-red-300">
+                    {taskError}
+                  </div>
+                )}
+
+                <div className="mt-6 space-y-6">
+                  {taskSections.map((section) => (
+                    <div
+                      key={section.id}
+                      data-task-dropzone={section.id}
+                      className={`rounded-[24px] border p-4 sm:p-5 ${
+                        draggingTodoId && dropTarget === section.id ? 'border-accent/60 ring-1 ring-accent/30' : 'border-border'
+                      }`}
+                    >
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-accent">{section.icon}</span>
+                          <h3 className="text-[14px] font-semibold text-text-primary">{section.label}</h3>
+                          <span className="rounded-full border border-border bg-bg-primary/65 px-2 py-0.5 text-[11px] text-text-muted">
+                            {section.count}
+                          </span>
+                        </div>
+                        {'description' in section && section.description ? (
+                          <div className="hidden text-[12px] text-text-secondary lg:block">{section.description}</div>
+                        ) : null}
+                        {'headerRight' in section && section.headerRight ? <div className="ml-auto">{section.headerRight}</div> : null}
+                      </div>
+
+                      <div className="mt-4 overflow-visible rounded-[20px] border border-border bg-bg-primary/40">
+                        {section.items.length === 0 ? (
+                          <div className="px-4 py-6 text-[12px] text-text-muted">
+                            {section.id === 'done' ? 'No completed tasks yet.' : 'No tasks in this section.'}
+                          </div>
+                        ) : (
+                          section.items.map((todo, index) => (
+                            <TaskRow
+                              key={todo.id}
+                              todo={todo}
+                              projectName={project.name}
+                              dueLabel={taskDueBadge(todo)}
+                              index={index}
+                              total={section.items.length}
+                              onToggle={() => void handleToggleTask(todo)}
+                              onMove={(bucket) => void handleMoveTaskBucket(todo, bucket)}
+                              onDelete={() => void handleDeleteTask(todo.id)}
+                              onDragStart={(event) => beginDrag(todo, event)}
+                              dragging={draggingTodoId === todo.id}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 text-[12px] text-text-muted sm:flex-row sm:items-center sm:justify-between">
+                  <div>Showing {projectTaskCount} tasks</div>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearCompleted()}
+                    disabled={projectDoneCount === 0 || taskSaving}
+                    className="inline-flex items-center gap-2 self-start text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Archive size={14} />
+                    Clear completed
+                  </button>
+                </div>
+              </section>
             )}
 
             <SectionCard title="Activity feed" actionLabel="View all">
@@ -828,6 +1341,20 @@ export default function ProjectViewPage({
           </aside>
         </div>
       </div>
+
+      {draggingTodoId && dragPosition ? (
+        <div
+          className="pointer-events-none fixed z-[100] -translate-x-1/2 -translate-y-1/2"
+          style={{ left: dragPosition.x, top: dragPosition.y }}
+        >
+          <div className="rounded-2xl border border-accent/40 bg-bg-secondary/95 px-4 py-2.5 shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
+            <div className="text-[12px] font-medium text-text-primary">{todos.find((item) => item.id === draggingTodoId)?.title ?? 'Task'}</div>
+            <div className="mt-0.5 text-[10px] text-text-muted">
+              Drop on {dropTarget ? (dropTarget === 'done' ? 'Done' : bucketLabel(dropTarget)) : 'a bucket'}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

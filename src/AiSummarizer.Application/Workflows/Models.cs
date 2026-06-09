@@ -53,6 +53,27 @@ public sealed record WorkflowEventDto(
     JsonElement Context,
     DateTimeOffset CreatedAt);
 
+public sealed record WorkflowCostDto(
+    Guid WorkflowId,
+    Guid? RequestedByUserId,
+    string? RequestedByUserEmail,
+    string? RequestedByUserDisplayName,
+    string WorkflowType,
+    string WorkflowStatus,
+    Guid? SourceId,
+    string? SourceLabel,
+    Guid? ReservationId,
+    string? ReservationStatus,
+    decimal EstimatedCredits,
+    decimal? FinalCredits,
+    string? SourceType,
+    string? Reason,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt,
+    DateTimeOffset? SettledAt,
+    DateTimeOffset? ReleasedAt);
+
 public sealed record CreateYoutubeSummaryWorkflowCommand(
     Guid? RequestedByUserId,
     string YoutubeUrl,

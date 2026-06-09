@@ -20,6 +20,7 @@ builder.Services.Configure<WhisperTranscribeOptions>(builder.Configuration.GetSe
 builder.Services.Configure<OpenRouterTranscribeOptions>(builder.Configuration.GetSection("Jobs:OpenRouterTranscribe"));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.Configure<WorkflowOptions>(builder.Configuration.GetSection("Workflows"));
+builder.Services.Configure<ResearchSchedulerOptions>(builder.Configuration.GetSection("ResearchScheduler"));
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("Connection string 'Postgres' is missing."),
@@ -28,6 +29,7 @@ builder.Services.AddSingleton<IJobHandlerRegistry, JobHandlerRegistry>();
 builder.Services.AddSingleton<IJobHandler, YouTubeDownloadJobHandler>();
 builder.Services.AddSingleton<IJobHandler, MediaExtractAudioJobHandler>();
 builder.Services.AddSingleton<IJobHandler, WhisperTranscribeJobHandler>();
+builder.Services.AddSingleton<IJobHandler, NoteProcessAssetJobHandler>();
 builder.Services.AddSingleton<IJobHandler, OpenRouterTranscribeJobHandler>();
 builder.Services.AddSingleton<IJobHandler, TranscriptImportJobHandler>();
 builder.Services.AddSingleton<IJobHandler, ResearchTopicRunJobHandler>();
@@ -39,6 +41,7 @@ builder.Services.AddSingleton<IJobHandler, WelcomeEmailJobHandler>();
 builder.Services.AddSingleton<TelegramBotApiClient>();
 builder.Services.AddSingleton<IJobHandler, TelegramIngestJobHandler>();
 builder.Services.AddHostedService<TelegramPollingHostedService>();
+builder.Services.AddHostedService<ResearchTopicSchedulerHostedService>();
 builder.Services.AddHostedService<JobsProcessorHostedService>();
 builder.Services.AddHostedService<WorkflowProcessorHostedService>();
 

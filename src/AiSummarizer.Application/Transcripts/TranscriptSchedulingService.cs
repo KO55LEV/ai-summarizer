@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiSummarizer.Application.Billing;
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.MediaSources;
@@ -8,6 +9,7 @@ using AiSummarizer.Domain.Workflows;
 namespace AiSummarizer.Application.Transcripts;
 
 public sealed class TranscriptSchedulingService(
+    IBillingService billingService,
     IMediaSourcesRepository mediaSourcesRepository,
     ITranscriptsRepository transcriptsRepository,
     IUserVideoLibraryRepository userVideoLibraryRepository,
@@ -50,33 +52,67 @@ public sealed class TranscriptSchedulingService(
             return new TranscriptScheduleResultDto("queued", null, Map(activeWorkflow));
         }
 
-        var workflow = await workflowsRepository.CreateWorkflowAsync(new Workflow
+        BillingReservationDto? reservation = null;
+        try
         {
-            Id = Guid.NewGuid(),
-            RequestedByUserId = command.RequestedByUserId,
-            SourceId = mediaSource.Id,
-            WorkflowType = "youtube.transcript",
-            Status = "queued",
-            Input = JsonSerializer.SerializeToElement(new
+            if (command.RequestedByUserId is not null)
             {
-                sourceId = mediaSource.Id,
-                sourceProvider = mediaSource.SourceProvider,
-                sourceKind = mediaSource.SourceKind,
-                sourceExternalId = mediaSource.ExternalSourceId,
-                language,
-                preferNativeTranscript = command.PreferNativeTranscript
-            }),
-            Result = null,
-            CurrentStepKey = null,
-            AttemptCount = 0,
-            MaxAttempts = 5,
-            AvailableAt = now,
-            CreatedAt = now,
-            UpdatedAt = now
-        }, null, cancellationToken);
+                reservation = await billingService.ReserveAsync(
+                    new ReserveBillingCreditsCommand(
+                        command.RequestedByUserId.Value,
+                        "youtube.transcript",
+                        mediaSource.Id,
+                        BillingUsageEstimator.EstimateWorkflowCredits("youtube.transcript"),
+                        "Reserve credits for youtube transcript workflow."),
+                    cancellationToken);
+            }
 
-        await UpsertUserVideoAsync(command, mediaSource, null, workflow.Id, null, "queued", null, cancellationToken);
-        return new TranscriptScheduleResultDto("queued", null, Map(workflow));
+            var workflow = await workflowsRepository.CreateWorkflowAsync(new Workflow
+            {
+                Id = Guid.NewGuid(),
+                RequestedByUserId = command.RequestedByUserId,
+                SourceId = mediaSource.Id,
+                WorkflowType = "youtube.transcript",
+                Status = "queued",
+                Input = JsonSerializer.SerializeToElement(new
+                {
+                    sourceId = mediaSource.Id,
+                    sourceProvider = mediaSource.SourceProvider,
+                    sourceKind = mediaSource.SourceKind,
+                    sourceExternalId = mediaSource.ExternalSourceId,
+                    language,
+                    preferNativeTranscript = command.PreferNativeTranscript
+                }),
+                Result = null,
+                CurrentStepKey = null,
+                AttemptCount = 0,
+                MaxAttempts = 5,
+                AvailableAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            }, null, cancellationToken);
+
+            await UpsertUserVideoAsync(command, mediaSource, null, workflow.Id, null, "queued", null, cancellationToken);
+            return new TranscriptScheduleResultDto("queued", null, Map(workflow));
+        }
+        catch
+        {
+            if (reservation is not null)
+            {
+                try
+                {
+                    await billingService.ReleaseAsync(
+                        new ReleaseBillingReservationCommand(reservation.Id, "Transcript workflow creation failed."),
+                        cancellationToken);
+                }
+                catch
+                {
+                    // Best effort rollback only.
+                }
+            }
+
+            throw;
+        }
     }
 
     private static TranscriptSummaryDto Map(Transcript transcript)

@@ -5,7 +5,7 @@ namespace AiSummarizer.Api.Notes;
 public sealed record CreateNoteRequest(
     Guid? RequestedByUserId,
     Guid? ProjectId,
-    string Title,
+    string? Title,
     string SourceChannel,
     string InputKind,
     string? PrimaryLanguage,
@@ -43,6 +43,7 @@ public sealed record CreateNoteAssetRequest(
     JsonElement Metadata);
 
 public sealed record CreateNoteTextVersionRequest(
+    Guid? SourceAssetId,
     Guid? SourceRunId,
     string VersionKind,
     string Text,
@@ -53,6 +54,7 @@ public sealed record CreateNoteTextVersionRequest(
 
 public sealed record CreateNoteProcessingRunRequest(
     Guid? JobId,
+    Guid? SourceAssetId,
     string Stage,
     string Status,
     string? Provider,
@@ -132,6 +134,7 @@ public sealed record NoteAssetResponse(
 public sealed record NoteTextVersionResponse(
     Guid Id,
     Guid NoteId,
+    Guid? SourceAssetId,
     Guid? SourceRunId,
     string VersionKind,
     string Text,
@@ -145,6 +148,7 @@ public sealed record NoteProcessingRunResponse(
     Guid Id,
     Guid NoteId,
     Guid? JobId,
+    Guid? SourceAssetId,
     string Stage,
     string Status,
     string? Provider,

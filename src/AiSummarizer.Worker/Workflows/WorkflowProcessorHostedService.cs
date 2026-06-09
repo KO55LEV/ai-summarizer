@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AiSummarizer.Application.Billing;
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Settings;
@@ -16,6 +17,7 @@ using Microsoft.Extensions.Options;
 namespace AiSummarizer.Worker.Workflows;
 
 public sealed class WorkflowProcessorHostedService(
+    IBillingService billingService,
     IMediaSourcesRepository mediaSourcesRepository,
     IWorkflowsRepository workflowsRepository,
     IJobsRepository jobsRepository,
@@ -88,6 +90,7 @@ public sealed class WorkflowProcessorHostedService(
             {
                 await userVideoLibraryRepository.FailByMediaSourceIdAsync(workflow.SourceId.Value, DateTimeOffset.UtcNow, null, cancellationToken);
             }
+            await ReleaseWorkflowBillingAsync(workflow, "Unsupported workflow type.", cancellationToken);
             return;
         }
 
@@ -672,6 +675,8 @@ public sealed class WorkflowProcessorHostedService(
             await repository.AddWorkflowEventAsync(workflow.Id, completedStep.StepKey, "info", "Workflow completed.", job.Result ?? JsonSerializer.SerializeToElement(new { workflowId = workflow.Id }), transaction, cancellationToken);
             return 0;
         }, cancellationToken);
+
+        await SettleWorkflowBillingAsync(workflow, "Workflow completed.", cancellationToken);
     }
 
     private async Task FailWorkflowAsync(Workflow workflow, string errorCode, string errorMessage, CancellationToken cancellationToken)
@@ -699,6 +704,63 @@ public sealed class WorkflowProcessorHostedService(
         if (workflow.SourceId is not null)
         {
             await userVideoLibraryRepository.FailByMediaSourceIdAsync(workflow.SourceId.Value, now, null, cancellationToken);
+        }
+
+        await ReleaseWorkflowBillingAsync(workflow, errorMessage, cancellationToken);
+    }
+
+    private async Task SettleWorkflowBillingAsync(Workflow workflow, string? reason, CancellationToken cancellationToken)
+    {
+        if (workflow.RequestedByUserId is null || workflow.SourceId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var reservation = await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.SourceId.Value, cancellationToken);
+            if (reservation is null)
+            {
+                return;
+            }
+
+            await billingService.SettleAsync(
+                new SettleBillingReservationCommand(
+                    reservation.Id,
+                    reservation.EstimatedCredits,
+                    reason),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to settle billing for workflow {WorkflowId}.", workflow.Id);
+        }
+    }
+
+    private async Task ReleaseWorkflowBillingAsync(Workflow workflow, string? reason, CancellationToken cancellationToken)
+    {
+        if (workflow.RequestedByUserId is null || workflow.SourceId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var reservation = await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.SourceId.Value, cancellationToken);
+            if (reservation is null)
+            {
+                return;
+            }
+
+            await billingService.ReleaseAsync(
+                new ReleaseBillingReservationCommand(
+                    reservation.Id,
+                    reason),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to release billing for workflow {WorkflowId}.", workflow.Id);
         }
     }
 

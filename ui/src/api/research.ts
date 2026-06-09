@@ -1,5 +1,5 @@
 import { getCurrentUserId } from '../config/currentUser';
-import type { ResearchBriefing, ResearchListData, ResearchTopic } from './types';
+import type { ResearchBriefing, ResearchListData, ResearchTopic, ResearchTopicRun } from './types';
 import { getMockResearchList, getMockResearchBriefing } from '../mocks/api/research';
 
 interface ApiResearchTopic {
@@ -69,13 +69,38 @@ interface ApiResearchBriefing {
 
 interface CreateResearchTopicInput {
   requestedByUserId: string;
+  projectId?: string | null;
   name: string;
   description?: string;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  status?: 'active' | 'paused' | 'draft';
   deliveryTime?: string | null;
   sources: string[];
   tags: string[];
   outputs: string[];
+}
+
+export interface UpdateResearchTopicInput {
+  requestedByUserId?: string;
+  projectId?: string | null;
+  name: string;
+  description?: string;
+  frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  status: 'active' | 'paused' | 'draft';
+  deliveryTime?: string | null;
+  sources: string[];
+  tags: string[];
+  outputs: string[];
+}
+
+interface StartResearchRunResponse {
+  jobId: string | null;
+  topicId: string;
+  existingRunId: string | null;
+  jobType: string;
+  status: string;
+  createdAt: string;
+  message: string;
 }
 
 interface CreateResearchBriefingInput {
@@ -149,23 +174,30 @@ function formatReadTime(minutes: number): string {
 function mapTopic(topic: ApiResearchTopic): ResearchTopic {
   return {
     id: topic.id,
+    requestedByUserId: topic.requestedByUserId ?? null,
     projectId: topic.projectId ?? null,
     name: topic.name,
     description: topic.description ?? '',
     frequency: topic.frequency,
     status: topic.status,
+    deliveryTime: topic.deliveryTime,
     sources: topic.sources,
     tags: topic.tags,
+    outputs: topic.outputs,
     briefingsCount: topic.briefingsCount,
+    lastRunAt: topic.lastRunAt,
+    nextRunAt: topic.nextRunAt,
     lastRun: formatRelativeDate(topic.lastRunAt, topic.status),
     nextRun: formatRelativeDate(topic.nextRunAt, topic.status),
     lastBriefingPreview: topic.lastBriefingPreview ?? '',
+    createdAt: topic.createdAt,
     updatedAt: topic.updatedAt ?? topic.lastRunAt ?? new Date().toISOString(),
   };
 }
 
 function mapBriefing(briefing: ApiResearchBriefing): ResearchBriefing {
   return {
+    id: briefing.id,
     topicId: briefing.researchTopicId,
     topicName: briefing.topicName,
     generatedAt: formatGeneratedAt(briefing.generatedAt),
@@ -177,9 +209,11 @@ function mapBriefing(briefing: ApiResearchBriefing): ResearchBriefing {
     sources: briefing.sources,
     pastBriefings: briefing.pastBriefings.map((item) => ({
       id: item.id,
+      generatedAt: item.generatedAt,
       date: formatGeneratedAt(item.generatedAt),
       preview: item.previewText,
     })),
+    previewText: briefing.previewText,
   };
 }
 
@@ -202,32 +236,85 @@ export async function getResearchList(requestedByUserId = getCurrentUserId()): P
   };
 }
 
+export async function getResearchTopic(topicId: string): Promise<ResearchTopic> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    const data = await getMockResearchList();
+    const topic = data.topics.find((item) => item.id === topicId);
+    if (!topic) throw new Error('Research topic not found');
+    return topic;
+  }
+
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch research topic');
+  const data = await res.json() as ApiResearchTopic;
+  return mapTopic(data);
+}
+
 export async function getResearchBriefing(topicId: string): Promise<ResearchBriefing | null> {
   if (import.meta.env.VITE_USE_MOCK_API === 'true') {
     return getMockResearchBriefing(topicId);
   }
-  const res = await fetch(`/api/research/${topicId}/briefing`);
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}/briefing?${params.toString()}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error('Failed to fetch research briefing');
   const data = await res.json() as ApiResearchBriefing;
   return mapBriefing(data);
 }
 
+export async function getResearchBriefingById(topicId: string, briefingId: string): Promise<ResearchBriefing | null> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return getMockResearchBriefing(topicId);
+  }
+
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}/briefings/${encodeURIComponent(briefingId)}?${params.toString()}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to fetch research briefing');
+  const data = await res.json() as ApiResearchBriefing;
+  return mapBriefing(data);
+}
+
+export async function listResearchBriefings(topicId: string): Promise<ResearchBriefing['pastBriefings']> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    const briefing = await getMockResearchBriefing(topicId);
+    return briefing?.pastBriefings ?? [];
+  }
+
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}/briefings?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch research briefing history');
+  const data = await res.json() as ApiResearchBriefingHistoryItem[];
+  return data.map((item) => ({
+    id: item.id,
+    generatedAt: item.generatedAt,
+    date: formatGeneratedAt(item.generatedAt),
+    preview: item.previewText,
+  }));
+}
+
 export async function createResearchTopic(input: CreateResearchTopicInput): Promise<ResearchTopic> {
   if (import.meta.env.VITE_USE_MOCK_API === 'true') {
     return {
       id: `mock-${Date.now()}`,
+      requestedByUserId: input.requestedByUserId,
       projectId: null,
       name: input.name,
       description: input.description ?? '',
       frequency: input.frequency,
-      status: 'draft',
+      status: input.status ?? 'active',
+      deliveryTime: input.deliveryTime ?? null,
       sources: input.sources,
       tags: input.tags,
+      outputs: input.outputs,
       briefingsCount: 0,
+      lastRunAt: null,
+      nextRunAt: null,
       lastRun: '—',
       nextRun: input.deliveryTime ? `at ${input.deliveryTime}` : '—',
       lastBriefingPreview: '',
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
   }
@@ -246,6 +333,44 @@ export async function createResearchTopic(input: CreateResearchTopicInput): Prom
 
   const data = await res.json() as ApiResearchTopic;
   return mapTopic(data);
+}
+
+export async function updateResearchTopic(topicId: string, input: UpdateResearchTopicInput): Promise<ResearchTopic> {
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...input, requestedByUserId: input.requestedByUserId ?? getCurrentUserId() }),
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to update research topic');
+  }
+
+  const data = await res.json() as ApiResearchTopic;
+  return mapTopic(data);
+}
+
+export async function deleteResearchTopic(topicId: string): Promise<void> {
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}?${params.toString()}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete research topic');
+}
+
+export async function startResearchRun(topicId: string, requestedByUserId = getCurrentUserId()): Promise<StartResearchRunResponse> {
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestedByUserId, triggeredBy: 'manual', forceRun: true }),
+  });
+  if (!res.ok) throw new Error('Failed to start research run');
+  return await res.json() as StartResearchRunResponse;
+}
+
+export async function listResearchRuns(topicId: string): Promise<ResearchTopicRun[]> {
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/${encodeURIComponent(topicId)}/runs?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch research runs');
+  return await res.json() as ResearchTopicRun[];
 }
 
 export async function createResearchBriefing(topicId: string, input: CreateResearchBriefingInput): Promise<ResearchBriefing> {

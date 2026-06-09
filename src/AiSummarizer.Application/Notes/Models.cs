@@ -55,6 +55,7 @@ public sealed record NoteAssetDto(
 public sealed record NoteTextVersionDto(
     Guid Id,
     Guid NoteId,
+    Guid? SourceAssetId,
     Guid? SourceRunId,
     string VersionKind,
     string Text,
@@ -68,6 +69,7 @@ public sealed record NoteProcessingRunDto(
     Guid Id,
     Guid NoteId,
     Guid? JobId,
+    Guid? SourceAssetId,
     string Stage,
     string Status,
     string? Provider,
@@ -112,7 +114,7 @@ public sealed record UserTelegramAccountDto(
 public sealed record CreateNoteCommand(
     Guid? RequestedByUserId,
     Guid? ProjectId,
-    string Title,
+    string? Title,
     string SourceChannel,
     string InputKind,
     string? PrimaryLanguage,
@@ -152,8 +154,27 @@ public sealed record CreateNoteAssetCommand(
     int? Height,
     JsonElement Metadata);
 
+public sealed record UploadNoteAssetCommand(
+    Guid NoteId,
+    Guid? NoteInputId,
+    string OriginalFilename,
+    string ContentType,
+    Stream Content);
+
+public sealed record NoteAssetStorageRequest(
+    Guid NoteId,
+    Guid AssetId,
+    string OriginalFilename,
+    string ContentType);
+
+public sealed record NoteAssetStorageResult(
+    string StorageKey,
+    long SizeBytes,
+    string ChecksumSha256);
+
 public sealed record CreateNoteTextVersionCommand(
     Guid NoteId,
+    Guid? SourceAssetId,
     Guid? SourceRunId,
     string VersionKind,
     string Text,
@@ -165,6 +186,7 @@ public sealed record CreateNoteTextVersionCommand(
 public sealed record CreateNoteProcessingRunCommand(
     Guid NoteId,
     Guid? JobId,
+    Guid? SourceAssetId,
     string Stage,
     string Status,
     string? Provider,

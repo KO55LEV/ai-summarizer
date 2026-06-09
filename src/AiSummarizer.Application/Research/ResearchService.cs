@@ -27,13 +27,16 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
             var id = await txRepository.CreateTopicAsync(new ResearchTopicRecord(
                 Guid.NewGuid(),
                 requestedByUserId,
+                command.ProjectId,
                 command.Name.Trim(),
                 NormalizeNullable(command.Description),
                 NormalizeKey(command.Frequency),
-                "draft",
+                NormalizeStatus(command.Status),
                 command.DeliveryTime,
                 null,
-                null,
+                NormalizeStatus(command.Status) == "active"
+                    ? CalculateNextRunAt(NormalizeKey(command.Frequency), now, command.DeliveryTime)
+                    : null,
                 null,
                 now,
                 now), tx, cancellationToken);
@@ -50,19 +53,23 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
     public async Task<ResearchTopicDto> UpdateTopicAsync(Guid topicId, UpdateResearchTopicCommand command, CancellationToken cancellationToken)
     {
         var existing = await GetTopicAsync(topicId, cancellationToken);
+        var nextFrequency = NormalizeKey(command.Frequency);
+        var nextStatus = NormalizeStatus(command.Status);
+        var nextRunAt = CalculateUpdatedNextRunAt(existing, nextFrequency, nextStatus, command.DeliveryTime);
 
         await repository.ExecuteInTransactionAsync(async (txRepository, tx) =>
         {
             await txRepository.UpdateTopicAsync(new ResearchTopicRecord(
                 existing.Id,
                 existing.RequestedByUserId,
+                command.ProjectId ?? existing.ProjectId,
                 command.Name.Trim(),
                 NormalizeNullable(command.Description),
-                NormalizeKey(command.Frequency),
-                NormalizeKey(command.Status),
+                nextFrequency,
+                nextStatus,
                 command.DeliveryTime,
                 existing.LastRunAt,
-                existing.NextRunAt,
+                nextRunAt,
                 existing.LastBriefingPreview,
                 existing.CreatedAt,
                 DateTimeOffset.UtcNow), tx, cancellationToken);
@@ -88,6 +95,19 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
     public async Task<ResearchBriefingDto> GetLatestBriefingAsync(Guid topicId, CancellationToken cancellationToken)
         => await repository.GetLatestBriefingAsync(topicId, cancellationToken)
             ?? throw new ResearchNotFoundException("Research briefing not found.");
+
+    public async Task<ResearchBriefingDto> GetBriefingAsync(Guid topicId, Guid briefingId, CancellationToken cancellationToken)
+    {
+        var briefing = await repository.GetBriefingByIdAsync(briefingId, cancellationToken)
+            ?? throw new ResearchNotFoundException("Research briefing not found.");
+
+        if (briefing.ResearchTopicId != topicId)
+        {
+            throw new ResearchNotFoundException("Research briefing not found for this topic.");
+        }
+
+        return briefing;
+    }
 
     public async Task<IReadOnlyList<ResearchBriefingHistoryItemDto>> ListBriefingHistoryAsync(Guid topicId, int limit, int offset, CancellationToken cancellationToken)
         => await repository.ListBriefingHistoryAsync(topicId, limit, offset, cancellationToken);
@@ -145,15 +165,28 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
         => requestedByUserId ?? throw new ResearchValidationException("RequestedByUserId is required.");
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
+    private static string NormalizeStatus(string value)
+    {
+        var status = NormalizeKey(value);
+        return status is "active" or "paused" or "draft"
+            ? status
+            : throw new ResearchValidationException("Research topic status must be draft, active, or paused.");
+    }
+
     private static string? NormalizeNullable(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static IReadOnlyList<string> NormalizeList(IReadOnlyList<string> values)
         => values.Select(NormalizeNullable).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     private static DateTimeOffset? CalculateNextRunAt(string frequency, DateTimeOffset generatedAt, TimeOnly? deliveryTime)
     {
+        if (frequency == "hourly")
+        {
+            var nextHour = generatedAt.UtcDateTime.AddHours(1);
+            return new DateTimeOffset(new DateTime(nextHour.Year, nextHour.Month, nextHour.Day, nextHour.Hour, 0, 0, DateTimeKind.Utc), TimeSpan.Zero);
+        }
+
         var next = frequency switch
         {
-            "hourly" => generatedAt.AddHours(1),
             "daily" => generatedAt.AddDays(1),
             "weekly" => generatedAt.AddDays(7),
             "monthly" => generatedAt.AddMonths(1),
@@ -167,6 +200,25 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
 
         var date = next.UtcDateTime.Date;
         return new DateTimeOffset(date.Add(deliveryTime.Value.ToTimeSpan()), TimeSpan.Zero);
+    }
+
+    private static DateTimeOffset? CalculateUpdatedNextRunAt(ResearchTopicDto existing, string frequency, string status, TimeOnly? deliveryTime)
+    {
+        if (status != "active")
+        {
+            return null;
+        }
+
+        if (existing.Status == "active"
+            && existing.NextRunAt is not null
+            && existing.NextRunAt > DateTimeOffset.UtcNow
+            && existing.Frequency == frequency
+            && existing.DeliveryTime == deliveryTime)
+        {
+            return existing.NextRunAt;
+        }
+
+        return CalculateNextRunAt(frequency, DateTimeOffset.UtcNow, deliveryTime);
     }
 }
 

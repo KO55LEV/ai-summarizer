@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Projects;
 using AiSummarizer.Application.Users;
 using AiSummarizer.Domain.Notes;
@@ -8,7 +9,9 @@ namespace AiSummarizer.Application.Notes;
 public sealed class NotesService(
     INotesRepository repository,
     IProjectsRepository projectsRepository,
-    IUsersRepository usersRepository) : INotesService
+    IUsersRepository usersRepository,
+    INoteAssetStorage noteAssetStorage,
+    IJobsService jobsService) : INotesService
 {
     public async Task<NotesListDto> ListNotesAsync(Guid? requestedByUserId, Guid? projectId, int limit, int offset, CancellationToken cancellationToken)
         => new((await repository.ListNotesAsync(requestedByUserId, projectId, limit, offset, cancellationToken)).Select(note => MapNote(note)).ToArray());
@@ -28,20 +31,75 @@ public sealed class NotesService(
 
         var now = DateTimeOffset.UtcNow;
         var projectId = await ResolveProjectIdAsync(requestedByUserId, command.ProjectId, cancellationToken);
-        var note = await repository.CreateNoteAsync(new Note
+        var normalizedSummary = NormalizeNullable(command.Summary);
+        var normalizedTitle = NormalizeOptionalTitle(command.Title);
+        if (string.IsNullOrWhiteSpace(normalizedTitle) && !string.IsNullOrWhiteSpace(normalizedSummary))
         {
-            Id = Guid.NewGuid(),
-            RequestedByUserId = requestedByUserId,
-            ProjectId = projectId,
-            Title = NormalizeTitle(command.Title),
-            Status = NoteStatus.Draft,
-            SourceChannel = ParseSourceChannel(command.SourceChannel),
-            InputKind = ParseInputKind(command.InputKind),
-            PrimaryLanguage = NormalizeNullable(command.PrimaryLanguage),
-            Summary = NormalizeNullable(command.Summary),
-            CreatedAt = now,
-            UpdatedAt = now
-        }, null, cancellationToken);
+            normalizedTitle = BuildAutoTitle(normalizedSummary);
+        }
+
+        var note = await repository.ExecuteInTransactionAsync(async (txRepository, tx) =>
+        {
+            var created = await txRepository.CreateNoteAsync(new Note
+            {
+                Id = Guid.NewGuid(),
+                RequestedByUserId = requestedByUserId,
+                ProjectId = projectId,
+                Title = normalizedTitle,
+                Status = NoteStatus.Draft,
+                SourceChannel = ParseSourceChannel(command.SourceChannel),
+                InputKind = ParseInputKind(command.InputKind),
+                PrimaryLanguage = NormalizeNullable(command.PrimaryLanguage),
+                Summary = normalizedSummary,
+                CreatedAt = now,
+                UpdatedAt = now
+            }, tx, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(normalizedSummary))
+            {
+                return created;
+            }
+
+            _ = await txRepository.CreateNoteInputAsync(new NoteInput
+            {
+                Id = Guid.NewGuid(),
+                NoteId = created.Id,
+                SourceChannel = ParseSourceChannel(command.SourceChannel),
+                ExternalSourceId = null,
+                ExternalMessageId = null,
+                InputKind = NoteInputKind.Text,
+                RawText = normalizedSummary,
+                RawPayload = JsonSerializer.SerializeToElement(new { text = normalizedSummary }),
+                Status = NoteInputStatus.Succeeded,
+                ReceivedAt = now,
+                ProcessedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            }, tx, cancellationToken);
+
+            var textVersion = await txRepository.CreateNoteTextVersionAsync(new NoteTextVersion
+            {
+                Id = Guid.NewGuid(),
+                NoteId = created.Id,
+                SourceAssetId = null,
+                SourceRunId = null,
+                VersionKind = NoteTextVersionKind.Original,
+                Text = normalizedSummary,
+                Language = NormalizeNullable(command.PrimaryLanguage),
+                Provider = "local",
+                Model = null,
+                PromptVersion = null,
+                CreatedAt = now
+            }, tx, cancellationToken);
+
+            return await txRepository.UpdateNoteAsync(created with
+            {
+                Status = NoteStatus.Ready,
+                CurrentTextVersionId = textVersion.Id,
+                Summary = normalizedSummary,
+                UpdatedAt = now
+            }, tx, cancellationToken);
+        }, cancellationToken);
 
         return await BuildDetailAsync(note, cancellationToken);
     }
@@ -53,7 +111,7 @@ public sealed class NotesService(
 
         var note = await repository.UpdateNoteAsync(existing with
         {
-            Title = NormalizeTitle(command.Title),
+            Title = NormalizeRequired(command.Title),
             Status = ParseStatus(command.Status),
             ProjectId = command.ProjectId ?? existing.ProjectId,
             PrimaryLanguage = NormalizeNullable(command.PrimaryLanguage),
@@ -122,6 +180,73 @@ public sealed class NotesService(
             UpdatedAt = DateTimeOffset.UtcNow
         }, null, cancellationToken);
 
+        await ScheduleAssetProcessingAsync(created, cancellationToken);
+        return MapAsset(created);
+    }
+
+    public async Task<NoteAssetDto> UploadNoteAssetAsync(UploadNoteAssetCommand command, CancellationToken cancellationToken)
+    {
+        var note = await repository.GetNoteByIdAsync(command.NoteId, cancellationToken)
+            ?? throw new NoteNotFoundException("Note not found.");
+
+        if (command.NoteInputId is not null)
+        {
+            var noteInput = await repository.GetNoteInputByIdAsync(command.NoteInputId.Value, cancellationToken)
+                ?? throw new NoteValidationException("Note input not found.");
+
+            if (noteInput.NoteId != note.Id)
+            {
+                throw new NoteConflictException("Note input does not belong to this note.");
+            }
+        }
+
+        var assetId = Guid.NewGuid();
+        var originalFilename = string.IsNullOrWhiteSpace(command.OriginalFilename)
+            ? "upload"
+            : Path.GetFileName(command.OriginalFilename.Trim());
+        var contentType = NormalizeMimeType(command.ContentType);
+        var storageResult = await noteAssetStorage.SaveAsync(
+            new NoteAssetStorageRequest(note.Id, assetId, originalFilename, contentType),
+            command.Content,
+            cancellationToken);
+
+        NoteAsset created;
+        try
+        {
+            created = await repository.CreateNoteAssetAsync(new NoteAsset
+            {
+                Id = assetId,
+                NoteId = note.Id,
+                NoteInputId = command.NoteInputId,
+                AssetType = InferAssetType(contentType),
+                MimeType = contentType,
+                StorageKey = storageResult.StorageKey,
+                OriginalFilename = originalFilename,
+                SizeBytes = storageResult.SizeBytes,
+                ChecksumSha256 = storageResult.ChecksumSha256,
+                DurationSeconds = null,
+                Width = null,
+                Height = null,
+                Metadata = EmptyJson(),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }, null, cancellationToken);
+        }
+        catch
+        {
+            try
+            {
+                await noteAssetStorage.DeleteAsync(storageResult.StorageKey, cancellationToken);
+            }
+            catch
+            {
+                // Best-effort cleanup only.
+            }
+
+            throw;
+        }
+
+        await ScheduleAssetProcessingAsync(created, cancellationToken);
         return MapAsset(created);
     }
 
@@ -134,6 +259,7 @@ public sealed class NotesService(
         {
             Id = Guid.NewGuid(),
             NoteId = command.NoteId,
+            SourceAssetId = command.SourceAssetId,
             SourceRunId = command.SourceRunId,
             VersionKind = ParseTextVersionKind(command.VersionKind),
             Text = command.Text.Trim(),
@@ -158,6 +284,7 @@ public sealed class NotesService(
             Id = Guid.NewGuid(),
             NoteId = command.NoteId,
             JobId = command.JobId,
+            SourceAssetId = command.SourceAssetId,
             Stage = ParseStage(command.Stage),
             Status = ParseProcessingStatus(command.Status),
             Provider = NormalizeNullable(command.Provider),
@@ -256,6 +383,99 @@ public sealed class NotesService(
     public async Task<UserTelegramAccountDto?> GetLinkedTelegramAccountAsync(Guid userId, CancellationToken cancellationToken)
         => MapUserTelegramAccountNullable(await repository.GetUserTelegramAccountByUserIdAsync(userId, cancellationToken));
 
+    private async Task ScheduleAssetProcessingAsync(NoteAsset asset, CancellationToken cancellationToken)
+    {
+        var note = await repository.GetNoteByIdAsync(asset.NoteId, cancellationToken)
+            ?? throw new NoteNotFoundException("Note not found.");
+
+        if (note.Status is NoteStatus.Archived or NoteStatus.Deleted)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var request = JsonSerializer.SerializeToElement(new
+        {
+            noteId = asset.NoteId,
+            noteAssetId = asset.Id,
+            storageKey = asset.StorageKey,
+            mimeType = asset.MimeType,
+            originalFilename = asset.OriginalFilename
+        });
+
+        var processingRun = await repository.ExecuteInTransactionAsync(async (txRepository, tx) =>
+        {
+            _ = await txRepository.UpdateNoteAsync(note with
+            {
+                Status = NoteStatus.Processing,
+                UpdatedAt = now
+            }, tx, cancellationToken);
+
+            return await txRepository.CreateNoteProcessingRunAsync(new NoteProcessingRun
+            {
+                Id = Guid.NewGuid(),
+                NoteId = asset.NoteId,
+                JobId = null,
+                SourceAssetId = asset.Id,
+                Stage = ResolveProcessingStage(asset),
+                Status = NoteProcessingStatus.Queued,
+                Provider = null,
+                Model = null,
+                PromptVersion = null,
+                InputHash = asset.ChecksumSha256,
+                Request = request,
+                Response = null,
+                Output = null,
+                Usage = null,
+                Metrics = null,
+                ErrorCode = null,
+                ErrorMessage = null,
+                StartedAt = null,
+                FinishedAt = null,
+                CreatedAt = now,
+                UpdatedAt = now
+            }, tx, cancellationToken);
+        }, cancellationToken);
+
+        var job = await jobsService.CreateJobAsync(new CreateJobCommand(
+            "notes.process_asset",
+            JsonSerializer.SerializeToElement(new
+            {
+                noteId = asset.NoteId,
+                noteAssetId = asset.Id,
+                processingRunId = processingRun.Id
+            }),
+            50,
+            note.RequestedByUserId,
+            null,
+            3), cancellationToken);
+
+        await repository.UpdateNoteProcessingRunAsync(processingRun with
+        {
+            JobId = job.Job.Id,
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, null, cancellationToken);
+    }
+
+    private static bool IsAudioAsset(NoteAsset asset)
+        => asset.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
+           || asset.AssetType.Equals("audio", StringComparison.OrdinalIgnoreCase);
+
+    private static NoteProcessingStage ResolveProcessingStage(NoteAsset asset)
+    {
+        if (IsAudioAsset(asset))
+        {
+            return NoteProcessingStage.Whisper;
+        }
+
+        if (asset.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) || asset.AssetType.Equals("image", StringComparison.OrdinalIgnoreCase))
+        {
+            return NoteProcessingStage.Ocr;
+        }
+
+        return NoteProcessingStage.Rewrite;
+    }
+
     private async Task<NoteDetailDto> BuildDetailAsync(Note note, CancellationToken cancellationToken)
     {
         var projectName = note.ProjectId is null
@@ -313,10 +533,33 @@ public sealed class NotesService(
     private static string NormalizeRequired(string value)
         => string.IsNullOrWhiteSpace(value) ? throw new NoteValidationException("Value is required.") : value.Trim();
 
+    private static string NormalizeOptionalTitle(string? value)
+        => NormalizeNullable(value) ?? string.Empty;
+
     private static string NormalizeTitle(string value)
-        => string.IsNullOrWhiteSpace(value) ? throw new NoteValidationException("Title is required.") : value.Trim();
+        => NormalizeRequired(value);
+
+    private static string BuildAutoTitle(string text)
+    {
+        var normalized = NormalizeNullable(text);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        var firstSentenceEnd = normalized.IndexOfAny(new[] { '.', '!', '?' });
+        var candidate = firstSentenceEnd > 0 ? normalized[..(firstSentenceEnd + 1)] : normalized;
+        candidate = candidate.Trim();
+        if (candidate.Length > 72)
+        {
+            candidate = candidate[..69].TrimEnd() + "...";
+        }
+
+        return candidate.Length == 0 ? string.Empty : char.ToUpperInvariant(candidate[0]) + candidate[1..];
+    }
 
     private static string? NormalizeNullable(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string NormalizeMimeType(string? value) => string.IsNullOrWhiteSpace(value) ? "application/octet-stream" : value.Trim().ToLowerInvariant();
 
     private static JsonElement NormalizeJson(JsonElement element)
         => element.ValueKind == JsonValueKind.Undefined ? JsonDocument.Parse("{}").RootElement.Clone() : element.Clone();
@@ -333,6 +576,26 @@ public sealed class NotesService(
     private static NoteTextVersionKind ParseTextVersionKind(string value) => Enum.Parse<NoteTextVersionKind>(value.Trim(), true);
     private static NoteProcessingStage ParseStage(string value) => Enum.Parse<NoteProcessingStage>(value.Trim(), true);
     private static NoteProcessingStatus ParseProcessingStatus(string value) => Enum.Parse<NoteProcessingStatus>(value.Trim(), true);
+
+    private static string InferAssetType(string mimeType)
+    {
+        if (mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "image";
+        }
+
+        if (mimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "audio";
+        }
+
+        if (mimeType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return "pdf";
+        }
+
+        return "file";
+    }
 
     private static NoteDto MapNote(Note note, string? projectName = null)
         => new(
@@ -388,6 +651,7 @@ public sealed class NotesService(
         => new(
             version.Id,
             version.NoteId,
+            version.SourceAssetId,
             version.SourceRunId,
             version.VersionKind.ToString().ToLowerInvariant(),
             version.Text,
@@ -402,6 +666,7 @@ public sealed class NotesService(
             run.Id,
             run.NoteId,
             run.JobId,
+            run.SourceAssetId,
             run.Stage.ToString().ToLowerInvariant(),
             run.Status.ToString().ToLowerInvariant(),
             run.Provider,

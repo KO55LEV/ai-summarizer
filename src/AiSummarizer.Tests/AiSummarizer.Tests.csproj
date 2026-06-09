@@ -11,8 +11,10 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\AiSummarizer.Api\AiSummarizer.Api.csproj" />
     <ProjectReference Include="..\AiSummarizer.Application\AiSummarizer.Application.csproj" />
     <ProjectReference Include="..\AiSummarizer.Domain\AiSummarizer.Domain.csproj" />
     <ProjectReference Include="..\AiSummarizer.Infrastructure\AiSummarizer.Infrastructure.csproj" />
+    <ProjectReference Include="..\AiSummarizer.Worker\AiSummarizer.Worker.csproj" />
   </ItemGroup>
 </Project>

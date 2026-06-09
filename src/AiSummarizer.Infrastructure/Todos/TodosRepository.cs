@@ -2,6 +2,7 @@ using System.Data.Common;
 using AiSummarizer.Application.Todos;
 using AiSummarizer.Infrastructure.Persistence;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace AiSummarizer.Infrastructure.Todos;
 
@@ -39,24 +40,56 @@ public sealed class TodosRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
     public Task<TodoItemDto?> GetTodoByIdAsync(Guid todoId, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("Todos/GetTodoItemById.sql", cmd => cmd.Parameters.AddWithValue("todo_id", todoId), null, cancellationToken, MapTodo);
 
-    public Task<IReadOnlyList<TodoItemDto>> ListTodosAsync(Guid? requestedByUserId, Guid? projectId, string? cadence, string? status, int limit, int offset, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<TodoItemDto>> ListTodosAsync(Guid? requestedByUserId, Guid? projectId, string? bucket, string? cadence, string? status, int limit, int offset, CancellationToken cancellationToken)
         => QueryManyAsync("Todos/ListTodoItems.sql", cmd =>
         {
-            cmd.Parameters.AddWithValue("requested_by_user_id", (object?)requestedByUserId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("project_id", (object?)projectId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("cadence", (object?)NormalizeNullable(cadence) ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("status", (object?)NormalizeNullable(status) ?? DBNull.Value);
+            cmd.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)requestedByUserId ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("project_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)projectId ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("bucket", NpgsqlDbType.Text)
+            {
+                Value = (object?)NormalizeNullable(bucket) ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("cadence", NpgsqlDbType.Text)
+            {
+                Value = (object?)NormalizeNullable(cadence) ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("status", NpgsqlDbType.Text)
+            {
+                Value = (object?)NormalizeNullable(status) ?? DBNull.Value
+            });
             cmd.Parameters.AddWithValue("limit_value", limit);
             cmd.Parameters.AddWithValue("offset_value", offset);
         }, cancellationToken, MapTodo);
 
-    public Task<TodoStatsDto> GetStatsAsync(Guid? requestedByUserId, Guid? projectId, string? cadence, string? status, CancellationToken cancellationToken)
+    public Task<TodoStatsDto> GetStatsAsync(Guid? requestedByUserId, Guid? projectId, string? bucket, string? cadence, string? status, CancellationToken cancellationToken)
         => QuerySingleAsync("Todos/GetTodoStats.sql", cmd =>
         {
-            cmd.Parameters.AddWithValue("requested_by_user_id", (object?)requestedByUserId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("project_id", (object?)projectId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("cadence", (object?)NormalizeNullable(cadence) ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("status", (object?)NormalizeNullable(status) ?? DBNull.Value);
+            cmd.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)requestedByUserId ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("project_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)projectId ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("bucket", NpgsqlDbType.Text)
+            {
+                Value = (object?)NormalizeNullable(bucket) ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("cadence", NpgsqlDbType.Text)
+            {
+                Value = (object?)NormalizeNullable(cadence) ?? DBNull.Value
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("status", NpgsqlDbType.Text)
+            {
+                Value = (object?)NormalizeNullable(status) ?? DBNull.Value
+            });
         }, null, cancellationToken, reader => new TodoStatsDto(
             reader.GetInt32(reader.GetOrdinal("total_count")),
             reader.GetInt32(reader.GetOrdinal("open_count")),
@@ -169,15 +202,31 @@ public sealed class TodosRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
     private static void BindTodo(NpgsqlCommand command, TodoItemRecord todo)
     {
         command.Parameters.AddWithValue("id", todo.Id);
-        command.Parameters.AddWithValue("requested_by_user_id", (object?)todo.RequestedByUserId ?? DBNull.Value);
-        command.Parameters.AddWithValue("project_id", (object?)todo.ProjectId ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)todo.RequestedByUserId ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("project_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)todo.ProjectId ?? DBNull.Value
+        });
+        command.Parameters.AddWithValue("bucket", todo.Bucket);
         command.Parameters.AddWithValue("title", todo.Title);
-        command.Parameters.AddWithValue("description", (object?)todo.Description ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("description", NpgsqlDbType.Text)
+        {
+            Value = (object?)todo.Description ?? DBNull.Value
+        });
         command.Parameters.AddWithValue("cadence", todo.Cadence);
         command.Parameters.AddWithValue("status", todo.Status);
         command.Parameters.AddWithValue("priority", todo.Priority);
-        command.Parameters.AddWithValue("due_at", (object?)todo.DueAt?.UtcDateTime ?? DBNull.Value);
-        command.Parameters.AddWithValue("completed_at", (object?)todo.CompletedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.Add(new NpgsqlParameter("due_at", NpgsqlDbType.TimestampTz)
+        {
+            Value = (object?)todo.DueAt?.UtcDateTime ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("completed_at", NpgsqlDbType.TimestampTz)
+        {
+            Value = (object?)todo.CompletedAt?.UtcDateTime ?? DBNull.Value
+        });
         command.Parameters.AddWithValue("sort_order", todo.SortOrder);
         command.Parameters.AddWithValue("created_at", todo.CreatedAt.UtcDateTime);
         command.Parameters.AddWithValue("updated_at", todo.UpdatedAt.UtcDateTime);
@@ -189,6 +238,7 @@ public sealed class TodosRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             reader.IsDBNull(reader.GetOrdinal("requested_by_user_id")) ? null : reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
             reader.IsDBNull(reader.GetOrdinal("project_id")) ? null : reader.GetGuid(reader.GetOrdinal("project_id")),
             reader.IsDBNull(reader.GetOrdinal("project_name")) ? null : reader.GetString(reader.GetOrdinal("project_name")),
+            reader.GetString(reader.GetOrdinal("bucket")),
             reader.GetString(reader.GetOrdinal("title")),
             reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
             reader.GetString(reader.GetOrdinal("cadence")),

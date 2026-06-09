@@ -1,12 +1,15 @@
 using System.Text.Json;
+using AiSummarizer.Application.Billing;
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
+using AiSummarizer.Domain.Transcripts;
 using AiSummarizer.Domain.Workflows;
 
 namespace AiSummarizer.Application.Workflows;
 
 public sealed class WorkflowsService(
+    IBillingService billingService,
     IMediaSourcesRepository mediaSourcesRepository,
     IUserVideoLibraryRepository userVideoLibraryRepository,
     IWorkflowsRepository repository) : IWorkflowsService
@@ -33,51 +36,85 @@ public sealed class WorkflowsService(
             UpdatedAt = now
         }, null, cancellationToken);
 
-        var workflow = await repository.CreateWorkflowAsync(new Workflow
+        BillingReservationDto? reservation = null;
+        try
         {
-            Id = Guid.NewGuid(),
-            RequestedByUserId = command.RequestedByUserId,
-            SourceId = mediaSource.Id,
-            WorkflowType = "youtube.summary",
-            Status = "queued",
-            Input = JsonSerializer.SerializeToElement(new
+            if (command.RequestedByUserId is not null)
             {
-                sourceId = mediaSource.Id,
-                sourceProvider = mediaSource.SourceProvider,
-                sourceKind = mediaSource.SourceKind,
-                sourceExternalId = mediaSource.ExternalSourceId,
-                language,
-                preferNativeTranscript = command.PreferNativeTranscript
-            }),
-            Result = null,
-            CurrentStepKey = null,
-            AttemptCount = 0,
-            MaxAttempts = 5,
-            AvailableAt = now,
-            CreatedAt = now,
-            UpdatedAt = now
-        }, null, cancellationToken);
+                reservation = await billingService.ReserveAsync(
+                    new ReserveBillingCreditsCommand(
+                        command.RequestedByUserId.Value,
+                        "youtube.summary",
+                        mediaSource.Id,
+                        BillingUsageEstimator.EstimateWorkflowCredits("youtube.summary"),
+                        "Reserve credits for youtube summary workflow."),
+                    cancellationToken);
+            }
 
-        if (command.RequestedByUserId is not null)
-        {
-            var nowCompleted = DateTimeOffset.UtcNow;
-            _ = await userVideoLibraryRepository.UpsertUserVideoAsync(new UserVideoLibraryItem
+            var workflow = await repository.CreateWorkflowAsync(new Workflow
             {
                 Id = Guid.NewGuid(),
-                RequestedByUserId = command.RequestedByUserId.Value,
-                MediaSourceId = mediaSource.Id,
-                PublicRequestRunId = null,
-                WorkflowId = workflow.Id,
-                TranscriptId = null,
+                RequestedByUserId = command.RequestedByUserId,
+                SourceId = mediaSource.Id,
+                WorkflowType = "youtube.summary",
                 Status = "queued",
-                SourceUrl = mediaSource.CanonicalUrl,
-                CompletedAt = null,
-                CreatedAt = nowCompleted,
-                UpdatedAt = nowCompleted
+                Input = JsonSerializer.SerializeToElement(new
+                {
+                    sourceId = mediaSource.Id,
+                    sourceProvider = mediaSource.SourceProvider,
+                    sourceKind = mediaSource.SourceKind,
+                    sourceExternalId = mediaSource.ExternalSourceId,
+                    language,
+                    preferNativeTranscript = command.PreferNativeTranscript
+                }),
+                Result = null,
+                CurrentStepKey = null,
+                AttemptCount = 0,
+                MaxAttempts = 5,
+                AvailableAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
             }, null, cancellationToken);
-        }
 
-        return Map(workflow);
+            if (command.RequestedByUserId is not null)
+            {
+                var nowCompleted = DateTimeOffset.UtcNow;
+                _ = await userVideoLibraryRepository.UpsertUserVideoAsync(new UserVideoLibraryItem
+                {
+                    Id = Guid.NewGuid(),
+                    RequestedByUserId = command.RequestedByUserId.Value,
+                    MediaSourceId = mediaSource.Id,
+                    PublicRequestRunId = null,
+                    WorkflowId = workflow.Id,
+                    TranscriptId = null,
+                    Status = "queued",
+                    SourceUrl = mediaSource.CanonicalUrl,
+                    CompletedAt = null,
+                    CreatedAt = nowCompleted,
+                    UpdatedAt = nowCompleted
+                }, null, cancellationToken);
+            }
+
+            return Map(workflow);
+        }
+        catch
+        {
+            if (reservation is not null)
+            {
+                try
+                {
+                    await billingService.ReleaseAsync(
+                        new ReleaseBillingReservationCommand(reservation.Id, "Summary workflow creation failed."),
+                        cancellationToken);
+                }
+                catch
+                {
+                    // Best effort rollback only.
+                }
+            }
+
+            throw;
+        }
     }
 
     public async Task<WorkflowDto> GetWorkflowAsync(Guid workflowId, CancellationToken cancellationToken)

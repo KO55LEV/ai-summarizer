@@ -6,6 +6,7 @@ using AiSummarizer.Application.Emails;
 using AiSummarizer.Application.Notes;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Application.Todos;
+using AiSummarizer.Application.Billing;
 
 namespace AiSummarizer.Api.Middleware;
 
@@ -67,6 +68,18 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
         }
         catch (TodoValidationException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (BillingNotFoundException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (BillingInsufficientFundsException ex)
+        {
+            await WriteProblem(context, StatusCodes.Status402PaymentRequired, ex.Message);
+        }
+        catch (BillingValidationException ex)
         {
             await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
         }

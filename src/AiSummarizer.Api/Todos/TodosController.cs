@@ -11,12 +11,13 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
     public async Task<ActionResult<TodoListResponse>> GetList(
         [FromQuery] Guid? requestedByUserId = null,
         [FromQuery] Guid? projectId = null,
+        [FromQuery] string? bucket = null,
         [FromQuery] string? cadence = null,
         [FromQuery] string? status = null,
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(Map(await todosService.ListTodosAsync(requestedByUserId, projectId, cadence, status, limit, offset, cancellationToken)));
+        => Ok(Map(await todosService.ListTodosAsync(requestedByUserId, projectId, bucket, cadence, status, limit, offset, cancellationToken)));
 
     [HttpGet("{todoId:guid}")]
     public async Task<ActionResult<TodoResponse>> GetTodo([FromRoute] Guid todoId, CancellationToken cancellationToken)
@@ -27,6 +28,7 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
         => Ok(Map(await todosService.CreateTodoAsync(new CreateTodoCommand(
             request.RequestedByUserId,
             request.ProjectId,
+            request.Bucket,
             request.Title,
             request.Description,
             request.Cadence,
@@ -39,6 +41,7 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
     public async Task<ActionResult<TodoResponse>> UpdateTodo([FromRoute] Guid todoId, [FromBody] UpdateTodoRequest request, CancellationToken cancellationToken)
         => Ok(Map(await todosService.UpdateTodoAsync(todoId, new UpdateTodoCommand(
             request.ProjectId,
+            request.Bucket,
             request.Title,
             request.Description,
             request.Cadence,
@@ -63,6 +66,7 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
             todo.RequestedByUserId,
             todo.ProjectId,
             todo.ProjectName,
+            todo.Bucket,
             todo.Title,
             todo.Description,
             todo.Cadence,

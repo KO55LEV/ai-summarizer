@@ -6,10 +6,10 @@ namespace AiSummarizer.Application.Todos;
 
 public sealed class TodosService(ITodosRepository repository, IUsersRepository usersRepository, IProjectsRepository projectsRepository) : ITodosService
 {
-    public async Task<TodoListDto> ListTodosAsync(Guid? requestedByUserId, Guid? projectId, string? cadence, string? status, int limit, int offset, CancellationToken cancellationToken)
+    public async Task<TodoListDto> ListTodosAsync(Guid? requestedByUserId, Guid? projectId, string? bucket, string? cadence, string? status, int limit, int offset, CancellationToken cancellationToken)
     {
-        var items = await repository.ListTodosAsync(requestedByUserId, projectId, cadence, status, limit, offset, cancellationToken);
-        var stats = await repository.GetStatsAsync(requestedByUserId, projectId, cadence, status, cancellationToken);
+        var items = await repository.ListTodosAsync(requestedByUserId, projectId, bucket, cadence, status, limit, offset, cancellationToken);
+        var stats = await repository.GetStatsAsync(requestedByUserId, projectId, bucket, cadence, status, cancellationToken);
         return new TodoListDto(items, stats);
     }
 
@@ -29,6 +29,7 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
                 Guid.NewGuid(),
                 requestedByUserId,
                 command.ProjectId,
+                NormalizeBucket(command.Bucket) ?? "today",
                 NormalizeRequired(command.Title),
                 NormalizeNullable(command.Description),
                 NormalizeCadence(command.Cadence),
@@ -56,6 +57,7 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
         var now = DateTimeOffset.UtcNow;
         var status = ParseStatus(command.Status);
         DateTimeOffset? completedAt = status == TodoStatus.Done ? existing.CompletedAt ?? now : null;
+        var bucket = NormalizeBucket(command.Bucket) ?? existing.Bucket;
 
         var updatedId = await repository.ExecuteInTransactionAsync(async (txRepository, tx) =>
         {
@@ -63,6 +65,7 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
                 existing.Id,
                 existing.RequestedByUserId,
                 command.ProjectId,
+                bucket,
                 NormalizeRequired(command.Title),
                 NormalizeNullable(command.Description),
                 NormalizeCadence(command.Cadence),
@@ -113,8 +116,14 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
 
     private static string NormalizePriority(string priority) => ParsePriority(priority).ToString().ToLowerInvariant();
 
+    private static string? NormalizeBucket(string? bucket)
+        => string.IsNullOrWhiteSpace(bucket) ? null : ParseBucket(bucket).ToString().ToLowerInvariant();
+
     private static TodoCadence ParseCadence(string cadence)
         => Enum.Parse<TodoCadence>(cadence.Trim(), true);
+
+    private static TodoBucket ParseBucket(string bucket)
+        => Enum.Parse<TodoBucket>(bucket.Trim(), true);
 
     private static TodoStatus ParseStatus(string status)
         => Enum.Parse<TodoStatus>(status.Trim(), true);

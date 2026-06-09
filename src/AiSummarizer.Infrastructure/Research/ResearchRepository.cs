@@ -52,6 +52,23 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             cmd.Parameters.AddWithValue("offset_value", offset);
         }, cancellationToken, MapTopic);
 
+    public Task<IReadOnlyList<ResearchTopicDto>> ListDueActiveTopicsAsync(DateTimeOffset dueAt, int limit, CancellationToken cancellationToken)
+        => QueryManyAsync("Research/ListDueActiveResearchTopics.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("due_at", dueAt.UtcDateTime);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+        }, cancellationToken, MapTopic);
+
+    public Task<bool> HasActiveTopicRunAsync(Guid topicId, CancellationToken cancellationToken)
+        => QuerySingleAsync("Research/HasActiveResearchTopicRun.sql", cmd => cmd.Parameters.AddWithValue("topic_id", topicId), cancellationToken, reader => reader.GetBoolean(reader.GetOrdinal("has_active_run")));
+
+    public Task<ResearchActiveTopicRunDto?> GetActiveTopicRunAsync(Guid topicId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Research/GetActiveResearchTopicRun.sql", cmd => cmd.Parameters.AddWithValue("topic_id", topicId), cancellationToken, reader => new ResearchActiveTopicRunDto(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.IsDBNull(reader.GetOrdinal("job_id")) ? null : reader.GetGuid(reader.GetOrdinal("job_id")),
+            reader.GetString(reader.GetOrdinal("status")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))));
+
     public Task<ResearchStatsDto> GetStatsAsync(Guid? requestedByUserId, CancellationToken cancellationToken)
         => QuerySingleAsync("Research/GetResearchStats.sql", cmd =>
         {
@@ -79,6 +96,14 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
 
     public Task DeleteTopicAsync(Guid topicId, DbTransaction? transaction, CancellationToken cancellationToken)
         => ExecuteNonQueryAsync("Research/DeleteResearchTopic.sql", cmd => cmd.Parameters.AddWithValue("topic_id", topicId), transaction, cancellationToken);
+
+    public Task UpdateTopicNextRunAtAsync(Guid topicId, DateTimeOffset? nextRunAt, DbTransaction? transaction, CancellationToken cancellationToken)
+        => ExecuteNonQueryAsync("Research/UpdateResearchTopicNextRunAt.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("topic_id", topicId);
+            cmd.Parameters.AddWithValue("next_run_at", (object?)nextRunAt?.UtcDateTime ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("updated_at", DateTimeOffset.UtcNow.UtcDateTime);
+        }, transaction, cancellationToken);
 
     public Task ReplaceTopicSourcesAsync(Guid topicId, IReadOnlyList<string> sources, DbTransaction? transaction, CancellationToken cancellationToken)
         => ExecuteNonQueryAsync("Research/ReplaceResearchTopicSources.sql", cmd =>
@@ -192,6 +217,9 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             cmd.Parameters.AddWithValue("limit_value", limit);
             cmd.Parameters.AddWithValue("offset_value", offset);
         }, cancellationToken, MapTopicRun);
+
+    public Task<IReadOnlyList<ResearchTopicRunDto>> ListActiveTopicRunJobsAsync(Guid topicId, CancellationToken cancellationToken)
+        => QueryManyAsync("Research/ListActiveResearchTopicRunJobs.sql", cmd => cmd.Parameters.AddWithValue("topic_id", topicId), cancellationToken, MapTopicRun);
 
     public Task<Guid> CreateTopicRunPhaseAsync(ResearchTopicRunPhaseRecord phase, DbTransaction? transaction, CancellationToken cancellationToken)
         => QuerySingleAsync("ResearchRuns/CreateResearchTopicRunPhase.sql", cmd =>
@@ -756,6 +784,10 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         command.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
         {
             Value = (object?)topic.RequestedByUserId ?? DBNull.Value
+        });
+        command.Parameters.Add(new NpgsqlParameter("project_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)topic.ProjectId ?? DBNull.Value
         });
         command.Parameters.AddWithValue("name", topic.Name);
         command.Parameters.AddWithValue("description", (object?)topic.Description ?? DBNull.Value);
