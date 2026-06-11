@@ -910,7 +910,6 @@ export default function App() {
         return (
           <ProjectViewPage
             projectId={location.projectId}
-            onBack={() => navigateToPath('/projects')}
             currentUserDisplayName={authState?.user.displayName ?? null}
             currentUserEmail={authState?.user.email ?? null}
           />

@@ -6,8 +6,6 @@ import {
   Clock3,
   FileDown,
   FolderKanban,
-  Layers3,
-  Lightbulb,
   Link2,
   MessageSquareQuote,
   MoreVertical,
@@ -150,45 +148,6 @@ function navigateTo(path: string) {
   }
 }
 
-function normalizeProjectStatus(status?: string | null): 'active' | 'archived' | 'deleted' | 'unknown' {
-  switch ((status ?? '').toLowerCase()) {
-    case 'active':
-      return 'active';
-    case 'archived':
-      return 'archived';
-    case 'deleted':
-      return 'deleted';
-    default:
-      return 'unknown';
-  }
-}
-
-function projectStatusLabel(status: string): string {
-  switch (normalizeProjectStatus(status)) {
-    case 'active':
-      return 'Active';
-    case 'archived':
-      return 'Archived';
-    case 'deleted':
-      return 'Deleted';
-    default:
-      return 'Unknown';
-  }
-}
-
-function projectStatusStyles(status: string): string {
-  switch (normalizeProjectStatus(status)) {
-    case 'active':
-      return 'bg-accent/15 text-accent border-accent/20';
-    case 'archived':
-      return 'bg-amber-500/15 text-amber-300 border-amber-500/20';
-    case 'deleted':
-      return 'bg-rose-500/15 text-rose-300 border-rose-500/20';
-    default:
-      return 'bg-bg-input text-text-secondary border-border';
-  }
-}
-
 function formatRelative(value: string | null): string {
   if (!value) return '—';
   const date = new Date(value);
@@ -212,31 +171,6 @@ function formatShortDate(value: string | null): string {
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
-}
-
-function renderProjectIcon(key?: string | null): ReactNode {
-  switch (key) {
-    case 'Sparkles':
-      return <Sparkles size={18} />;
-    case 'Target':
-      return <Target size={18} />;
-    case 'Layers3':
-      return <Layers3 size={18} />;
-    case 'MessageSquareQuote':
-      return <MessageSquareQuote size={18} />;
-    case 'Lightbulb':
-      return <Lightbulb size={18} />;
-    case 'Play':
-      return <Play size={18} />;
-    case 'FolderKanban':
-    default:
-      return <FolderKanban size={18} />;
-  }
-}
-
-function initialsFrom(value?: string | null): string {
-  const source = (value?.trim() || 'AN').toUpperCase();
-  return source.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1252,12 +1186,10 @@ function ProjectNoteCreateModal({
 
 export default function ProjectViewPage({
   projectId,
-  onBack,
   currentUserDisplayName,
   currentUserEmail,
 }: {
   projectId: string;
-  onBack: () => void;
   currentUserDisplayName?: string | null;
   currentUserEmail?: string | null;
 }) {
@@ -1355,14 +1287,12 @@ export default function ProjectViewPage({
   }, [notes, researchTopics, todos, videoLibraryItems]);
 
   const projectAccent = project?.color ?? '#00d4aa';
-  const selectedProjectIcon = renderProjectIcon(project?.icon);
   const projectTags = useMemo(() => {
     if (!project) return [];
     const aliases = Array.isArray(project.aliases) ? project.aliases : [];
     return [
       ...aliases.slice(0, 3),
       project.isDefault ? 'Default workspace' : null,
-      project.status === 'active' ? 'Active' : null,
     ].filter((item): item is string => Boolean(item));
   }, [project]);
 
@@ -1498,7 +1428,6 @@ export default function ProjectViewPage({
   }, [activityItems, quickFilter]);
 
   const ownerName = currentUserDisplayName?.trim() || currentUserEmail?.trim() || 'Owner';
-  const ownerInitials = initialsFrom(ownerName);
 
   const tabItems: Array<{ id: ProjectTab; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -1875,14 +1804,6 @@ export default function ProjectViewPage({
       <main className="flex-1 overflow-y-auto bg-bg-primary">
         <div className="mx-auto max-w-[1600px] px-5 py-5">
           <section className="rounded-[24px] border border-border bg-bg-card p-6">
-            <button
-              type="button"
-              onClick={onBack}
-              className="inline-flex items-center gap-2 text-[11px] font-medium text-text-secondary hover:text-text-primary"
-            >
-              <ArrowLeft size={14} />
-              Back to Projects
-            </button>
             <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-red-300">
               {error || 'Project not found.'}
             </div>
@@ -1901,46 +1822,17 @@ export default function ProjectViewPage({
   return (
     <main className="flex-1 overflow-y-auto bg-bg-primary">
       <div className="mx-auto max-w-[1600px] px-5 py-5">
-        <section className="rounded-[24px] border border-border bg-[linear-gradient(135deg,rgba(0,212,170,0.12),rgba(19,28,48,0.96)_45%,rgba(12,18,33,1))] p-5 shadow-[0_16px_44px_rgba(0,0,0,0.22)]">
-          <div className="flex items-center justify-between gap-3 text-[12px] text-text-secondary">
-            <button type="button" onClick={onBack} className="inline-flex items-center gap-2 hover:text-text-primary">
-              <ArrowLeft size={14} />
-              Back to Projects
-            </button>
-            <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-text-muted">Project workspace</span>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <section className="rounded-[22px] border border-border bg-[linear-gradient(135deg,rgba(0,212,170,0.12),rgba(19,28,48,0.96)_45%,rgba(12,18,33,1))] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.2)] sm:p-4.5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border" style={{ backgroundColor: `${projectAccent}18`, color: projectAccent }}>
-                  {selectedProjectIcon}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h1 className="truncate text-[28px] font-semibold tracking-tight text-text-primary">{projectName}</h1>
-                    <Star size={15} className="text-text-secondary" />
-                  </div>
-                  <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-text-secondary">
-                    {projectDescription}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <StatusChip label={projectStatusLabel(project.status)} className={projectStatusStyles(project.status)} />
-                {project.isDefault ? <StatusChip label="Default workspace" className="bg-bg-input text-text-secondary border-border" /> : null}
-                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-bg-card px-2.5 py-1 text-[11px] text-text-secondary">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20 text-[10px] font-semibold text-accent">{ownerInitials}</span>
-                  <span className="font-medium text-text-primary">{ownerName}</span>
-                  <span>Owner</span>
-                </span>
-                {projectTags.map((tag) => (
-                  <span key={tag} className="rounded-full border border-border bg-bg-input px-2.5 py-1 text-[11px] text-text-secondary">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-semibold tracking-tight text-text-primary sm:text-[24px]">
+                <span>Project</span>
+                <span className="text-text-muted">&gt;</span>
+                <span>{projectName}</span>
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-text-secondary sm:text-[13px]">
+                {projectDescription}
+              </p>
             </div>
 
             <details className="relative z-20">
@@ -1972,6 +1864,16 @@ export default function ProjectViewPage({
               </div>
             </details>
           </div>
+
+          {projectTags.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {projectTags.map((tag) => (
+                <span key={tag} className="rounded-full border border-border bg-bg-input px-2.5 py-1 text-[11px] text-text-secondary">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-5 flex flex-wrap gap-5 border-t border-border pt-4">
             {tabItems.map((tab) => {
