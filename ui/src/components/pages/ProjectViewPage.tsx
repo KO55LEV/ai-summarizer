@@ -41,6 +41,7 @@ type ProjectTab = 'overview' | 'notes' | 'research' | 'videos' | 'tasks';
 type QuickFilter = 'all' | 'starred' | 'in-progress' | 'completed';
 type TaskStatusFilter = 'open' | 'all';
 type TaskBucket = 'today' | 'next' | 'later';
+type TaskBucketFilter = 'all' | TaskBucket;
 type TaskDropTarget = TaskBucket | 'done';
 type TaskDropInfo = {
   bucket: TaskDropTarget;
@@ -1274,6 +1275,7 @@ export default function ProjectViewPage({
   const [taskBucket, setTaskBucket] = useState<TaskBucket>('today');
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatusFilter>('open');
   const [taskSearch, setTaskSearch] = useState('');
+  const [taskBucketFilter, setTaskBucketFilter] = useState<TaskBucketFilter>('all');
   const [completedFilter, setCompletedFilter] = useState<CompletedFilter>('today');
   const [taskSaving, setTaskSaving] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -1387,11 +1389,17 @@ export default function ProjectViewPage({
     });
   }, [taskSearch, todos]);
   const filteredTodos = useMemo(
-    () => searchedTodos.filter((todo) => (taskStatusFilter === 'open' ? todo.status !== 'done' && todo.status !== 'archived' : todo.status !== 'archived')),
+    () =>
+      searchedTodos.filter((todo) =>
+        taskStatusFilter === 'open' ? todo.status !== 'done' && todo.status !== 'archived' : todo.status !== 'archived',
+      ),
     [searchedTodos, taskStatusFilter],
   );
   const taskSections = useMemo(() => {
-    const activeSorted = [...filteredTodos].filter((todo) => todo.status !== 'done').sort(sortTasksForDisplay);
+    const sorted = [...filteredTodos]
+      .filter((todo) => taskBucketFilter === 'all' || normalizeTaskBucket(todo.bucket) === taskBucketFilter)
+      .sort(sortTasksForDisplay);
+    const activeSorted = sorted.filter((todo) => todo.status !== 'done');
     const done = searchedTodos.filter((todo) => todo.status === 'done').sort(sortTasksForDisplay);
     const today = activeSorted.filter((todo) => normalizeTaskBucket(todo.bucket) === 'today');
     const next = activeSorted.filter((todo) => normalizeTaskBucket(todo.bucket) === 'next');
@@ -1432,7 +1440,17 @@ export default function ProjectViewPage({
         ),
       },
     ];
-  }, [completedFilter, filteredTodos, searchedTodos]);
+  }, [completedFilter, filteredTodos, searchedTodos, taskBucketFilter]);
+  const visibleTaskSections = useMemo(
+    () =>
+      taskSections.filter((section) => {
+        if (section.id === 'done') {
+          return taskStatusFilter === 'all' && taskBucketFilter === 'all';
+        }
+        return taskBucketFilter === 'all' || section.id === taskBucketFilter;
+      }),
+    [taskBucketFilter, taskSections, taskStatusFilter],
+  );
   const activityItems = useMemo(() => {
     const noteEntries = notes.map((note) => ({
       id: `note-${note.id}`,
@@ -2124,11 +2142,10 @@ export default function ProjectViewPage({
                     </div>
                   </div>
                   <select
-                    value={taskBucketFilter}
-                    onChange={(e) => setTaskBucketFilter(e.target.value as TaskBucketFilter)}
+                    value={taskBucket}
+                    onChange={(e) => setTaskBucket(e.target.value as TaskBucket)}
                     className="rounded-2xl border border-border bg-bg-card px-4 py-3 text-[13px] text-text-secondary outline-none transition-colors hover:bg-bg-card-hover"
                   >
-                    <option value="all">All buckets</option>
                     <option value="today">Today</option>
                     <option value="next">Next</option>
                     <option value="later">Later</option>
@@ -2161,6 +2178,16 @@ export default function ProjectViewPage({
                     <option value="open">Open only</option>
                     <option value="all">All tasks</option>
                   </select>
+                  <select
+                    value={taskBucketFilter}
+                    onChange={(e) => setTaskBucketFilter(e.target.value as TaskBucketFilter)}
+                    className="rounded-2xl border border-border bg-bg-card px-4 py-3 text-[13px] text-text-secondary outline-none transition-colors hover:bg-bg-card-hover"
+                  >
+                    <option value="all">All buckets</option>
+                    <option value="today">Today</option>
+                    <option value="next">Next</option>
+                    <option value="later">Later</option>
+                  </select>
                   <button
                     type="button"
                     onClick={resetTaskFilters}
@@ -2178,7 +2205,7 @@ export default function ProjectViewPage({
                 )}
 
                 <div className="mt-6 space-y-6">
-                  {taskSections.map((section) => {
+                  {visibleTaskSections.map((section) => {
                     if (taskStatusFilter === 'open' && section.id === 'done') return null;
 
                     return (
