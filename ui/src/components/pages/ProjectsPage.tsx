@@ -89,8 +89,8 @@ function navigateTo(path: string) {
   }
 }
 
-function normalizeProjectStatus(status: string): ProjectStatus {
-  switch (status.toLowerCase()) {
+function normalizeProjectStatus(status?: string | null): ProjectStatus {
+  switch ((status ?? '').toLowerCase()) {
     case 'active':
       return 'active';
     case 'archived':

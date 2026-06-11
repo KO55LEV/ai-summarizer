@@ -22,6 +22,7 @@ interface AnalyzingViewProps {
   url: string;
   state: ProcessingState;
   onCancel: () => void;
+  projectName?: string | null;
 }
 
 const STEP_ICONS = [
@@ -34,7 +35,7 @@ const STEP_ICONS = [
   <Zap size={18} />,
 ];
 
-export default function AnalyzingView({ url, state, onCancel }: AnalyzingViewProps) {
+export default function AnalyzingView({ url, state, onCancel, projectName }: AnalyzingViewProps) {
   const handleCopy = () => {
     navigator.clipboard.writeText(url).catch(() => {});
   };
@@ -44,6 +45,12 @@ export default function AnalyzingView({ url, state, onCancel }: AnalyzingViewPro
       <div className="max-w-[680px] mx-auto px-8 py-8">
         {/* Header */}
         <div className="text-center mb-5">
+          {projectName ? (
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-bg-card px-3 py-1 text-[11px] font-medium text-text-secondary">
+              <span className="text-accent">Project</span>
+              <span className="text-text-primary">{projectName}</span>
+            </div>
+          ) : null}
           <h1 className="text-[28px] font-bold text-text-primary mb-2 tracking-tight">
             Analyzing your video
           </h1>

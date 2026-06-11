@@ -355,6 +355,7 @@ type AppLocation =
       researchTopicId: string | null;
       researchBriefingId: string | null;
       projectId: string | null;
+      projectName: string | null;
     };
 
 const NAV_PATHS: Record<NavItem, string> = {
@@ -381,8 +382,11 @@ function normalizePathname(pathname: string): string {
   return pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
 }
 
-function getLocationFromPathname(pathname: string): AppLocation {
+function getLocationFromPathname(pathname: string, search = ''): AppLocation {
   const path = normalizePathname(pathname);
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const projectId = params.get('projectId');
+  const projectName = params.get('projectName');
 
   if (path === '/login' || path === '/signup') {
     return { kind: 'auth', mode: path === '/signup' ? 'signup' : 'login' };
@@ -406,26 +410,26 @@ function getLocationFromPathname(pathname: string): AppLocation {
   }
 
   if (path === '/summarizer') {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
   }
 
   if (path === '/summarizer/new') {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'new', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'new', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId, projectName };
   }
 
   const segments = path.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
   }
 
   const [first, second] = segments;
   if (!isNavItem(first)) {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
   }
 
   if (first === 'research') {
     if (second === 'create') {
-      return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'create', researchTopicId: null, researchBriefingId: null, projectId: null };
+      return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'create', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
     }
 
     if (second) {
@@ -438,6 +442,7 @@ function getLocationFromPathname(pathname: string): AppLocation {
           researchTopicId: decodeURIComponent(second),
           researchBriefingId: null,
           projectId: null,
+          projectName: null,
         };
       }
 
@@ -449,10 +454,11 @@ function getLocationFromPathname(pathname: string): AppLocation {
         researchTopicId: decodeURIComponent(second),
         researchBriefingId: segments[2] === 'briefings' && segments[3] ? decodeURIComponent(segments[3]) : null,
         projectId: null,
+        projectName: null,
       };
     }
 
-    return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+    return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
   }
 
   if (first === 'projects') {
@@ -464,10 +470,11 @@ function getLocationFromPathname(pathname: string): AppLocation {
       researchTopicId: null,
       researchBriefingId: null,
       projectId: second ? decodeURIComponent(second) : null,
+      projectName: null,
     };
   }
 
-  return { kind: 'app', nav: first, summarizerView: first === 'summarizer' && second === 'new' ? 'new' : 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null };
+  return { kind: 'app', nav: first, summarizerView: first === 'summarizer' && second === 'new' ? 'new' : 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
 }
 
 function getPathForNav(nav: NavItem): string {
@@ -475,7 +482,7 @@ function getPathForNav(nav: NavItem): string {
 }
 
 export default function App() {
-  const [location, setLocation] = useState<AppLocation>(() => getLocationFromPathname(window.location.pathname));
+  const [location, setLocation] = useState<AppLocation>(() => getLocationFromPathname(window.location.pathname, window.location.search));
   const [authState, setAuthState] = useState(() => getStoredAuthState());
   const [authenticated, setAuthenticated] = useState<boolean>(() => isAuthenticated());
   const [authHydrating, setAuthHydrating] = useState<boolean>(() => Boolean(getStoredAuthState() && isAuthenticated()));
@@ -501,7 +508,7 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setLocation(getLocationFromPathname(window.location.pathname));
+      setLocation(getLocationFromPathname(window.location.pathname, window.location.search));
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -535,22 +542,7 @@ export default function App() {
         setStoredAuthState(nextAuth);
         setAuthState(nextAuth);
         setAuthenticated(true);
-        if (nextAuth.user.roles.some((role) => role.toLowerCase() === 'admin')) {
-          setAdminAccess(true);
-          return;
-        }
-
-        return getAdminRoles(storedAuth.session.accessToken)
-          .then(() => {
-            if (!cancelled) {
-              setAdminAccess(true);
-            }
-          })
-          .catch(() => {
-            if (!cancelled) {
-              setAdminAccess(false);
-            }
-          });
+        setAdminAccess(nextAuth.user.roles.some((role) => role.toLowerCase() === 'admin'));
       })
       .catch(() => {
         if (cancelled) return;
@@ -567,6 +559,35 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (location.kind !== 'admin' || !authenticated || isAdminRole || adminAccess !== null) {
+      return;
+    }
+
+    let cancelled = false;
+    const accessToken = authState?.session.accessToken;
+    if (!accessToken) {
+      setAdminAccess(false);
+      return;
+    }
+
+    getAdminRoles(accessToken)
+      .then(() => {
+        if (!cancelled) {
+          setAdminAccess(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAdminAccess(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adminAccess, authenticated, authState?.session.accessToken, isAdminRole, location.kind]);
 
   useEffect(() => {
     const normalizedPath = normalizePathname(window.location.pathname);
@@ -706,7 +727,11 @@ export default function App() {
     setAnalysisPhase('starting');
 
     const previewPromise = getYouTubePreview(normalizedUrl).catch(() => null);
-    const analyzePromise = analyzeVideo({ youtubeUrl: normalizedUrl, requestedByUserId: getCurrentUserId() });
+    const analyzePromise = analyzeVideo({
+      youtubeUrl: normalizedUrl,
+      requestedByUserId: getCurrentUserId(),
+      projectId: location.kind === 'app' ? location.projectId : null,
+    });
 
     const preview = await previewPromise;
     setAnalysisVideoMeta(buildAnalyzingVideoMeta(normalizedUrl, preview));
@@ -779,10 +804,11 @@ export default function App() {
   };
 
   const navigateToPath = (nextPath: string) => {
-    const normalizedNextPath = normalizePathname(nextPath);
-    if (normalizePathname(window.location.pathname) === normalizedNextPath) return;
-    window.history.pushState({}, '', normalizedNextPath);
-    setLocation(getLocationFromPathname(normalizedNextPath));
+    const nextUrl = new URL(nextPath, window.location.origin);
+    const normalizedNextPath = normalizePathname(nextUrl.pathname);
+    if (normalizePathname(window.location.pathname) === normalizedNextPath && window.location.search === nextUrl.search) return;
+    window.history.pushState({}, '', `${normalizedNextPath}${nextUrl.search}`);
+    setLocation(getLocationFromPathname(normalizedNextPath, nextUrl.search));
   };
 
   const handleNavChange = (nav: NavItem) => {
@@ -841,10 +867,23 @@ export default function App() {
       }
 
       if (isSummarizerBusy) {
-        return <AnalyzingView url={analysisUrl || urlRef.current} state={summarizerProcessingState} onCancel={handleChangeUrl} />;
+        return (
+          <AnalyzingView
+            url={analysisUrl || urlRef.current}
+            projectName={location.kind === 'app' ? location.projectName : null}
+            state={summarizerProcessingState}
+            onCancel={handleChangeUrl}
+          />
+        );
       }
 
-      return <MainContent onStartAnalysis={handleStartAnalysis} errorMessage={analysisError} />;
+      return (
+        <MainContent
+          onStartAnalysis={handleStartAnalysis}
+          errorMessage={analysisError}
+          projectName={location.kind === 'app' ? location.projectName : null}
+        />
+      );
     }
 
     if (selectedHistoryTranscript && activeNav === 'transcript') {
@@ -881,7 +920,7 @@ export default function App() {
       return <ProjectsPage />;
     }
     if (activeNav === 'todo') return <TodoPage />;
-    if (activeNav === 'notes') return <NotesPage />;
+    if (activeNav === 'notes') return <NotesPage onNavigate={navigateToPath} />;
     if (activeNav === 'settings') return <SettingsPage />;
     if (activeNav === 'profile') return <ProfilePage onNavChange={handleNavChange} />;
     if (activeNav === 'research') {

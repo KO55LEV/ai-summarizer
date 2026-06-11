@@ -8,6 +8,7 @@ export async function analyzeVideo(request: AnalyzeRequest): Promise<TranscriptS
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       requestedByUserId: request.requestedByUserId ?? null,
+      projectId: request.projectId ?? null,
       youtubeUrl: request.youtubeUrl,
       language: request.language,
       preferNativeTranscript: request.preferNativeTranscript ?? true,

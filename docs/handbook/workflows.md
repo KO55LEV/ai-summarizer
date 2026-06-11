@@ -1,72 +1,72 @@
-# Jobs и workflow
+# Jobs and Workflow
 
-Проект использует две связанные модели исполнения:
+The project uses two related execution models:
 
-- `jobs` для низкоуровневых фоновых задач
-- `workflows` для user-facing orchestration
-- `media_sources` для нормализованной source-identity между платформами
+- `jobs` for low-level background tasks
+- `workflows` for user-facing orchestration
+- `media_sources` for normalized source-identity across platforms
 
 ## Jobs
 
-Jobs исполняются worker-процессом.
+Jobs are executed by a worker process.
 
-Основные job types сейчас:
+Currently, the primary job types are:
 
 - `youtube.download`
 - `media.extract_audio`
 - `whisper.transcribe`
 - `transcript.import`
 
-Жизненный цикл job:
+Job lifecycle:
 
-1. создается в статусе `queued`
-2. worker забирает job под lease
-3. job переходит в `running`
-4. worker пишет progress и logs
-5. job завершается `succeeded`, `failed`, `cancelled` или `dead`
+1. Created with `queued` status
+2. The worker claims the job under a lease
+3. The job transitions to `running`
+4. The worker records progress and logs
+5. The job transitions to `succeeded`, `failed`, `cancelled`, or `dead`
 
 ## Workflow `youtube.summary`
 
-Это текущий orchestration flow для анализа YouTube видео.
+This is the current orchestration flow for analyzing YouTube videos.
 
-### Логика
+### Logic
 
-1. Проверяется native transcript.
-2. Если native transcript найден, он импортируется сразу.
-3. Если native transcript не найден, запускается manual pipeline.
+1. Check for a native transcript.
+2. If a native transcript is found, import it immediately.
+3. If no native transcript is found, launch the manual pipeline.
 4. Manual pipeline:
    - download video
    - extract audio
    - whisper transcribe
    - import transcript
-5. После успешного import workflow завершается `succeeded`.
+5. Upon successful import, the workflow transitions to `succeeded`.
 
 ## Workflow `youtube.transcript`
 
-Это workflow для public transcript scheduling endpoint.
+This is the workflow used for the public transcript scheduling endpoint.
 
-### Логика
+### Logic
 
-1. Проверяется native transcript.
-2. Если native transcript найден, он импортируется сразу.
-3. Если native transcript не найден, запускается manual pipeline.
+1. Check for a native transcript.
+2. If a native transcript is found, import it immediately.
+3. If no native transcript is found, launch the manual pipeline.
 4. Manual pipeline:
    - download video
    - extract audio
    - whisper transcribe
    - import transcript
-5. После успешного import workflow завершается `succeeded`.
+5. Upon successful import, the workflow transitions to `succeeded`.
 
-### Отличие от `youtube.summary`
+### Difference from `youtube.summary`
 
-В worker используется тот же набор шагов, но тип workflow отдельный:
+The worker uses the same set of steps, but uses a separate workflow type:
 
-- `youtube.summary` для summary-oriented orchestration
-- `youtube.transcript` для transcript scheduling и reuse
+- `youtube.summary` for summary-oriented orchestration
+- `youtube.transcript` for transcript scheduling and reuse
 
-### Диаграмма
+### Diagram
 
-Для визуального просмотра открой [workflows-visual.html](/Volumes/Data/Devs/Projects/AiSummarizer/docs/handbook/workflows-visual.html).
+For visual inspection, open [workflows-visual.html](file:///Volumes/Data/Devs/Projects/AiSummarizer/docs/handbook/workflows-visual.html).
 
 ```mermaid
 flowchart TD
@@ -98,19 +98,19 @@ flowchart TD
     J -. persists .-> X[(workflow_events)]
 ```
 
-### Шаги
+### Steps
 
-| Step key | Step type | Назначение |
+| Step key | Step type | Purpose |
 | --- | --- | --- |
-| `native_transcript_check` | `native_check` | поиск native subtitles |
-| `download_video` | `job` | создание `youtube.download` |
-| `extract_audio` | `job` | создание `media.extract_audio` |
-| `transcribe_audio` | `job` | создание `whisper.transcribe` |
-| `import_transcript` | `job` | создание `transcript.import` |
+| `native_transcript_check` | `native_check` | Searches for native subtitles |
+| `download_video` | `job` | Creates a `youtube.download` job |
+| `extract_audio` | `job` | Creates a `media.extract_audio` job |
+| `transcribe_audio` | `job` | Creates a `whisper.transcribe` job |
+| `import_transcript` | `job` | Creates a `transcript.import` job |
 
 ### Progress
 
-Система публикует примерный прогресс:
+The system publishes approximate progress:
 
 - `5%` - native transcript check
 - `15%` - downloading video
@@ -119,36 +119,37 @@ flowchart TD
 - `80%` - importing transcript
 - `100%` - completed
 
-### Что проверять в БД
+### DB Troubleshooting
 
-Если workflow идет не так, обычно смотрим:
+If a workflow goes wrong, check:
 
 - `workflows.status`
 - `workflows.current_step_key`
-- `workflow_steps.status` и `workflow_steps.output_json`
-- `workflow_events` для таймлайна
+- `workflow_steps.status` and `workflow_steps.output_json`
+- `workflow_events` for timeline
 - `jobs.status`, `jobs.progress_percent`, `jobs.progress_message`
 
 ## Events
 
-Каждый workflow пишет события в `workflow_events`.
+Each workflow writes events into `workflow_events`.
 
-Это используется для:
+This is used for:
 
-- трассировки состояния
-- диагностики ошибок
-- просмотра полного таймлайна выполнения
+- State tracing
+- Error diagnostics
+- Viewing the full execution timeline
 
-## Output directory
+## Output Directory
 
-Для workflow создается отдельный каталог:
+A separate folder is created for each workflow:
 
 - `Workflows__OutputDirectory`
-- затем подпапка на каждый `workflowId`
+- Subfolder for each `workflowId`
 
-Пример структуры:
+Example structure:
 
 - `.../workflows/{workflowId}/download/`
 - `.../workflows/{workflowId}/audio/`
 - `.../workflows/{workflowId}/transcript/`
 - `.../workflows/{workflowId}/import/`
+

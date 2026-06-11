@@ -34,6 +34,12 @@ function normalize(value?: string | null): string | null {
   return value && value.trim() ? value.trim() : null;
 }
 
+function normalizeColor(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toUpperCase() : null;
+}
+
 function buildStats(items: TodoItem[]): TodoListData['stats'] {
   const todayKey = new Date().toISOString().slice(0, 10);
   return {
@@ -86,6 +92,7 @@ export async function createMockTodo(request: CreateTodoRequest): Promise<TodoIt
     requestedByUserId: request.requestedByUserId ?? null,
     projectId: request.projectId ?? null,
     projectName,
+    color: normalizeColor(request.color),
     bucket: inferBucket({ bucket: request.bucket, status: request.status, dueAt: request.dueAt }),
     title: request.title,
     description: normalize(request.description),
@@ -117,6 +124,7 @@ export async function updateMockTodo(todoId: string, request: UpdateTodoRequest)
     ...todos[index],
     projectId: request.projectId ?? null,
     projectName,
+    color: normalizeColor(request.color),
     bucket: inferBucket({
       ...todos[index],
       bucket: request.bucket ?? todos[index].bucket,

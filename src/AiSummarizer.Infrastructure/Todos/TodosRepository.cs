@@ -210,6 +210,10 @@ public sealed class TodosRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
         {
             Value = (object?)todo.ProjectId ?? DBNull.Value
         });
+        command.Parameters.Add(new NpgsqlParameter("color", NpgsqlDbType.Text)
+        {
+            Value = (object?)todo.Color ?? DBNull.Value
+        });
         command.Parameters.AddWithValue("bucket", todo.Bucket);
         command.Parameters.AddWithValue("title", todo.Title);
         command.Parameters.Add(new NpgsqlParameter("description", NpgsqlDbType.Text)
@@ -238,6 +242,7 @@ public sealed class TodosRepository(NpgsqlDataSource dataSource, ISqlScriptLoade
             reader.IsDBNull(reader.GetOrdinal("requested_by_user_id")) ? null : reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
             reader.IsDBNull(reader.GetOrdinal("project_id")) ? null : reader.GetGuid(reader.GetOrdinal("project_id")),
             reader.IsDBNull(reader.GetOrdinal("project_name")) ? null : reader.GetString(reader.GetOrdinal("project_name")),
+            reader.IsDBNull(reader.GetOrdinal("color")) ? null : reader.GetString(reader.GetOrdinal("color")),
             reader.GetString(reader.GetOrdinal("bucket")),
             reader.GetString(reader.GetOrdinal("title")),
             reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),

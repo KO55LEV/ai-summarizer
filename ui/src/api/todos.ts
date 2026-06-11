@@ -6,6 +6,7 @@ export interface CreateTodoRequest {
   requestedByUserId?: string | null;
   projectId?: string | null;
   bucket?: 'today' | 'next' | 'later' | string | null;
+  color?: string | null;
   title: string;
   description?: string | null;
   cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | string;
@@ -18,6 +19,7 @@ export interface CreateTodoRequest {
 export interface UpdateTodoRequest {
   projectId?: string | null;
   bucket?: 'today' | 'next' | 'later' | string | null;
+  color?: string | null;
   title: string;
   description?: string | null;
   cadence: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'target' | string;

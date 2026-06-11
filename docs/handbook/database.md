@@ -1,17 +1,17 @@
-# База данных
+# Database
 
-Проект использует PostgreSQL и SQL-first миграции.
+The project uses PostgreSQL and SQL-first migrations.
 
-## Правила миграций
+## Migration Rules
 
-- каждая схема-изменение получает отдельный файл
-- старые миграции не редактируются после коммита
-- миграции идут по возрастающему префиксу
-- все таблицы живут в `public`
+- Each schema change gets a separate file
+- Old migrations are not edited after they are committed
+- Migrations are ordered by an increasing prefix
+- All tables live in the `public` schema
 
-## Группы таблиц
+## Table Groups
 
-### Пользователи и аутентификация
+### Users and Authentication
 
 - `users`
 - `auth_identities`
@@ -25,7 +25,7 @@
 - `disabled`
 - `deleted`
 
-`roles` сейчас включает:
+`roles` currently includes:
 
 - `admin`
 - `user`
@@ -49,7 +49,7 @@
 - `cancelled`
 - `dead`
 
-### Media sources
+### Media Sources
 
 - `media_sources`
 
@@ -184,7 +184,7 @@ TODO:
 
 `research_briefing_sources` stores the cited source list for each briefing.
 
-### Notes and projects
+### Notes and Projects
 
 - `projects`
 - `notes`
@@ -236,9 +236,9 @@ TODO:
 
 `telegram_accounts` and `user_telegram_accounts` store Telegram identity and the user-to-account link used for message routing.
 
-## Что хранится в prompts
+## What is stored in prompts
 
-`prompts` содержит текущую версию шаблона:
+`prompts` contains the current version of the template:
 
 - `prompt_key`
 - `title`
@@ -252,34 +252,34 @@ TODO:
 - `created_at`
 - `updated_at`
 
-## Что хранится в prompt_archive
+## What is stored in prompt_archive
 
-`prompt_archive` хранит immutable snapshots:
+`prompt_archive` stores immutable snapshots:
 
-- момент создания
-- каждое обновление
-- удаление
+- moment of creation
+- each update
+- deletion
 
-Это нужно, чтобы можно было понять:
+This is necessary to understand:
 
-- что именно было изменено
-- когда это было изменено
-- какой текст реально использовался раньше
+- what exactly was changed
+- when it was changed
+- what text was actually used in the past
 
-## Что хранится в prompt_runs
+## What is stored in prompt_runs
 
-`prompt_runs` хранит audit trail выполнения промпта:
+`prompt_runs` stores the audit trail of prompt execution:
 
 - request JSON
 - response JSON
-- статус запуска
+- run status
 - error_code
 - error_message
 - input/output/total tokens
 - duration
 - started_at / finished_at
 
-## Важные связи
+## Key Relationships
 
 - `auth_identities.user_id` -> `users.id`
 - `sessions.user_id` -> `users.id`
@@ -306,7 +306,7 @@ TODO:
 
 ## Seeds
 
-Seed-файлы используются для bootstrap и ручной проверки:
+Seed files are used for bootstrapping and manual testing:
 
 - test user
 - base roles
@@ -315,4 +315,5 @@ Seed-файлы используются для bootstrap и ручной про
 - prompt fixtures
 - research fixtures
 
-`db/seeds/0008_seed_roles_and_admin_user.sql` создает базовые роли и назначает test user в `admin`.
+`db/seeds/0008_seed_roles_and_admin_user.sql` creates base roles and assigns the test user as `admin`.
+

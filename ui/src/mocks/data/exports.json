@@ -1,10 +1,10 @@
 {
   "items": [
-    { "title": "Как ПРАВИЛЬНО читать книги",    "channel": "Беседы с Маргуляном", "format": "TXT",  "size": "42 KB",  "date": "1h ago",     "type": "transcript" },
-    { "title": "Как ПРАВИЛЬНО читать книги",    "channel": "Беседы с Маргуляном", "format": "JSON", "size": "78 KB",  "date": "1h ago",     "type": "full" },
-    { "title": "Как устроена Вселенная?",        "channel": "Космос Просто",        "format": "PDF",  "size": "156 KB", "date": "Yesterday",  "type": "summary" },
+    { "title": "How to read books CORRECTLY",    "channel": "Conversations with Margulan", "format": "TXT",  "size": "42 KB",  "date": "1h ago",     "type": "transcript" },
+    { "title": "How to read books CORRECTLY",    "channel": "Conversations with Margulan", "format": "JSON", "size": "78 KB",  "date": "1h ago",     "type": "full" },
+    { "title": "How does the Universe work?",        "channel": "Cosmos Simply",        "format": "PDF",  "size": "156 KB", "date": "Yesterday",  "type": "summary" },
     { "title": "Mars: The Next Frontier",        "channel": "Cosmic Future",        "format": "TXT",  "size": "28 KB",  "date": "3 days ago", "type": "transcript" },
     { "title": "How to Think Like a Programmer", "channel": "Fireship",             "format": "SRT",  "size": "18 KB",  "date": "1 week ago", "type": "subtitles" },
-    { "title": "Продуктивность без выгорания",   "channel": "Максим Дорофеев",      "format": "JSON", "size": "64 KB",  "date": "1 week ago", "type": "full" }
+    { "title": "Productivity without burnout",   "channel": "Maxim Dorofeev",      "format": "JSON", "size": "64 KB",  "date": "1 week ago", "type": "full" }
   ]
 }

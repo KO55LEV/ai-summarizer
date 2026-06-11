@@ -29,6 +29,7 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
                 Guid.NewGuid(),
                 requestedByUserId,
                 command.ProjectId,
+                NormalizeColor(command.Color),
                 NormalizeBucket(command.Bucket) ?? "today",
                 NormalizeRequired(command.Title),
                 NormalizeNullable(command.Description),
@@ -65,6 +66,7 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
                 existing.Id,
                 existing.RequestedByUserId,
                 command.ProjectId,
+                NormalizeColor(command.Color),
                 bucket,
                 NormalizeRequired(command.Title),
                 NormalizeNullable(command.Description),
@@ -118,6 +120,15 @@ public sealed class TodosService(ITodosRepository repository, IUsersRepository u
 
     private static string? NormalizeBucket(string? bucket)
         => string.IsNullOrWhiteSpace(bucket) ? null : ParseBucket(bucket).ToString().ToLowerInvariant();
+
+    private static string? NormalizeColor(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color)) return null;
+        var normalized = color.Trim();
+        return normalized.Length == 7 && normalized[0] == '#'
+            ? normalized.ToUpperInvariant()
+            : throw new TodoValidationException("Color must be a hex value like #00D4AA.");
+    }
 
     private static TodoCadence ParseCadence(string cadence)
         => Enum.Parse<TodoCadence>(cadence.Trim(), true);

@@ -1,6 +1,6 @@
-# Операции и запуск
+# Operations and Launch
 
-## Локальный запуск
+## Local Launch
 
 API:
 
@@ -27,18 +27,18 @@ docker compose up -d --build
 
 `AiSummarizer.Shared.EnvironmentBootstrapper`:
 
-- ищет `.env` в текущей директории и выше
-- подхватывает значения через `Environment.SetEnvironmentVariable`
-- поддерживает подстановки вида `${VAR}`
+- Searches for `.env` in the current directory and parent directories
+- Loads values using `Environment.SetEnvironmentVariable`
+- Supports variable substitutions using the `${VAR}` format
 
-Это означает:
+This means:
 
-- можно хранить `ConnectionStrings__Postgres` как шаблон
-- можно переиспользовать переменные внутри `.env`
+- You can store `ConnectionStrings__Postgres` as a template
+- You can reuse variables within `.env`
 
-## Основные переменные
+## Core Variables
 
-Минимум для запуска:
+Minimum requirements for launch:
 
 - `ConnectionStrings__Postgres`
 - `InternalApi__ApiKey`
@@ -62,7 +62,7 @@ Email provider choices:
 - `Email__Provider=Brevo` sends through Brevo
 - `Email__Provider=File` dumps messages into `Email__FileDump__FolderPath`
 
-Примеры:
+Examples:
 
 ```env
 POSTGRES_DB=AiSummarizer
@@ -145,48 +145,49 @@ Jobs__OpenRouterTranscribe__RetryDelay=00:00:30
 Jobs__OpenRouterTranscribe__RequestTimeoutSeconds=7200
 ```
 
-## Seed workflow
+## Workflow Seeding
 
-Рекомендуемый порядок bootstrap:
+Recommended bootstrap order:
 
-1. применить миграции
-2. загрузить seed user
-3. загрузить roles
-4. при необходимости создать demo jobs/workflows/prompts
+1. Apply migrations
+2. Load seed user
+3. Load roles
+4. Create demo jobs/workflows/prompts if necessary
 
-## Диагностика
+## Diagnostics
 
-Если что-то не работает, сначала проверять:
+If something is not working, check the following first:
 
-- есть ли `.env`
-- корректен ли `ConnectionStrings__Postgres`
-- доступен ли Postgres
-- верный ли `X-Internal-Api-Key`
-- запущен ли `whisper-service`
-- создает ли worker logs и пишет ли progress в БД
+- Is the `.env` file present?
+- Is `ConnectionStrings__Postgres` correct?
+- Is Postgres accessible?
+- Is `X-Internal-Api-Key` correct?
+- Is `whisper-service` running?
+- Is the worker producing logs and writing progress to the DB?
 
 ### Research synthesis JSON failures
 
-Если `research.topic.synthesize` падает на парсинге ответа:
+If `research.topic.synthesize` fails during response parsing:
 
-- проверь `research_synthesis_runs.response_json`
-- проверь `research_synthesis_runs.output_json`
-- проверь `prompt_runs.request_json` и `prompt_runs.response_json`, если синтез использует prompt audit
-- сравни ответ провайдера с ожидаемой JSON-схемой
-- при необходимости обнови prompt и bump `ResearchSynthesis__PromptVersion`
-- rerun synthesis для того же `research_topic_run_id`
+- Check `research_synthesis_runs.response_json`
+- Check `research_synthesis_runs.output_json`
+- Check `prompt_runs.request_json` and `prompt_runs.response_json` (if synthesis uses prompt audits)
+- Compare the provider's response against the expected JSON schema
+- If necessary, update the prompt and bump `ResearchSynthesis__PromptVersion`
+- Rerun synthesis for the same `research_topic_run_id`
 
-## Деплой
+## Deployment
 
-Предпочтительная схема:
+Preferred scheme:
 
-- API отдельно
-- Worker отдельно
-- Whisper service отдельно
-- PostgreSQL отдельно
+- API hosted separately
+- Worker hosted separately
+- Whisper service hosted separately
+- PostgreSQL hosted separately
 
-Это позволяет:
+This allows you to:
 
-- не держать тяжелую работу в API
-- масштабировать worker независимо
-- обновлять Whisper сервис без изменения API
+- Avoid handling heavy operations inside the API process
+- Scale workers independently
+- Update the Whisper service without affecting the API
+

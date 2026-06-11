@@ -254,6 +254,7 @@ export interface TodoItem {
   requestedByUserId: string | null;
   projectId: string | null;
   projectName: string | null;
+  color: string | null;
   bucket: 'today' | 'next' | 'later' | string;
   title: string;
   description: string | null;

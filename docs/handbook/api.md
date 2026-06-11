@@ -1,88 +1,88 @@
 # API
 
-API разделен на публичный слой и internal слой.
+The API is divided into a public layer and an internal layer.
 
 ## Users API
 
-Базовый путь: `/api/users`
+Base path: `/api/users`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/register` | регистрация пользователя |
-| POST | `/login` | логин по email/password |
-| POST | `/google` | логин через Google access token |
-| POST | `/facebook` | логин через Facebook access token |
-| POST | `/refresh` | обновление access/refresh token |
-| POST | `/logout` | logout текущей сессии |
-| GET | `/me` | текущий пользователь |
+| POST | `/register` | User registration |
+| POST | `/login` | Login via email/password |
+| POST | `/google` | Login via Google access token |
+| POST | `/facebook` | Login via Facebook access token |
+| POST | `/refresh` | Refresh access/refresh tokens |
+| POST | `/logout` | Logout the current session |
+| GET | `/me` | Get current user details |
 
-Формат `Authorization` для `logout` и `me`:
+`Authorization` header format for `logout` and `me`:
 
 - `Bearer <session-id>`
 
-Технически это GUID сессии, а не JWT.
+Note: This is technically a session GUID, not a JWT.
 
 ## Jobs API
 
-Базовый путь: `/internal/jobs`
+Base path: `/internal/jobs`
 
-Требует заголовок:
+Requires the following header:
 
 - `X-Internal-Api-Key: <key>`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/` | создать job |
-| GET | `/{jobId}` | получить job |
-| GET | `/active` | активные jobs |
-| GET | `/history` | история jobs |
-| GET | `/{jobId}/logs` | логи job |
+| POST | `/` | Create a job |
+| GET | `/{jobId}` | Get a job by ID |
+| GET | `/active` | Get active jobs |
+| GET | `/history` | Get jobs history |
+| GET | `/{jobId}/logs` | Get job logs |
 
-Этот API предназначен для worker-процессов и внутренних интеграций.
+This API is designed for worker processes and internal integrations.
 
 ## Workflows API
 
-Базовый путь: `/api/workflows`
+Base path: `/api/workflows`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/youtube-summary` | создать workflow `youtube.summary` |
-| GET | `/{workflowId}` | получить workflow |
-| GET | `/active` | активные workflows |
-| GET | `/history` | история workflows |
-| GET | `/{workflowId}/steps` | шаги workflow |
-| GET | `/{workflowId}/events` | события workflow |
+| POST | `/youtube-summary` | Create a `youtube.summary` workflow |
+| GET | `/{workflowId}` | Get workflow details |
+| GET | `/active` | Get active workflows |
+| GET | `/history` | Get workflows history |
+| GET | `/{workflowId}/steps` | Get workflow steps |
+| GET | `/{workflowId}/events` | Get workflow events |
 
 ## Transcripts API
 
-Базовый путь: `/api/transcripts`
+Base path: `/api/transcripts`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/youtube/schedule` | публично запустить transcript flow для YouTube URL |
-| GET | `/requests/{requestId}` | получить статус и audit одного public-запроса |
-| GET | `/source/{sourceId}` | получить готовый transcript по `sourceId` |
-| GET | `/history` | список запущенных transcript requests для sidebar/history |
+| POST | `/youtube/schedule` | Publicly launch the transcript flow for a YouTube URL |
+| GET | `/requests/{requestId}` | Get status and audit info for a single public request |
+| GET | `/source/{sourceId}` | Get a completed transcript by `sourceId` |
+| GET | `/history` | List of triggered transcript requests for the sidebar/history |
 
-Поведение endpoint:
+Endpoint Behavior:
 
-1. принимает `requestedByUserId`, `youtubeUrl`, `language`, `preferNativeTranscript`
-2. валидирует, что это YouTube video URL
-3. извлекает `media source` identity и проверяет, есть ли уже готовый transcript по `source_id`
-4. если transcript уже есть, возвращает его сразу со `status = completed`
-5. если есть активный workflow для этого URL, возвращает его со `status = queued`
-6. если ничего не найдено, создает workflow `youtube.transcript` и отдает `status = queued`
+1. Accepts `requestedByUserId`, `youtubeUrl`, `language`, `preferNativeTranscript`.
+2. Validates that the input is a valid YouTube video URL.
+3. Extracts the `media source` identity and checks if a completed transcript already exists for the `source_id`.
+4. If a transcript already exists, returns it immediately with `status = completed`.
+5. If there is an active workflow running for this URL, returns it with `status = queued`.
+6. If no matches are found, creates a `youtube.transcript` workflow and returns `status = queued`.
 
-Это публичный entrypoint для scheduling transcript pipeline. Само исполнение делает worker.
+This is the public entrypoint for scheduling the transcript pipeline. The actual execution is handled by the worker.
 
-`POST /youtube/schedule` возвращает:
+`POST /youtube/schedule` returns:
 
 - `requestId`
 - `status`
-- `transcript` если уже готов
-- `workflow` если обработка ещё идёт
+- `transcript` (if already completed)
+- `workflow` (if processing is still in progress)
 
-`GET /requests/{requestId}` возвращает один audit-run:
+`GET /requests/{requestId}` returns a single audit run:
 
 - `request`
 - `response`
@@ -94,18 +94,18 @@ API разделен на публичный слой и internal слой.
 - `errorCode`
 - `errorMessage`
 
-`GET /source/{sourceId}` возвращает готовый transcript с `transcriptText` и базовыми метаданными. Если transcript ещё не готов, endpoint возвращает `404`.
+`GET /source/{sourceId}` returns the completed transcript containing `transcriptText` and basic metadata. If the transcript is not yet ready, the endpoint returns `404`.
 
-`GET /history` возвращает список recent transcript requests для sidebar. Фильтр `requestedByUserId` пока передаётся query-параметром.
+`GET /history` returns a list of recent transcript requests for the sidebar. The `requestedByUserId` filter is currently passed as a query parameter.
 
-Каждый public-запрос также пишется в `public_request_runs` с `api_area`, `operation_name`, `http_method`, `request_path`, `request_json`, `response_json`, `started_at` и `finished_at`.
-В ответе API возвращается `requestId`, чтобы можно было сопоставить ответ с audit-записью.
+Each public request is also recorded in `public_request_runs` containing `api_area`, `operation_name`, `http_method`, `request_path`, `request_json`, `response_json`, `started_at`, and `finished_at`.
+The API response returns the `requestId` to map the response back to its audit record.
 
-`TranscriptHistoryItemResponse` дополнительно отдаёт derived-поля для UI:
+`TranscriptHistoryItemResponse` provides additional derived fields for the UI:
 
-- `displayStatus` для человекочитаемого статуса (`completed`, `queued`, `running`, `failed`, `cancelled`)
-- `sourceLabel` для badge в sidebar/history
-- `language` и `durationSeconds` для компактного отображения карточек и таблиц
+- `displayStatus` for a human-readable status (`completed`, `queued`, `running`, `failed`, `cancelled`)
+- `sourceLabel` for badges in the sidebar/history
+- `language` and `durationSeconds` for compact card and table rendering
 
 Response models:
 
@@ -115,21 +115,21 @@ Response models:
 
 ## Research API
 
-Базовый путь: `/api/research`
+Base path: `/api/research`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/` | список research topics, можно фильтровать по `requestedByUserId` |
-| POST | `/` | создать research topic |
-| GET | `/{topicId}` | получить topic |
-| PUT | `/{topicId}` | обновить topic |
-| DELETE | `/{topicId}` | удалить topic |
-| GET | `/{topicId}/briefing` | получить latest briefing |
-| GET | `/{topicId}/briefings` | история briefings |
-| GET | `/{topicId}/history` | alias для истории briefings |
-| POST | `/{topicId}/briefings` | создать briefing record |
+| GET | `/` | List research topics (can filter by `requestedByUserId`) |
+| POST | `/` | Create a research topic |
+| GET | `/{topicId}` | Get a research topic |
+| PUT | `/{topicId}` | Update a research topic |
+| DELETE | `/{topicId}` | Delete a research topic |
+| GET | `/{topicId}/briefing` | Get the latest briefing |
+| GET | `/{topicId}/briefings` | Get briefing history |
+| GET | `/{topicId}/history` | Alias for briefing history |
+| POST | `/{topicId}/briefings` | Create a briefing record |
 
-Research topics and briefings are user-scoped through `requestedByUserId`, because auth is not wired yet.
+Research topics and briefings are currently user-scoped through `requestedByUserId`, as authentication is not yet fully wired.
 
 Primary response models:
 
@@ -140,15 +140,15 @@ Primary response models:
 
 ## Todos API
 
-Базовый путь: `/api/todos`
+Base path: `/api/todos`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/` | список todos, можно фильтровать по `requestedByUserId`, `projectId`, `cadence`, `status` |
-| GET | `/{todoId}` | получить todo |
-| POST | `/` | создать todo |
-| PUT | `/{todoId}` | обновить todo |
-| DELETE | `/{todoId}` | удалить todo |
+| GET | `/` | List todos (can filter by `requestedByUserId`, `projectId`, `cadence`, `status`) |
+| GET | `/{todoId}` | Get a todo by ID |
+| POST | `/` | Create a todo |
+| PUT | `/{todoId}` | Update a todo |
+| DELETE | `/{todoId}` | Delete a todo |
 
 Todos are user-scoped through `requestedByUserId` and can be linked to `projects` via `projectId`.
 
@@ -160,23 +160,23 @@ Primary response models:
 
 ## Prompts API
 
-Базовый путь: `/api/prompts`
+Base path: `/api/prompts`
 
-| Method | Path | Назначение |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/` | создать prompt |
-| GET | `/{promptId}` | получить prompt |
-| GET | `/` | список prompts |
-| PUT | `/{promptId}` | обновить prompt |
-| DELETE | `/{promptId}` | удалить prompt |
-| GET | `/{promptId}/archive` | история версий prompt |
-| GET | `/{promptId}/runs` | audit runs промпта |
-| GET | `/{promptId}/usage` | агрегированная статистика запусков |
-| POST | `/{promptId}/runs` | записать run audit вручную или из runtime |
+| POST | `/` | Create a prompt |
+| GET | `/{promptId}` | Get a prompt by ID |
+| GET | `/` | List prompts |
+| PUT | `/{promptId}` | Update a prompt |
+| DELETE | `/{promptId}` | Delete a prompt |
+| GET | `/{promptId}/archive` | Get prompt version history |
+| GET | `/{promptId}/runs` | Get prompt execution audit logs |
+| GET | `/{promptId}/usage` | Get aggregated execution statistics |
+| POST | `/{promptId}/runs` | Record a run audit manually or from the runtime |
 
-## Ошибки
+## Errors
 
-Ошибки централизованы через middleware и возвращают JSON вида:
+Errors are handled centrally via middleware and return JSON in the following format:
 
 ```json
 {
@@ -185,9 +185,10 @@ Primary response models:
 }
 ```
 
-Типовые коды:
+Standard codes:
 
 - `401 Unauthorized`
 - `404 Not Found`
 - `409 Conflict`
 - `500 Internal Server Error`
+

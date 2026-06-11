@@ -1,41 +1,41 @@
-# Архитектура и модули
+# Architecture and Modules
 
-Проект построен как SQL-first монолит с четким разделением на слои.
+The project is built as a SQL-first monolith with a clear separation of layers.
 
-## Слои
+## Layers
 
 ### `AiSummarizer.Api`
 
-HTTP API слой:
+HTTP API layer:
 
-- принимает пользовательские запросы
-- валидирует входные данные
-- вызывает application services
-- возвращает JSON-ответы
+- Accepts user requests
+- Validates input data
+- Invokes application services
+- Returns JSON responses
 
 ### `AiSummarizer.Worker`
 
-Фоновый процесс:
+Background process:
 
-- забирает jobs из БД
-- исполняет long-running обработку
-- поддерживает workflow orchestration
-- пишет прогресс и логи обратно в БД
+- Polls jobs from the database
+- Executes long-running processing tasks
+- Supports workflow orchestration
+- Writes progress and logs back to the database
 
 ### `AiSummarizer.Application`
 
-Use-case слой:
+Use-case layer:
 
 - `UsersService`
 - `JobsService`
 - `WorkflowsService`
 - `PromptsService`
 
-Здесь находится основная бизнес-логика.
+This layer contains the core business logic.
 
 ### `AiSummarizer.Domain`
 
-Чистые доменные модели:
+Pure domain models:
 
 - `User`
 - `Session`
@@ -45,34 +45,35 @@ Use-case слой:
 
 ### `AiSummarizer.Infrastructure`
 
-Хранилище и интеграции:
+Storage and integrations:
 
-- PostgreSQL через `Npgsql`
-- SQL-скрипты в `src/**/Sql`
-- репозитории для доступа к данным
-- external auth verifier для Google/Facebook
+- PostgreSQL via `Npgsql`
+- SQL scripts in `src/**/Sql`
+- Data access repositories
+- External auth verifier for Google/Facebook
 
 ### `AiSummarizer.Shared`
 
-Общая инфраструктура старта:
+Common startup infrastructure:
 
-- загрузка `.env`
-- расширение `${VAR}` внутри env-файлов
-- переиспользуется API и worker
+- Loading `.env`
+- Resolving `${VAR}` expansions inside env files
+- Reused by both API and Worker
 
-## Направление зависимостей
+## Dependency Flow
 
-Правило простое:
+The rule is simple:
 
 - `Api` -> `Application`
 - `Worker` -> `Application`
 - `Application` -> `Domain`
-- `Infrastructure` -> `Application` и `Domain`
-- `Shared` -> используется на старте, но не содержит бизнес-логики
+- `Infrastructure` -> `Application` and `Domain`
+- `Shared` -> Used during startup, does not contain business logic
 
-## Почему так сделано
+## Why it is built this way
 
-- SQL-first миграции и SQL-скрипты проще ревьюить
-- фоновые задачи не блокируют HTTP API
-- workflow state можно восстановить из БД
-- prompts можно тюнить и архивировать независимо от кода
+- SQL-first migrations and SQL scripts are easier to review
+- Background tasks do not block the HTTP API
+- Workflow state can be recovered from the database
+- Prompts can be tuned and archived independently of code
+

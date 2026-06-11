@@ -1,37 +1,38 @@
-# Обзор системы
+# System Overview
 
-`AiSummarizer` - это .NET-приложение для обработки видео и текста с последующим анализом через LLM.
+`AiSummarizer` is a .NET application for video and text processing followed by analysis via LLM.
 
-Основной сценарий:
+Main scenario:
 
-1. Пользователь создает workflow на основе YouTube URL.
-2. Worker проверяет, есть ли native transcript.
-3. Если transcript есть, он импортируется напрямую.
-4. Если transcript нет, workflow идет через download -> extract audio -> whisper transcribe -> transcript import.
-5. Результаты, журналы и промежуточные состояния сохраняются в PostgreSQL.
-6. После этого поверх transcript можно запускать LLM-промпты.
+1. The user creates a workflow based on a YouTube URL.
+2. The worker checks if a native transcript is available.
+3. If a transcript is available, it is imported directly.
+4. If there is no transcript, the workflow goes through download -> extract audio -> whisper transcribe -> transcript import.
+5. Results, logs, and intermediate states are saved in PostgreSQL.
+6. After this, LLM prompts can be run on top of the transcript.
 
-Что уже есть в проекте:
+What is already in the project:
 
-- пользовательская аутентификация
-- internal jobs API для worker-процессов
-- workflow orchestration для `youtube.summary`
-- таблицы ролей и связей user-role
-- CRUD для prompts
-- archive history для prompts
-- audit log для prompt runs
+- User authentication
+- Internal jobs API for worker processes
+- Workflow orchestration for `youtube.summary`
+- Role tables and user-role relations
+- CRUD for prompts
+- Archive history for prompts
+- Audit log for prompt runs
 
-Что проект не делает сам по себе:
+What the project does not do on its own:
 
-- не хранит бизнес-логику в API-контроллерах
-- не выполняет тяжелые задачи внутри API
-- не привязывает prompts к конкретному LLM provider на уровне runtime автоматически, если это не реализовано отдельным сервисом
+- Does not store business logic in API controllers
+- Does not perform heavy tasks inside the API
+- Does not bind prompts to a specific LLM provider at the runtime level automatically, unless implemented by a separate service
 
-Runtime-слои:
+Runtime layers:
 
-- `AiSummarizer.Api` - публичный HTTP API
-- `AiSummarizer.Worker` - фоновые jobs и workflow processor
-- `AiSummarizer.Infrastructure` - SQL-first доступ к PostgreSQL
-- `AiSummarizer.Application` - use cases и сервисы
-- `AiSummarizer.Domain` - доменные модели
-- `AiSummarizer.Shared` - общий bootstrap конфигурации
+- `AiSummarizer.Api` - public HTTP API
+- `AiSummarizer.Worker` - background jobs and workflow processor
+- `AiSummarizer.Infrastructure` - SQL-first access to PostgreSQL
+- `AiSummarizer.Application` - use cases and services
+- `AiSummarizer.Domain` - domain models
+- `AiSummarizer.Shared` - shared configuration bootstrap
+

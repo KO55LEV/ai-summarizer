@@ -1,21 +1,22 @@
 # Documentation
 
-Основная документация проекта находится в `docs/handbook/`.
+The main project documentation is located in `docs/handbook/`.
 
-Рекомендуемый старт:
+Recommended start:
 
 - [Handbook README](handbook/README.md)
-- [Обзор системы](handbook/overview.md)
-- [Архитектура и модули](handbook/architecture.md)
-- [База данных](handbook/database.md)
+- [System Overview](handbook/overview.md)
+- [Architecture and Modules](handbook/architecture.md)
+- [Database](handbook/database.md)
 - [API](handbook/api.md)
-- [Jobs и workflow](handbook/workflows.md)
-- [Research search implementation plan](handbook/research-search-implementation-plan.md)
-- [Prompts и LLM-аудит](handbook/prompts.md)
-- [Пользователи, роли и безопасность](handbook/security.md)
-- [Операции и запуск](handbook/operations.md)
+- [Jobs and Workflow](handbook/workflows.md)
+- [Research Search Implementation Plan](handbook/research-search-implementation-plan.md)
+- [Prompts and LLM Audit](handbook/prompts.md)
+- [Users, Roles and Security](handbook/security.md)
+- [Operations and Launch](handbook/operations.md)
 
-Legacy-заметки:
+Legacy notes:
 
 - [Runbook](runbook.md)
 - [Deployment worker guide](deployment-worker-guide.md)
+

@@ -278,26 +278,62 @@ type NoteDetailModel = NoteDetailResponse & {
   note: NoteResponse;
 };
 
-export default function NotesPage() {
+function getInitialCreateContext(): { open: boolean; projectId: string; projectName: string | null; returnTo: string | null } {
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('projectId')?.trim() || 'inbox';
+  const create = params.get('create');
+  const returnTo = params.get('returnTo')?.trim() || null;
+
+  return {
+    open: create === '1' || create === 'true',
+    projectId,
+    projectName: params.get('projectName')?.trim() || null,
+    returnTo: returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null,
+  };
+}
+
+function formatProjectOptionLabel(projectId: string, projectName: string | null, fallback: string) {
+  const trimmed = projectName?.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  if (trimmed.toLowerCase() === 'inbox') {
+    return projectId === 'inbox' ? 'Inbox' : 'Inbox project';
+  }
+
+  return trimmed;
+}
+
+function navigateWithinApp(path: string) {
+  const nextUrl = new URL(path, window.location.origin);
+  window.history.pushState({}, '', `${nextUrl.pathname}${nextUrl.search}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+export default function NotesPage({ onNavigate }: { onNavigate?: (path: string) => void } = {}) {
+  const [initialCreateContext] = useState(getInitialCreateContext);
   const [notes, setNotes] = useState<NoteResponse[]>([]);
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | NoteStatus>('all');
-  const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [projectFilter, setProjectFilter] = useState<string>(
+    initialCreateContext.projectId === 'inbox' ? 'all' : initialCreateContext.projectId,
+  );
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteDetailModel | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(initialCreateContext.open);
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createDraftNoteId, setCreateDraftNoteId] = useState<string | null>(null);
   const [createAttachments, setCreateAttachments] = useState<File[]>([]);
   const [createForm, setCreateForm] = useState({
     title: '',
-    projectId: 'inbox',
+    projectId: initialCreateContext.projectId,
     inputKind: 'text' as NoteInputKind,
     summary: '',
   });
@@ -405,7 +441,15 @@ export default function NotesPage() {
         inputKind: 'text',
         summary: '',
       });
-      setSelectedNoteId(noteId!);
+      if (initialCreateContext.returnTo) {
+        if (onNavigate) {
+          onNavigate(initialCreateContext.returnTo);
+        } else {
+          navigateWithinApp(initialCreateContext.returnTo);
+        }
+      } else {
+        setSelectedNoteId(noteId!);
+      }
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create note');
     } finally {
@@ -459,12 +503,53 @@ export default function NotesPage() {
   }, [models, projectFilter, search, statusFilter]);
 
   const projectOptions = useMemo(() => {
+    const hasInitialProject = projects.some((project) => project.id === initialCreateContext.projectId);
+    const scopedProject =
+      initialCreateContext.projectId !== 'inbox' && initialCreateContext.projectId !== 'all' && !hasInitialProject
+        ? [{
+            id: initialCreateContext.projectId,
+            label: formatProjectOptionLabel(initialCreateContext.projectId, initialCreateContext.projectName, 'Selected project'),
+          }]
+        : [];
+    const visibleProjects = projects.filter((project) => {
+      const label = project.name.trim().toLowerCase();
+      return project.id !== 'inbox' && label !== 'inbox';
+    });
+
     return [
       { id: 'all', label: 'All notes' },
       { id: 'inbox', label: 'Inbox' },
-      ...projects.map((project) => ({ id: project.id, label: project.name })),
+      ...scopedProject,
+      ...visibleProjects.map((project) => ({
+        id: project.id,
+        label: formatProjectOptionLabel(project.id, project.name, 'Selected project'),
+      })),
     ];
-  }, [projects]);
+  }, [initialCreateContext.projectId, initialCreateContext.projectName, projects]);
+
+  const projectCreateOptions = useMemo(() => {
+    const options = projects
+      .filter((project) => {
+        const label = project.name.trim().toLowerCase();
+        return project.id !== 'inbox' && label !== 'inbox';
+      })
+      .map((project) => ({
+        id: project.id,
+        name: formatProjectOptionLabel(project.id, project.name, 'Selected project'),
+      }));
+    const hasInitialProject = options.some((project) => project.id === initialCreateContext.projectId);
+    if (initialCreateContext.projectId === 'inbox' || initialCreateContext.projectId === 'all' || hasInitialProject) {
+      return options;
+    }
+
+    return [
+      {
+        id: initialCreateContext.projectId,
+        name: formatProjectOptionLabel(initialCreateContext.projectId, initialCreateContext.projectName, 'Selected project'),
+      },
+      ...options,
+    ];
+  }, [initialCreateContext.projectId, initialCreateContext.projectName, projects]);
 
   const projectSummary = useMemo(() => {
     const sorted = [...models].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
@@ -713,7 +798,7 @@ export default function NotesPage() {
       {createOpen && (
         <NoteCreateModal
           form={createForm}
-          projects={projects}
+          projects={projectCreateOptions}
           attachments={createAttachments}
           draftNoteCreated={Boolean(createDraftNoteId)}
           saving={createSaving}
@@ -723,6 +808,13 @@ export default function NotesPage() {
             setCreateDraftNoteId(null);
             setCreateAttachments([]);
             setCreateError(null);
+            if (initialCreateContext.returnTo) {
+              if (onNavigate) {
+                onNavigate(initialCreateContext.returnTo);
+              } else {
+                navigateWithinApp(initialCreateContext.returnTo);
+              }
+            }
           }}
           onChange={setCreateForm}
           onAttachmentsChange={(files) => {
@@ -820,7 +912,7 @@ function NoteCreateModal({
     inputKind: NoteInputKind;
     summary: string;
   };
-  projects: ProjectResponse[];
+  projects: Array<{ id: string; name: string }>;
   attachments: File[];
   draftNoteCreated: boolean;
   saving: boolean;
@@ -1039,7 +1131,12 @@ function NoteCreateModal({
             <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted">Create note</div>
             <h3 className="mt-1 text-[18px] font-semibold text-text-primary">New note</h3>
           </div>
-          <button onClick={onClose} className="rounded-lg border border-border bg-bg-input p-2 text-text-secondary hover:text-text-primary">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close note composer"
+            className="rounded-lg border border-border bg-bg-input p-2 text-text-secondary hover:text-text-primary"
+          >
             <X size={16} />
           </button>
         </div>

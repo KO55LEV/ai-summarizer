@@ -1,33 +1,33 @@
-# Практическое руководство: `.env`, Docker и worker-изоляция
+# Practical Guide: `.env`, Docker, and Worker Isolation
 
-Этот документ описывает, как держать окружение для `AiSummarizer` на VPS и в Docker, чтобы:
+This document describes how to manage the environment for `AiSummarizer` on a VPS and in Docker to ensure:
 
-- API оставался легким и не выполнял тяжелую работу
-- `worker` обрабатывал long-running jobs отдельно
-- `whisper-service` жил как отдельный сервис
-- секреты не попадали в git
+- The API remains lightweight and does not perform heavy tasks
+- The `worker` processes long-running jobs separately
+- The `whisper-service` runs as a separate standalone service
+- Secrets do not get committed to git
 
-## Базовая схема
+## Core Architecture
 
-Рекомендуемый набор сервисов:
+Recommended service stack:
 
-- `api` - принимает запросы пользователя и создает jobs
-- `worker` - читает jobs из БД и выполняет их
-- `whisper-service` - отдельный сервис для транскрипции
-- `postgres` - база данных
+- `api` - Accepts user requests and creates jobs
+- `worker` - Polls jobs from the database and executes them
+- `whisper-service` - Standalone service for transcription
+- `postgres` - Database
 
-Эта схема работает так:
+The execution flow works as follows:
 
-1. API принимает запрос.
-2. API создает job в БД.
-3. Worker забирает job по lease.
-4. Worker запускает нужный обработчик.
-5. Долгие операции выполняются внутри worker-процесса или дочернего процесса.
-6. Результат и логи сохраняются в БД.
+1. The API receives a request.
+2. The API creates a job in the database.
+3. The worker claims the job under a lease.
+4. The worker runs the appropriate handler.
+5. Long-running operations execute inside the worker process or as child processes.
+6. Results and logs are saved back to the database.
 
-## Где держать `.env`
+## Where to keep `.env`
 
-Для локального запуска и VPS удобно держать `.env` рядом с корневым `docker-compose.yml`:
+For local execution and VPS deployments, it is convenient to keep `.env` alongside the root `docker-compose.yml`:
 
 ```text
 AiSummarizer/
@@ -41,33 +41,33 @@ AiSummarizer/
   docs/
 ```
 
-Правило:
+Rules:
 
-- `.env` не коммитить
-- `.env.example` коммитить
-- `.env` должен лежать рядом с `docker-compose.yml`, чтобы Docker Compose подхватывал его автоматически
+- Do NOT commit `.env` to git
+- DO commit `.env.example` to git
+- The `.env` file must reside in the same directory as `docker-compose.yml` so Docker Compose loads it automatically
 
-Если нужен более строгий вариант для VPS, `.env` можно хранить вне репозитория в отдельной deploy-папке. Логика остается той же.
+If a more secure setup is needed for VPS, you can store `.env` outside the repository in a dedicated deployment folder. The logic remains the same.
 
-Для локального запуска `.NET` entrypoint-проекты читают `.env` автоматически через общий bootstrapper перед созданием host. В Docker переменные обычно приходят уже из окружения контейнера, и тогда они имеют приоритет над значениями из файла.
+For local execution, the .NET entry point projects automatically load `.env` via a shared bootstrapper before creating the host. In Docker, variables are typically provided from the container environment, which takes precedence over values in the file.
 
-## Что класть в `.env`
+## What to put in `.env`
 
-В `.env` обычно кладут:
+Common environment variables:
 
-- параметры Postgres
-- connection strings
-- internal API keys
-- search provider API keys
-- email provider API keys
-- transcription provider defaults
-- reasoning provider keys and model defaults
+- Postgres parameters
+- Connection strings
+- Internal API keys
+- Search provider API keys
+- Email provider API keys
+- Transcription provider defaults
+- Reasoning provider keys and model defaults
 - JWT signing keys
-- настройки worker
-- настройки Whisper
-- путь к `yt-dlp`
+- Worker settings
+- Whisper settings
+- Path to `yt-dlp`
 
-Пример набора переменных:
+Example variable set:
 
 ```env
 POSTGRES_DB=AiSummarizer
@@ -130,47 +130,112 @@ Workflow steps should derive their step folders from `Workflows__OutputDirectory
 - `.../workflows/{workflowId}/transcript/`
 - `.../workflows/{workflowId}/import/`
 
-## Как это работает в Docker
+## How it works in Docker
 
-В Docker схема должна быть разнесена по контейнерам:
+In Docker, the architecture should be split across containers:
 
-- один контейнер для API
-- один контейнер для worker
-- один контейнер для `whisper-service`
-- один контейнер для Postgres
+- One container for the API
+- One container for the worker
+- One container for the `whisper-service`
+- One container for Postgres
 
-Плюсы такой схемы:
+Advantages of this setup:
 
-- API не блокируется длинными операциями
-- worker можно масштабировать горизонтально
-- `whisper-service` можно обновлять отдельно
-- long-running job не ломает остальную систему
+- The API is not blocked by long-running operations
+- The worker can scale horizontally
+- The `whisper-service` can be updated independently
+- A long-running job failure does not crash the rest of the system
 
-Если используешь `Email__Provider=File` для локального дампа писем, смонтируй папку `Email__FileDump__FolderPath` в volume, чтобы письма сохранялись вне контейнера.
+If you use `Email__Provider=File` for local email dumps, mount the `Email__FileDump__FolderPath` folder in a volume to preserve emails outside the container.
 
-## Как worker выполняет долгие задачи
+## How the worker processes long-running tasks
 
-Worker не должен выполнять все в одном глобальном потоке.
+The worker should not run everything in a single global thread.
 
-Правильная модель:
+Correct model:
 
-- worker берет job из очереди в БД
-- job лочится через lease
-- worker запускает обработчик
-- если нужно, обработчик создает отдельный child process, например `yt-dlp`
-- progress и heartbeat пишутся в БД
-- если worker падает, lease истекает, job становится доступной снова
+- The worker polls jobs from the database queue
+- The job is locked using a lease
+- The worker invokes the appropriate handler
+- If necessary, the handler spawns a separate child process (e.g., `yt-dlp`)
+- Progress and heartbeats are written back to the database
+- If the worker crashes, the lease expires and the job becomes available for polling again
 
-Это позволяет безопасно работать с:
+This ensures safe handling of:
 
-- YouTube download
+- YouTube downloads
 - Whisper transcription
-- генерацией summary
-- другими long-running задачами
+- Summary generation
+- Other long-running tasks
 
-## Изоляция long-running процессов
+## Long-Running Process Isolation
 
-Для каждого тяжелого job type должен быть свой обработчик:
+Each heavy job type should have its own handler:
+
+- `youtube.download`
+- `whisper.transcribe`
+- `summary.generate`
+- Other types as the product grows
+
+Each handler can:
+
+- Spawn an external process
+- Call an HTTP service
+- Process files in a temporary directory
+- Report progress percentage
+
+This provides proper isolation:
+
+- A single job does not block the API
+- A single job does not block other jobs
+- Multiple worker instances can be spun up
+
+## Important Worker Container Details
+
+If the worker runs `yt-dlp`, its image must contain:
+
+- `yt-dlp`
+- `ffmpeg`
+- Write permissions for the output directory
+- Access to `/tmp` for temporary storage
+
+If the worker calls `whisper-service` via HTTP, Python and `faster-whisper` are not required inside the worker image. This is correct: Whisper is kept separate. If you switch transcription providers later, the keys will remain in `.env`, and the provider configuration will be stored in application settings.
+
+## VPS Recommendation
+
+For VPS deployment, run via Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+Each service then runs independently:
+
+- The API serves requests
+- The Worker processes jobs
+- Whisper handles transcription
+- Postgres stores state
+
+## Practical Summary
+
+It is critical to keep three layers separated:
+
+1. **Public API**
+   - Handles user requests
+   - Creates jobs
+   - Returns results
+
+2. **Internal Worker**
+   - Polls jobs
+   - Executes long-running tasks
+   - Logs status and progress
+
+3. **External processing services**
+   - `whisper-service`
+   - Other specialized services as they are introduced
+
+This approach scales cleanly and keeps system evolution straightforward.
+�о job type должен быть свой обработчик:
 
 - `youtube.download`
 - `whisper.transcribe`

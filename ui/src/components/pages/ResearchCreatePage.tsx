@@ -51,12 +51,32 @@ const OUTPUT_OPTIONS = [
 
 const DELIVERY_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '15:00', '18:00', '20:00', '22:00'];
 
+function getInitialCreateContext(): { projectId: string | null; projectName: string | null; returnTo: string | null } {
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('projectId')?.trim() || null;
+  const projectName = params.get('projectName')?.trim() || null;
+  const returnTo = params.get('returnTo')?.trim() || null;
+
+  return {
+    projectId,
+    projectName,
+    returnTo: returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null,
+  };
+}
+
+function navigateWithinApp(path: string) {
+  const nextUrl = new URL(path, window.location.origin);
+  window.history.pushState({}, '', `${nextUrl.pathname}${nextUrl.search}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 interface ResearchCreatePageProps {
   onBack: () => void;
   topic?: ResearchTopic | null;
 }
 
 export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
+  const initialCreateContext = useMemo(getInitialCreateContext, []);
   const isEdit = Boolean(topic);
   const [name, setName] = useState(topic?.name ?? '');
   const [description, setDescription] = useState(topic?.description ?? '');
@@ -121,7 +141,7 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
       } else {
         await createResearchTopic({
           requestedByUserId: getCurrentUserId(),
-          projectId: null,
+          projectId: initialCreateContext.projectId,
           name: name.trim(),
           description: description.trim() || undefined,
           frequency,
@@ -132,7 +152,11 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
           outputs,
         });
       }
-      onBack();
+      if (initialCreateContext.returnTo) {
+        navigateWithinApp(initialCreateContext.returnTo);
+      } else {
+        onBack();
+      }
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : `Failed to ${isEdit ? 'update' : 'create'} topic`);
     } finally {
@@ -162,6 +186,15 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
     };
   }, [description, deliveryTime, frequency, name, outputs, sources, tags]);
 
+  const handleBack = () => {
+    if (initialCreateContext.returnTo) {
+      navigateWithinApp(initialCreateContext.returnTo);
+      return;
+    }
+
+    onBack();
+  };
+
   return (
     <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)]">
       <div className="mx-auto max-w-[1280px] px-6 py-6 lg:px-8">
@@ -181,7 +214,7 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
           </div>
 
           <button
-            onClick={onBack}
+            onClick={handleBack}
             className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-card)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-card-hover)] hover:text-[var(--color-text-primary)]"
           >
             <ArrowLeft size={15} />
@@ -422,6 +455,15 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
                 <Wand2 size={16} className="text-[var(--color-accent)]" />
                 <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Live preview</h2>
               </div>
+
+              {initialCreateContext.projectId ? (
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-muted)]">Attached project</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--color-text-primary)]">
+                    {initialCreateContext.projectName || 'Selected project'}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
                 <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-muted)]">Topic</div>

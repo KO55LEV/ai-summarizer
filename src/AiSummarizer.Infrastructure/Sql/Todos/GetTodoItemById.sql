@@ -3,6 +3,7 @@ select
     t.requested_by_user_id,
     t.project_id,
     p.name as project_name,
+    t.color,
     t.bucket,
     t.title,
     t.description,

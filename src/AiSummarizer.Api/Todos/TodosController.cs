@@ -29,6 +29,7 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
             request.RequestedByUserId,
             request.ProjectId,
             request.Bucket,
+            request.Color,
             request.Title,
             request.Description,
             request.Cadence,
@@ -42,6 +43,7 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
         => Ok(Map(await todosService.UpdateTodoAsync(todoId, new UpdateTodoCommand(
             request.ProjectId,
             request.Bucket,
+            request.Color,
             request.Title,
             request.Description,
             request.Cadence,
@@ -66,6 +68,7 @@ public sealed class TodosController(ITodosService todosService) : ControllerBase
             todo.RequestedByUserId,
             todo.ProjectId,
             todo.ProjectName,
+            todo.Color,
             todo.Bucket,
             todo.Title,
             todo.Description,

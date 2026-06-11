@@ -16,9 +16,10 @@ import type { TranscriptScheduleResponse } from '../types';
 interface MainContentProps {
   onStartAnalysis?: (url: string) => Promise<void> | void;
   errorMessage?: string | null;
+  projectName?: string | null;
 }
 
-export default function MainContent({ onStartAnalysis, errorMessage }: MainContentProps) {
+export default function MainContent({ onStartAnalysis, errorMessage, projectName }: MainContentProps) {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +79,12 @@ export default function MainContent({ onStartAnalysis, errorMessage }: MainConte
 
         {/* ── Hero ──────────────────────────────────────── */}
         <div className="mb-5 text-center">
+          {projectName ? (
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-bg-card px-3 py-1 text-[11px] font-medium text-text-secondary">
+              <span className="text-accent">Project</span>
+              <span className="text-text-primary">{projectName}</span>
+            </div>
+          ) : null}
           <h1 className="mb-2 text-[28px] font-bold tracking-tight text-text-primary">
             Summarize any YouTube video
           </h1>

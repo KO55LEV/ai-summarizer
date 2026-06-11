@@ -92,4 +92,5 @@ export interface AnalyzeRequest {
   language?: string;
   preferNativeTranscript?: boolean;
   requestedByUserId?: string | null;
+  projectId?: string | null;
 }

@@ -299,7 +299,7 @@ export async function createResearchTopic(input: CreateResearchTopicInput): Prom
     return {
       id: `mock-${Date.now()}`,
       requestedByUserId: input.requestedByUserId,
-      projectId: null,
+      projectId: input.projectId ?? null,
       name: input.name,
       description: input.description ?? '',
       frequency: input.frequency,

@@ -1,27 +1,27 @@
-# Пользователи, роли и безопасность
+# Users, Roles and Security
 
-## Пользователи
+## Users
 
-Пользовательская аутентификация сейчас поддерживает:
+User authentication currently supports:
 
-- регистрацию по email/password
-- логин по email/password
-- логин через Google
-- логин через Facebook
-- refresh session
-- logout
-- `me`
+- Registration via email/password
+- Login via email/password
+- Login via Google
+- Login via Facebook
+- Session refresh
+- Logout
+- `me` endpoint
 
-`AccessToken` сейчас является идентификатором сессии в строковом виде.
+`AccessToken` is currently a string representation of the session identifier.
 
-## Роли
+## Roles
 
-В базе есть таблицы:
+The database contains the following tables:
 
 - `roles`
 - `user_roles`
 
-Роли, которые уже заведены:
+The following roles are pre-seeded:
 
 - `admin`
 - `user`
@@ -30,31 +30,32 @@
 - `support`
 - `viewer`
 
-## Назначение ролей
+## Role Assignment
 
-`user_roles` - это many-to-many связь между пользователем и ролью.
+`user_roles` is a many-to-many relationship between a user and a role.
 
-Такой подход позволяет:
+This approach allows you to:
 
-- назначить несколько ролей одному пользователю
-- менять права без изменения таблицы пользователей
-- добавлять новые роли без миграции users
+- Assign multiple roles to a single user
+- Change permissions without altering the users table
+- Add new roles without migrating the users table
 
 ## Internal API
 
-Отдельный protection layer есть только для `/internal/*`.
+A separate protection layer exists only for `/internal/*` routes.
 
-Требуется заголовок:
+It requires the following header:
 
 - `X-Internal-Api-Key`
 
-Если ключ отсутствует или неверный, запрос получает `401 Unauthorized`.
+If the key is missing or incorrect, the request returns `401 Unauthorized`.
 
-## Что еще не подключено
+## Future Security Extensions
 
-На текущий момент:
+Currently:
 
-- роль-based authorization в публичных API еще не централизована
-- `api/prompts` существует как CRUD слой, но не ограничен middleware ролями
+- Role-based authorization in public APIs is not yet centralized
+- `api/prompts` exists as a CRUD layer but is not restricted by role middleware
 
-Это осознанный этап scaffolding, а не финальная security-модель.
+This is an intentional step in scaffolding, not the final security model.
+

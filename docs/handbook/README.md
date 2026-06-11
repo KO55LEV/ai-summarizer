@@ -1,29 +1,30 @@
 # AiSummarizer Handbook
 
-Это основная документация проекта `AiSummarizer`.
+This is the main documentation for the `AiSummarizer` project.
 
-Цель проекта:
+Project goal:
 
-- загружать видео с YouTube
-- извлекать аудио
-- транскрибировать аудио через Whisper
-- импортировать транскрипт в базу
-- запускать и аудировать LLM-промпты для summary, Q&A и других задач
+- Upload videos from YouTube
+- Extract audio
+- Transcribe audio using Whisper
+- Import transcripts into the database
+- Run and audit LLM prompts for summary, Q&A, and other tasks
 
-Ключевые разделы:
+Key sections:
 
-- [Обзор системы](overview.md)
-- [Архитектура и модули](architecture.md)
-- [База данных](database.md)
+- [System Overview](overview.md)
+- [Architecture and Modules](architecture.md)
+- [Database](database.md)
 - [API](api.md)
-- [Jobs и workflow](workflows.md)
-- [Prompts и LLM-аудит](prompts.md)
-- [Notes implementation plan](notes-implementation-plan.md)
-- [Пользователи, роли и безопасность](security.md)
-- [Операции и запуск](operations.md)
+- [Jobs and Workflow](workflows.md)
+- [Prompts and LLM Audit](prompts.md)
+- [Notes Implementation Plan](notes-implementation-plan.md)
+- [Users, Roles and Security](security.md)
+- [Operations and Launch](operations.md)
 - [UI (React frontend)](ui.md)
 
-Примечание:
+Note:
 
-- старые файлы в `docs/runbook.md` и `docs/deployment-worker-guide.md` оставлены как рабочие заметки
-- новый набор документации в `docs/handbook/` должен считаться основным
+- Old files in `docs/runbook.md` and `docs/deployment-worker-guide.md` are kept as working notes.
+- The new set of documentation in `docs/handbook/` should be considered the primary source.
+

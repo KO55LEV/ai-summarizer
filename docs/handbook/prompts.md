@@ -1,19 +1,19 @@
-# Prompts и LLM-аудит
+# Prompts and LLM Audit
 
-Система prompts нужна для управления LLM-шаблонами как данными, а не как кодом.
+The prompts system is designed to manage LLM templates as data rather than as code.
 
-## Зачем это нужно
+## Why it is needed
 
-- разные workflow могут требовать разные промпты
-- один и тот же prompt можно тюнить без redeploy
-- можно хранить несколько provider/model комбинаций
-- можно вести аудит того, как именно prompt был использован
+- Different workflows may require different prompts
+- The same prompt can be tuned without redeploying code
+- Multiple provider/model combinations can be stored
+- Usage audits can track exactly how a prompt was used
 
-## Основная сущность
+## Core Entity
 
-`prompts` хранит текущую активную версию шаблона.
+`prompts` stores the currently active version of a template.
 
-Поля:
+Fields:
 
 - `prompt_key`
 - `title`
@@ -27,109 +27,109 @@
 - `created_at`
 - `updated_at`
 
-### Практический смысл полей
+### Technical Purpose of Fields
 
-- `prompt_key` - стабильный slug для технической идентификации
-- `workflow_type` - привязка к типу workflow, если prompt используется в workflow-цепочке
-- `provider` - vendor, например OpenAI или другой провайдер
-- `model` - конкретная модель
-- `system_prompt` - системная инструкция
-- `user_prompt` - пользовательская часть запроса
-- `is_active` - позволяет выключать шаблон без удаления
+- `prompt_key` - A stable slug for technical identification
+- `workflow_type` - Links to a workflow type if the prompt is part of a workflow sequence
+- `provider` - Vendor name, e.g., OpenAI or other providers
+- `model` - Specific model identifier
+- `system_prompt` - System instructions
+- `user_prompt` - User part of the request
+- `is_active` - Allows disabling a template without deleting it
 
-## Архив промптов
+## Prompt Archive
 
-`prompt_archive` хранит immutable snapshots.
+`prompt_archive` stores immutable snapshots.
 
-Снимок создается:
+A snapshot is created:
 
-- при `INSERT`
-- при `UPDATE`
-- при `DELETE`
+- On `INSERT`
+- On `UPDATE`
+- On `DELETE`
 
-Это нужно для:
+This is useful for:
 
-- просмотра истории изменений
-- сравнения старых и новых формулировок
-- восстановления решений, которые работали раньше
+- Viewing change history
+- Comparing old and new versions
+- Reverting to versions that worked better in the past
 
-Каждый snapshot содержит:
+Each snapshot contains:
 
-- все текстовые поля промпта
+- All prompt text fields
 - `archive_version`
 - `archive_reason`
 - `archived_at`
 - `source_updated_at`
 
-## Audit runs
+## Audit Runs
 
-`prompt_runs` хранит события использования промпта.
+`prompt_runs` stores prompt execution events.
 
-Сохраняются:
+It preserves:
 
-- request JSON
-- response JSON
-- статус
-- error_code
-- error_message
-- token usage
-- duration
-- started_at
-- finished_at
-- created_at
-- updated_at
+- Request JSON
+- Response JSON
+- Status
+- `error_code`
+- `error_message`
+- Token usage
+- Duration
+- `started_at`
+- `finished_at`
+- `created_at`
+- `updated_at`
 
-Это позволяет строить аудит:
+This enables building audit records for:
 
-- сколько раз prompt запускался
-- сколько запусков успешны
-- сколько провалились
-- какой request был отправлен
-- какой response был получен
-- сколько токенов ушло
-- сколько длился вызов
+- Number of times a prompt has run
+- Number of successful runs vs. failed runs
+- The exact request sent
+- The exact response received
+- Number of tokens consumed
+- Execution duration
 
 ## API
 
-API для prompts уже позволяет:
+The API for prompts already allows you to:
 
-- создавать
-- читать
-- обновлять
-- удалять
-- смотреть архив
-- смотреть runs
-- смотреть usage summary
-- писать run audit вручную
+- Create
+- Read
+- Update
+- Delete
+- View version archives
+- View execution runs
+- View usage summaries
+- Log run audits manually
 
-## Текущее состояние
+## Current State
 
-Сейчас prompts уже выделены как отдельная подсистема, но runtime-интеграция с workflow-цепочкой может быть расширена отдельно.
+Prompts are already separated as a distinct subsystem, but the runtime integration with workflow chains can be expanded separately.
 
-Нормальный следующий шаг:
+Next logical steps:
 
-- выбирать prompt по `workflow_type + provider + model`
-- использовать `prompt_runs` в момент реального LLM-вызова
-- строить метрики по качеству и частоте запуска
+- Select a prompt dynamically by `workflow_type + provider + model`
+- Use `prompt_runs` at the moment of the actual LLM call
+- Build metrics for quality and invocation frequency
 
-## JSON-вывод для synthesis
+## JSON Output for Synthesis
 
-Для workflow, где downstream ожидает JSON, запрос должен быть максимально жестким:
+For workflows where downstream systems expect JSON, the prompt instructions should be very strict:
 
-- в `system_prompt` явно требовать `only valid JSON`
-- не добавлять пояснительный текст до или после JSON
-- валидировать результат до сохранения
+- Explicitly demand `only valid JSON` in the `system_prompt`
+- Forbid explanatory text before or after the JSON body
+- Validate the result before saving it
 
-Если модель вернула malformed JSON:
+If a model returns malformed JSON:
 
-1. посмотреть `prompt_runs.request_json` и `prompt_runs.response_json`
-2. посмотреть `research_synthesis_runs.response_json` и `research_synthesis_runs.output_json`
-3. обновить `prompt_version` или текст промпта
-4. при необходимости переключить provider/model на более стабильный
-5. rerun synthesis для того же `research_topic_run_id`
+1. Check `prompt_runs.request_json` and `prompt_runs.response_json`
+2. Check `research_synthesis_runs.response_json` and `research_synthesis_runs.output_json`
+3. Update the prompt text or increment the `prompt_version`
+4. Switch to a more robust provider/model combination if necessary
+5. Rerun synthesis for the same `research_topic_run_id`
 
-Практика для этого workflow:
+Best practices for this workflow:
 
-- хранить prompt version как обязательный audit field
-- держать `response_format=json` или эквивалент provider-specific setting
-- считать malformed JSON отдельным failure mode, а не silent parse success
+- Keep the prompt version as a mandatory audit field
+- Use `response_format=json` or the provider-specific equivalent setting
+- Treat malformed JSON as a distinct failure mode rather than a silent parse success
+
