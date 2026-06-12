@@ -35,7 +35,7 @@ import { getYouTubePreview } from '../../api/youtube';
 import { createTodo, deleteTodo, getTodos, updateTodo } from '../../api/todos';
 import type { ResearchTopic as ApiResearchTopic, TodoItem } from '../../api/types';
 
-type ProjectTab = 'overview' | 'notes' | 'research' | 'videos' | 'tasks';
+export type ProjectTab = 'overview' | 'notes' | 'research' | 'videos' | 'tasks';
 type QuickFilter = 'all' | 'starred' | 'in-progress' | 'completed';
 type TaskStatusFilter = 'open' | 'all';
 type TaskBucket = 'today' | 'next' | 'later';
@@ -69,6 +69,7 @@ const TASK_COLOR_OPTIONS = [
 interface VideoLibraryItem {
   id: string;
   status: string;
+  mediaSourceId: string;
   sourceProvider: string;
   sourceKind: string;
   sourceUrl: string;
@@ -116,6 +117,7 @@ async function loadVideoLibraryItems(): Promise<VideoLibraryItem[]> {
   const items = await response.json() as Array<{
     id: string;
     status: string;
+    mediaSourceId: string;
     sourceProvider: string;
     sourceKind: string;
     sourceUrl: string;
@@ -146,6 +148,14 @@ function navigateTo(path: string) {
     window.history.pushState({}, '', target);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
+}
+
+function navigateToWithSearch(path: string, searchParams: Record<string, string>) {
+  const url = new URL(path, window.location.origin);
+  for (const [key, value] of Object.entries(searchParams)) {
+    url.searchParams.set(key, value);
+  }
+  navigateTo(`${url.pathname}${url.search}`);
 }
 
 function formatRelative(value: string | null): string {
@@ -732,15 +742,24 @@ function ItemRow({
   meta,
   time,
   trailing,
+  onClick,
 }: {
   icon: ReactNode;
   title: string;
   meta?: string;
   time?: string;
   trailing?: ReactNode;
+  onClick?: () => void;
 }) {
+  const clickable = Boolean(onClick);
+
   return (
-    <div className="flex items-start gap-3 py-3">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!clickable}
+      className={`flex w-full items-start gap-3 py-3 text-left ${clickable ? 'cursor-pointer rounded-2xl transition-colors hover:bg-bg-card-hover/60' : ''}`}
+    >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-bg-input text-accent">
         {icon}
       </div>
@@ -752,7 +771,7 @@ function ItemRow({
         {time ? <div className="text-[10px] text-text-muted">{time}</div> : null}
         {trailing}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -829,7 +848,7 @@ function TaskRow({
       data-task-row
       data-task-row-id={todo.id}
       data-task-bucket={bucket}
-      className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 ${dragging ? 'opacity-50' : ''} ${isDropTarget ? 'ring-2 ring-accent/70 shadow-[0_0_0_1px_rgba(0,212,170,0.12),0_0_18px_rgba(0,212,170,0.18)]' : ''}`}
+      className={`flex items-center gap-2.5 rounded-2xl px-3 py-2.5 ${dragging ? 'opacity-50' : ''} ${isDropTarget ? 'ring-2 ring-accent/70 shadow-[0_0_0_1px_rgba(0,212,170,0.12),0_0_18px_rgba(0,212,170,0.18)]' : ''}`}
       style={{
         backgroundColor: todo.color ? taskAccent : 'rgba(12, 18, 33, 0.92)',
         boxShadow: todo.color ? `inset 0 0 0 1px ${taskTheme?.border ?? 'rgba(255,255,255,0.18)'}` : 'inset 0 0 0 1px rgba(255,255,255,0.03)',
@@ -839,17 +858,17 @@ function TaskRow({
       <button
         type="button"
         onPointerDown={onDragStart}
-        className="touch-none rounded-full p-1 text-text-muted transition-colors hover:bg-bg-card-hover hover:text-text-primary"
+        className="touch-none rounded-full p-0.5 text-text-muted transition-colors hover:bg-bg-card-hover hover:text-text-primary"
         style={taskTheme ? { color: taskTheme.mutedForeground } : undefined}
         aria-label="Drag to move task"
       >
-        <GripVertical size={14} />
+        <GripVertical size={12} />
       </button>
 
       <button
         type="button"
         onClick={onToggle}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
           done
             ? 'text-bg-primary'
             : 'border-border bg-bg-card text-text-muted hover:border-accent/40 hover:bg-accent/10'
@@ -867,7 +886,7 @@ function TaskRow({
         }}
         aria-label={done ? 'Mark task as open' : 'Mark task as done'}
       >
-        {done ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+        {done ? <CheckCircle2 size={12} /> : <Circle size={12} />}
       </button>
 
       <div className="min-w-0 flex-1">
@@ -886,14 +905,14 @@ function TaskRow({
                 cancelEdit();
               }
             }}
-            className="w-full rounded-xl border border-accent/30 bg-bg-primary/85 px-3 py-1.5 text-[13px] font-medium text-text-primary outline-none ring-0 placeholder:text-text-muted focus:border-accent/60"
+            className="w-full rounded-xl border border-accent/30 bg-bg-primary/85 px-2.5 py-[5px] text-[12px] font-medium text-text-primary outline-none ring-0 placeholder:text-text-muted focus:border-accent/60"
             style={taskTheme ? { color: done ? taskTheme.mutedForeground : taskTheme.foreground } : undefined}
           />
         ) : (
           <button
             type="button"
             onClick={() => setIsEditingTitle(true)}
-            className={`w-full truncate text-left text-[13px] font-medium ${done ? 'line-through' : ''}`}
+            className={`w-full truncate text-left text-[12px] font-medium ${done ? 'line-through' : ''}`}
             style={taskTheme ? { color: done ? taskTheme.mutedForeground : taskTheme.foreground } : undefined}
             aria-label="Edit task title"
           >
@@ -901,20 +920,20 @@ function TaskRow({
           </button>
         )}
         {todo.description ? (
-          <div className="mt-0.5 truncate text-[11px] text-text-secondary" style={taskTheme ? { color: taskTheme.mutedForeground } : undefined}>
+          <div className="mt-0.5 truncate text-[10px] text-text-secondary" style={taskTheme ? { color: taskTheme.mutedForeground } : undefined}>
             {todo.description}
           </div>
         ) : null}
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted" style={taskTheme ? { color: taskTheme.mutedForeground } : undefined}>
-          <Link2 size={11} />
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-text-muted" style={taskTheme ? { color: taskTheme.mutedForeground } : undefined}>
+          <Link2 size={10} />
           <span className="truncate">linked to: {projectName}</span>
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2.5">
         {dueLabel ? (
           <span
-            className={`rounded-full border px-2.5 py-1 text-[11px] ${
+            className={`rounded-full border px-2 py-0.5 text-[10px] ${
               todo.color
                 ? ''
                 : done
@@ -932,7 +951,7 @@ function TaskRow({
         ) : null}
 
         <span
-          className="hidden items-center gap-2 text-[12px] text-text-secondary lg:inline-flex"
+          className="hidden items-center gap-2 text-[11px] text-text-secondary lg:inline-flex"
         >
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accentColor }} />
           {projectName}
@@ -941,10 +960,10 @@ function TaskRow({
         <TaskColorPicker color={todo.color} fallbackColor={accentColor} onChange={onChangeColor} />
 
         <details className="relative z-20">
-          <summary className="list-none cursor-pointer rounded-full p-1.5 text-text-muted transition-colors hover:bg-bg-card-hover hover:text-text-primary">
-            <MoreVertical size={14} />
+          <summary className="list-none cursor-pointer rounded-full p-1 text-text-muted transition-colors hover:bg-bg-card-hover hover:text-text-primary">
+            <MoreVertical size={12} />
           </summary>
-          <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-2xl border border-border bg-bg-secondary p-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.35)]">
+          <div className="absolute right-0 top-full z-50 mt-2 w-[168px] rounded-2xl border border-border bg-bg-secondary p-1 shadow-[0_18px_42px_rgba(0,0,0,0.35)]">
             {(['today', 'next', 'later'] as const).map((bucket) => (
               <button
                 key={bucket}
@@ -953,9 +972,9 @@ function TaskRow({
                   (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
                   onMove(bucket);
                 }}
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-text-secondary hover:bg-bg-card-hover hover:text-text-primary"
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-[7px] text-left text-[11px] text-text-secondary hover:bg-bg-card-hover hover:text-text-primary"
               >
-                <Clock3 size={13} />
+                <Clock3 size={12} />
                 Move to {bucket.charAt(0).toUpperCase() + bucket.slice(1)}
               </button>
             ))}
@@ -965,9 +984,9 @@ function TaskRow({
                 (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
                 onToggle();
               }}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-text-secondary hover:bg-bg-card-hover hover:text-text-primary"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-[7px] text-left text-[11px] text-text-secondary hover:bg-bg-card-hover hover:text-text-primary"
             >
-              {done ? <Circle size={13} /> : <CheckCircle2 size={13} />}
+              {done ? <Circle size={12} /> : <CheckCircle2 size={12} />}
               {done ? 'Reopen' : 'Mark done'}
             </button>
             <button
@@ -976,9 +995,9 @@ function TaskRow({
                 (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
                 onDelete();
               }}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] text-rose-300 hover:bg-rose-500/10"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-[7px] text-left text-[11px] text-rose-300 hover:bg-rose-500/10"
             >
-              <Trash2 size={13} />
+              <Trash2 size={12} />
               Delete
             </button>
           </div>
@@ -1047,20 +1066,20 @@ function TaskSectionGroup({
   return (
     <div
       data-task-dropzone={sectionId}
-      className={`rounded-[24px] border p-4 sm:p-5 ${isActiveDrop ? 'border-accent/60 ring-1 ring-accent/30' : 'border-border'}`}
+      className={`rounded-[20px] border p-3 sm:p-3.5 ${isActiveDrop ? 'border-accent/60 ring-1 ring-accent/30' : 'border-border'}`}
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-accent">{icon}</span>
-          <h3 className="text-[14px] font-semibold text-text-primary">{label}</h3>
-          <span className="rounded-full border border-border bg-bg-primary/65 px-2 py-0.5 text-[11px] text-text-muted">{count}</span>
+          <h3 className="text-[12px] font-semibold text-text-primary">{label}</h3>
+          <span className="rounded-full border border-border bg-bg-primary/65 px-2 py-0.5 text-[10px] text-text-muted">{count}</span>
         </div>
-        {description ? <div className="hidden text-[12px] text-text-secondary lg:block">{description}</div> : null}
+        {description ? <div className="hidden text-[10px] text-text-secondary lg:block">{description}</div> : null}
         {headerRight ? <div className="ml-auto">{headerRight}</div> : null}
       </div>
 
-      <div ref={listRef} className="relative mt-4 overflow-visible rounded-[20px] border border-border bg-bg-primary/40 p-2">
-        <div className="space-y-2">{children}</div>
+      <div ref={listRef} className="relative mt-2.5 overflow-visible rounded-[18px] border border-border bg-bg-primary/40 p-1.5">
+        <div className="space-y-[5px]">{children}</div>
         {activePreview ? (
           <div
             className="pointer-events-none absolute left-2 right-2 z-20 transition-transform duration-150 ease-out"
@@ -1083,7 +1102,7 @@ function TaskSectionGroup({
 }
 
 function EmptyState({ label }: { label: string }) {
-  return <div className="px-4 py-6 text-[12px] text-text-muted">{label}</div>;
+  return <div className="px-3 py-3 text-[10px] text-text-muted">{label}</div>;
 }
 
 function ProjectNoteCreateModal({
@@ -1188,10 +1207,12 @@ export default function ProjectViewPage({
   projectId,
   currentUserDisplayName,
   currentUserEmail,
+  initialTab = 'overview',
 }: {
   projectId: string;
   currentUserDisplayName?: string | null;
   currentUserEmail?: string | null;
+  initialTab?: ProjectTab;
 }) {
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [notes, setNotes] = useState<NoteResponse[]>([]);
@@ -1200,7 +1221,7 @@ export default function ProjectViewPage({
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
+  const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [taskDraft, setTaskDraft] = useState('');
   const [taskColor, setTaskColor] = useState<string | null>(null);
@@ -1225,6 +1246,10 @@ export default function ProjectViewPage({
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskDropTarget | null>(null);
   const [dropPreview, setDropPreview] = useState<TaskDropInfo | null>(null);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, projectId]);
 
   useEffect(() => {
     let mounted = true;
@@ -1262,9 +1287,9 @@ export default function ProjectViewPage({
   }, [projectId]);
 
   useEffect(() => {
-    setActiveTab('overview');
+    setActiveTab(initialTab);
     setQuickFilter('all');
-  }, [projectId]);
+  }, [projectId, initialTab]);
 
   const metrics = useMemo(() => {
     const doneTasks = todos.filter((todo) => todo.status === 'done').length;
@@ -1697,7 +1722,7 @@ export default function ProjectViewPage({
   };
 
   const projectVideoImportPath = `/summarizer/new?projectId=${encodeURIComponent(projectId)}&projectName=${encodeURIComponent(project?.name ?? 'Project')}`;
-  const projectNoteReturnPath = `/projects/${encodeURIComponent(projectId)}`;
+  const projectNoteReturnPath = `/projects/${encodeURIComponent(projectId)}?tab=notes`;
   const projectNoteCreatePath = `/notes?projectId=${encodeURIComponent(projectId)}&projectName=${encodeURIComponent(project?.name ?? 'Project')}&create=1&returnTo=${encodeURIComponent(projectNoteReturnPath)}`;
   const projectResearchReturnPath = `/projects/${encodeURIComponent(projectId)}`;
   const projectResearchCreatePath = `/research/create?projectId=${encodeURIComponent(projectId)}&projectName=${encodeURIComponent(project?.name ?? 'Project')}&returnTo=${encodeURIComponent(projectResearchReturnPath)}`;
@@ -1752,7 +1777,6 @@ export default function ProjectViewPage({
       });
       const noteList = await getNotes({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 });
       setNotes(normalizeNoteList(noteList));
-      setActiveTab('notes');
       setNoteCreateOpen(false);
       setNoteCreateForm({ title: '', summary: '' });
     } catch (err: unknown) {
@@ -1998,6 +2022,16 @@ export default function ProjectViewPage({
                         meta={`${video.channel} · ${video.sourceProvider} · ${video.sourceKind}${video.language ? ` · ${video.language.toUpperCase()}` : ''}`}
                         time={formatRelative(video.completedAt ?? video.updatedAt)}
                         trailing={<StatusChip label={video.transcriptId ? 'Transcript ready' : 'Completed'} className="bg-emerald-500/15 text-emerald-300 border-emerald-500/20" />}
+                        onClick={
+                          video.transcriptId
+                            ? () => navigateToWithSearch('/transcript', {
+                                sourceId: video.mediaSourceId,
+                                sourceUrl: video.sourceUrl,
+                                title: video.title,
+                                channel: video.channel,
+                              })
+                            : undefined
+                        }
                       />
                     ))
                   )}

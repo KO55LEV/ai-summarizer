@@ -14,7 +14,7 @@ import HistoryPage from './components/pages/HistoryPage';
 import SettingsPage from './components/pages/SettingsPage';
 import ProfilePage from './components/pages/ProfilePage';
 import ProjectsPage from './components/pages/ProjectsPage';
-import ProjectViewPage from './components/pages/ProjectViewPage';
+import ProjectViewPage, { type ProjectTab } from './components/pages/ProjectViewPage';
 import TodoPage from './components/pages/TodoPage';
 import NotesPage from './components/pages/NotesPage';
 import { ResearchPage } from './components/pages/ResearchPage';
@@ -125,6 +125,23 @@ function buildTranscriptVideoMeta(
     duration: formatDuration(transcript.durationSeconds),
     language: transcript.language.toUpperCase(),
     age: item.date,
+    quality: transcript.sourceFilePath ? 'Whisper transcript' : 'YouTube subtitles',
+  };
+}
+
+function buildTranscriptVideoMetaFromTranscript(
+  transcript: TranscriptResponse,
+  preview: Awaited<ReturnType<typeof getYouTubePreview>> | null,
+  hints?: { sourceUrl?: string | null; title?: string | null; channel?: string | null },
+): VideoMetadata {
+  const base = buildFallbackVideoMeta(hints?.sourceUrl ?? transcript.sourceUrl ?? 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  return {
+    ...base,
+    title: preview?.title ?? hints?.title ?? base.title,
+    channel: preview?.channel ?? hints?.channel ?? base.channel,
+    thumbnail: preview?.thumbnail ?? base.thumbnail,
+    duration: formatDuration(transcript.durationSeconds),
+    language: transcript.language.toUpperCase(),
     quality: transcript.sourceFilePath ? 'Whisper transcript' : 'YouTube subtitles',
   };
 }
@@ -356,6 +373,11 @@ type AppLocation =
       researchBriefingId: string | null;
       projectId: string | null;
       projectName: string | null;
+      projectTab: ProjectTab | null;
+      transcriptSourceId: string | null;
+      transcriptSourceUrl: string | null;
+      transcriptTitle: string | null;
+      transcriptChannel: string | null;
     };
 
 const NAV_PATHS: Record<NavItem, string> = {
@@ -387,6 +409,19 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const projectId = params.get('projectId');
   const projectName = params.get('projectName');
+  const projectTabParam = params.get('tab');
+  const transcriptSourceId = params.get('sourceId');
+  const transcriptSourceUrl = params.get('sourceUrl');
+  const transcriptTitle = params.get('title');
+  const transcriptChannel = params.get('channel');
+  const projectTab: ProjectTab | null =
+    projectTabParam === 'overview' ||
+    projectTabParam === 'notes' ||
+    projectTabParam === 'research' ||
+    projectTabParam === 'videos' ||
+    projectTabParam === 'tasks'
+      ? projectTabParam
+      : null;
 
   if (path === '/login' || path === '/signup') {
     return { kind: 'auth', mode: path === '/signup' ? 'signup' : 'login' };
@@ -410,26 +445,26 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
   }
 
   if (path === '/summarizer') {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
   }
 
   if (path === '/summarizer/new') {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'new', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId, projectName };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'new', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId, projectName, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
   }
 
   const segments = path.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
   }
 
   const [first, second] = segments;
   if (!isNavItem(first)) {
-    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
+    return { kind: 'app', nav: 'summarizer', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
   }
 
   if (first === 'research') {
     if (second === 'create') {
-      return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'create', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
+      return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'create', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
     }
 
     if (second) {
@@ -443,6 +478,11 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
           researchBriefingId: null,
           projectId: null,
           projectName: null,
+          projectTab: null,
+          transcriptSourceId: null,
+          transcriptSourceUrl: null,
+          transcriptTitle: null,
+          transcriptChannel: null,
         };
       }
 
@@ -455,10 +495,15 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
         researchBriefingId: segments[2] === 'briefings' && segments[3] ? decodeURIComponent(segments[3]) : null,
         projectId: null,
         projectName: null,
+        projectTab: null,
+        transcriptSourceId: null,
+        transcriptSourceUrl: null,
+        transcriptTitle: null,
+        transcriptChannel: null,
       };
     }
 
-    return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
+    return { kind: 'app', nav: 'research', summarizerView: 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
   }
 
   if (first === 'projects') {
@@ -471,10 +516,33 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
       researchBriefingId: null,
       projectId: second ? decodeURIComponent(second) : null,
       projectName: null,
+      projectTab,
+      transcriptSourceId: null,
+      transcriptSourceUrl: null,
+      transcriptTitle: null,
+      transcriptChannel: null,
     };
   }
 
-  return { kind: 'app', nav: first, summarizerView: first === 'summarizer' && second === 'new' ? 'new' : 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null };
+  if (first === 'transcript') {
+    return {
+      kind: 'app',
+      nav: 'transcript',
+      summarizerView: 'history',
+      researchView: 'list',
+      researchTopicId: null,
+      researchBriefingId: null,
+      projectId: null,
+      projectName: null,
+      projectTab: null,
+      transcriptSourceId: transcriptSourceId?.trim() || null,
+      transcriptSourceUrl: transcriptSourceUrl?.trim() || null,
+      transcriptTitle: transcriptTitle?.trim() || null,
+      transcriptChannel: transcriptChannel?.trim() || null,
+    };
+  }
+
+  return { kind: 'app', nav: first, summarizerView: first === 'summarizer' && second === 'new' ? 'new' : 'history', researchView: 'list', researchTopicId: null, researchBriefingId: null, projectId: null, projectName: null, projectTab: null, transcriptSourceId: null, transcriptSourceUrl: null, transcriptTitle: null, transcriptChannel: null };
 }
 
 function getPathForNav(nav: NavItem): string {
@@ -493,6 +561,12 @@ export default function App() {
     transcript: TranscriptResponse;
     videoMeta: VideoMetadata;
   } | null>(null);
+  const [selectedTranscriptSource, setSelectedTranscriptSource] = useState<{
+    url: string;
+    transcript: TranscriptResponse;
+    videoMeta: VideoMetadata;
+  } | null>(null);
+  const [selectedTranscriptSourceLoading, setSelectedTranscriptSourceLoading] = useState(false);
   const [selectedResearchTopic, setSelectedResearchTopic] = useState<ResearchTopic | null>(null);
   const [researchTopicLoading, setResearchTopicLoading] = useState(false);
   const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'starting' | 'analyzing' | 'ready' | 'error'>('idle');
@@ -647,6 +721,48 @@ export default function App() {
       })
       .finally(() => {
         if (!cancelled) setResearchTopicLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (location.kind !== 'app' || location.nav !== 'transcript' || !location.transcriptSourceId) {
+      setSelectedTranscriptSource(null);
+      setSelectedTranscriptSourceLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setSelectedTranscriptSource(null);
+    setSelectedTranscriptSourceLoading(true);
+
+    getTranscriptBySource(location.transcriptSourceId)
+      .then(async (transcript) => {
+        const previewSourceUrl = location.transcriptSourceUrl ?? transcript.sourceUrl ?? '';
+        const preview = previewSourceUrl ? await getYouTubePreview(previewSourceUrl).catch(() => null) : null;
+        if (cancelled) return;
+        setSelectedTranscriptSource({
+          url: previewSourceUrl || transcript.sourceUrl || '',
+          transcript,
+          videoMeta: buildTranscriptVideoMetaFromTranscript(transcript, preview, {
+            sourceUrl: previewSourceUrl,
+            title: location.transcriptTitle,
+            channel: location.transcriptChannel,
+          }),
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelectedTranscriptSource(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedTranscriptSourceLoading(false);
       });
 
     return () => {
@@ -897,6 +1013,27 @@ export default function App() {
       );
     }
 
+    if (selectedTranscriptSource && activeNav === 'transcript') {
+      return (
+        <BackendTranscriptView
+          url={selectedTranscriptSource.url}
+          transcript={selectedTranscriptSource.transcript}
+          videoMeta={selectedTranscriptSource.videoMeta}
+          onChangeUrl={handleChangeUrl}
+        />
+      );
+    }
+
+    if (selectedTranscriptSourceLoading && activeNav === 'transcript') {
+      return (
+        <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">
+            Loading transcript...
+          </div>
+        </main>
+      );
+    }
+
     // Historical video selected → always show transcript view
     if (selectedVideoState && activeNav === 'transcript') {
       return <TranscriptView url={selectedVideoUrl} state={selectedVideoState} onChangeUrl={handleChangeUrl} />;
@@ -912,6 +1049,7 @@ export default function App() {
             projectId={location.projectId}
             currentUserDisplayName={authState?.user.displayName ?? null}
             currentUserEmail={authState?.user.email ?? null}
+            initialTab={location.projectTab ?? 'overview'}
           />
         );
       }
@@ -1001,6 +1139,7 @@ export default function App() {
 
   const renderRight = () => {
     if (selectedHistoryTranscript && activeNav === 'transcript') return <TranscriptRightSidebar />;
+    if (selectedTranscriptSource && activeNav === 'transcript') return <TranscriptRightSidebar />;
     if (selectedVideoState && activeNav === 'transcript') return <TranscriptRightSidebar />;
     if (activeNav === 'summarizer') {
       if (analysisPhase === 'ready' && analysisTranscript) return <TranscriptRightSidebar />;
