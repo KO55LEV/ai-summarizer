@@ -65,6 +65,7 @@ export interface WorkflowStepResponse {
 
 export interface TranscriptResponse {
   id: string;
+  sourceId: string | null;
   sourceUrl: string | null;
   sourceFilePath: string | null;
   language: string;
@@ -78,6 +79,27 @@ export interface TranscriptResponse {
   cleanText: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type TranscriptInsightActionKey = 'quick-summary' | 'key-takeaways' | 'ask-this-video' | 'study-guide';
+
+export interface TranscriptInsightScheduleResponse {
+  status: string;
+  actionKey: TranscriptInsightActionKey;
+  promptKey: string;
+  estimatedCredits: number;
+  workflow: WorkflowResponse | null;
+  result: Record<string, unknown> | null;
+}
+
+export interface TranscriptInsightState {
+  actionKey: TranscriptInsightActionKey;
+  status: string;
+  promptKey: string;
+  estimatedCredits: number;
+  workflowId: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
 }
 
 export interface TranscriptScheduleResponse {

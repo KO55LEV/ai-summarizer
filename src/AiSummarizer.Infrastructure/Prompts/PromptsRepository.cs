@@ -16,6 +16,9 @@ public sealed class PromptsRepository(NpgsqlDataSource dataSource, ISqlScriptLoa
     public Task<Prompt?> GetPromptByIdAsync(Guid promptId, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("Prompts/GetPromptById.sql", cmd => cmd.Parameters.AddWithValue("prompt_id", promptId), cancellationToken);
 
+    public Task<Prompt?> GetPromptByKeyAsync(string promptKey, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Prompts/GetPromptByKey.sql", cmd => cmd.Parameters.AddWithValue("prompt_key", promptKey), cancellationToken);
+
     public Task<IReadOnlyList<Prompt>> ListPromptsAsync(int limit, int offset, CancellationToken cancellationToken)
         => QueryManyAsync("Prompts/ListPrompts.sql", cmd =>
         {

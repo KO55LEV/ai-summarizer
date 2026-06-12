@@ -63,6 +63,12 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
             cmd.Parameters.AddWithValue("source_id", sourceId);
         }, cancellationToken);
 
+    public Task<IReadOnlyList<TranscriptSegment>> GetTranscriptSegmentsByTranscriptIdAsync(Guid transcriptId, CancellationToken cancellationToken)
+        => QueryListAsync("Transcripts/GetTranscriptSegmentsByTranscriptId.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("transcript_id", transcriptId);
+        }, cancellationToken, MapTranscriptSegment);
+
     public Task DeleteTranscriptSegmentsAsync(Guid transcriptId, DbTransaction? transaction, CancellationToken cancellationToken)
         => ExecuteAsync("Transcripts/DeleteTranscriptSegments.sql", cmd => cmd.Parameters.AddWithValue("transcript_id", transcriptId), transaction, cancellationToken);
 
@@ -164,6 +170,22 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
         return await reader.ReadAsync(cancellationToken) ? MapTranscript(reader) : null;
     }
 
+    private async Task<IReadOnlyList<T>> QueryListAsync<T>(string sqlPath, Action<NpgsqlCommand> configure, CancellationToken cancellationToken, Func<NpgsqlDataReader, T> mapper)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sqlScriptLoader.Load(sqlPath), connection);
+        configure(command);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<T>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(mapper(reader));
+        }
+
+        return results;
+    }
+
     private static void BindTranscriptSegment(NpgsqlCommand command, TranscriptSegment segment)
     {
         command.Parameters.AddWithValue("id", segment.Id);
@@ -203,6 +225,24 @@ public sealed class TranscriptsRepository(NpgsqlDataSource dataSource, ISqlScrip
             Metadata = ParseJson(reader.GetString(reader.GetOrdinal("metadata_json"))),
             CreatedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
             UpdatedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at"))
+        };
+
+    private static TranscriptSegment MapTranscriptSegment(NpgsqlDataReader reader)
+        => new()
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("id")),
+            TranscriptId = reader.GetGuid(reader.GetOrdinal("transcript_id")),
+            SegmentIndex = reader.GetInt32(reader.GetOrdinal("segment_index")),
+            StartSeconds = reader.GetDecimal(reader.GetOrdinal("start_seconds")),
+            EndSeconds = reader.GetDecimal(reader.GetOrdinal("end_seconds")),
+            TextOffsetStart = reader.GetInt32(reader.GetOrdinal("text_offset_start")),
+            TextOffsetEnd = reader.GetInt32(reader.GetOrdinal("text_offset_end")),
+            Text = reader.GetString(reader.GetOrdinal("text")),
+            SpeakerLabel = reader.IsDBNull(reader.GetOrdinal("speaker_label")) ? null : reader.GetString(reader.GetOrdinal("speaker_label")),
+            WordCount = reader.GetInt32(reader.GetOrdinal("word_count")),
+            CharacterCount = reader.GetInt32(reader.GetOrdinal("character_count")),
+            Metadata = ParseJson(reader.GetString(reader.GetOrdinal("metadata_json"))),
+            CreatedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))
         };
 
     private static JsonElement ParseJson(string json) => JsonDocument.Parse(json).RootElement.Clone();

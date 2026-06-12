@@ -25,12 +25,14 @@ import LandingPage from './components/pages/LandingPage';
 import LoginPage from './components/pages/LoginPage';
 import { getCurrentUser, loginWithPassword, logoutUser, registerUser } from './api/auth';
 import { getAdminRoles } from './api/adminUsers';
-import { analyzeVideo, getTranscriptBySource, getWorkflowStatus } from './api';
+import { getBillingBalance } from './api/adminBilling';
+import { analyzeVideo, createTranscriptInsight, getTranscriptBySource, getWorkflowStatus } from './api';
 import { getResearchTopic } from './api/research';
 import { getYouTubePreview } from './api/youtube';
 import { getCurrentUserId } from './config/currentUser';
 import { clearAuthenticated, getStoredAuthState, isAuthenticated, setStoredAuthState } from './config/auth';
-import type { NavItem, VideoMetadata, VideoRecord, WorkflowResponse, TranscriptResponse } from './types';
+import type { NavItem, VideoMetadata, VideoRecord, WorkflowResponse, TranscriptInsightActionKey, TranscriptResponse } from './types';
+import type { BillingBalanceResponse } from './api/adminBilling';
 import type { LogEntry, ProcessingState, PipelineStep } from './types/pipeline';
 import type { ResearchTopic, HistoryItem } from './api/types';
 
@@ -576,6 +578,20 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisVideoMeta, setAnalysisVideoMeta] = useState<VideoMetadata>(() => buildFallbackVideoMeta('https://www.youtube.com/watch?v=dQw4w9WgXcQ'));
   const [pollingWorkflowId, setPollingWorkflowId] = useState<string | null>(null);
+  const [billingBalance, setBillingBalance] = useState<BillingBalanceResponse | null>(null);
+  const [billingBalanceLoading, setBillingBalanceLoading] = useState(false);
+  const [billingBalanceError, setBillingBalanceError] = useState<string | null>(null);
+  const [insightState, setInsightState] = useState<{
+    actionKey: TranscriptInsightActionKey;
+    promptKey: string;
+    estimatedCredits: number;
+    workflowId: string | null;
+    status: string;
+    result: Record<string, unknown> | null;
+    error: string | null;
+  } | null>(null);
+  const [activeInsightTab, setActiveInsightTab] = useState<TranscriptInsightActionKey>('quick-summary');
+  const [pollingInsightWorkflowId, setPollingInsightWorkflowId] = useState<string | null>(null);
   const [adminAccess, setAdminAccess] = useState<boolean | null>(null);
   const isAdminRole = Boolean(authState?.user.roles?.some((role) => role.toLowerCase() === 'admin'));
   const isAdmin = isAdminRole || adminAccess === true;
@@ -692,6 +708,44 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const userId = authState?.user.id?.trim();
+
+    if (!authenticated || !userId) {
+      setBillingBalance(null);
+      setBillingBalanceError(null);
+      setBillingBalanceLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setBillingBalanceLoading(true);
+    setBillingBalanceError(null);
+    getBillingBalance(userId, authState?.session.accessToken)
+      .then((balance) => {
+        if (!cancelled) {
+          setBillingBalance(balance);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setBillingBalance(null);
+          setBillingBalanceError(error instanceof Error ? error.message : 'Failed to load billing balance');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBillingBalanceLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authState?.session.accessToken, authState?.user.id, authenticated]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     if (location.kind !== 'app' || location.nav !== 'research' || !['briefing', 'edit'].includes(location.researchView)) {
       setResearchTopicLoading(false);
@@ -734,6 +788,8 @@ export default function App() {
     if (location.kind !== 'app' || location.nav !== 'transcript' || !location.transcriptSourceId) {
       setSelectedTranscriptSource(null);
       setSelectedTranscriptSourceLoading(false);
+      setInsightState(null);
+      setPollingInsightWorkflowId(null);
       return () => {
         cancelled = true;
       };
@@ -821,6 +877,59 @@ export default function App() {
     };
   }, [analysisPhase, pollingWorkflowId]);
 
+  useEffect(() => {
+    if (!pollingInsightWorkflowId) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      if (cancelled) return;
+
+      try {
+        const workflow = await getWorkflowStatus(pollingInsightWorkflowId);
+        if (cancelled) return;
+
+        setInsightState((current) => {
+          if (!current || current.workflowId !== pollingInsightWorkflowId) {
+            return current;
+          }
+
+          return {
+            ...current,
+            status: workflow.status,
+            result: workflow.result as Record<string, unknown> | null,
+            error: workflow.status === 'failed' || workflow.status === 'dead' || workflow.status === 'cancelled'
+              ? workflow.errorMessage ?? current.error
+              : null,
+          };
+        });
+
+        if (workflow.status === 'succeeded' || workflow.status === 'failed' || workflow.status === 'dead' || workflow.status === 'cancelled') {
+          setPollingInsightWorkflowId(null);
+          return;
+        }
+
+        timer = setTimeout(poll, 2000);
+      } catch (error) {
+        if (cancelled) return;
+        setInsightState((current) => current ? {
+          ...current,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Something went wrong while polling insight workflow status',
+        } : current);
+        setPollingInsightWorkflowId(null);
+      }
+    };
+
+    timer = setTimeout(poll, 1000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pollingInsightWorkflowId]);
+
   const resetSummarizer = () => {
     setAnalysisPhase('idle');
     setAnalysisUrl('');
@@ -828,6 +937,9 @@ export default function App() {
     setAnalysisTranscript(null);
     setAnalysisError(null);
     setPollingWorkflowId(null);
+    setInsightState(null);
+    setActiveInsightTab('quick-summary');
+    setPollingInsightWorkflowId(null);
     setAnalysisVideoMeta(buildFallbackVideoMeta('https://www.youtube.com/watch?v=dQw4w9WgXcQ'));
   };
 
@@ -836,6 +948,9 @@ export default function App() {
     urlRef.current = normalizedUrl;
     setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
+    setInsightState(null);
+    setActiveInsightTab('quick-summary');
+    setPollingInsightWorkflowId(null);
     setAnalysisUrl(normalizedUrl);
     setAnalysisError(null);
     setAnalysisTranscript(null);
@@ -893,9 +1008,87 @@ export default function App() {
     navigateToPath('/summarizer/new');
   };
 
+  const handleRequestInsight = async (actionKey: TranscriptInsightActionKey, question?: string | null, conversationContext?: string | null) => {
+    const sourceId =
+      analysisTranscript?.sourceId
+      ?? selectedHistoryTranscript?.transcript.sourceId
+      ?? selectedTranscriptSource?.transcript.sourceId
+      ?? null;
+
+    if (!sourceId) {
+      setInsightState({
+        actionKey,
+        promptKey: '',
+        estimatedCredits: 0,
+        workflowId: null,
+        status: 'error',
+        result: null,
+        error: 'Transcript source is missing.',
+      });
+      return;
+    }
+
+    setActiveInsightTab(actionKey);
+
+    let nextQuestion: string | null = question ?? null;
+    if (actionKey === 'ask-this-video') {
+      if (!nextQuestion?.trim()) {
+        return;
+      }
+
+      nextQuestion = nextQuestion.trim();
+    }
+
+    setInsightState({
+      actionKey,
+      promptKey: '',
+      estimatedCredits: 0,
+      workflowId: null,
+      status: 'starting',
+      result: null,
+      error: null,
+    });
+
+    try {
+      const response = await createTranscriptInsight(sourceId, {
+        requestedByUserId: getCurrentUserId(),
+        actionKey,
+        question: nextQuestion,
+        conversationContext: conversationContext ?? null,
+      });
+
+      setInsightState({
+        actionKey: response.actionKey,
+        promptKey: response.promptKey,
+        estimatedCredits: response.estimatedCredits,
+        workflowId: response.workflow?.id ?? null,
+        status: response.workflow?.status ?? response.status,
+        result: response.result,
+        error: null,
+      });
+
+      if (response.workflow && !['succeeded', 'failed', 'dead', 'cancelled'].includes(response.workflow.status)) {
+        setPollingInsightWorkflowId(response.workflow.id);
+      }
+    } catch (error) {
+      setInsightState({
+        actionKey,
+        promptKey: '',
+        estimatedCredits: 0,
+        workflowId: null,
+        status: 'error',
+        result: null,
+        error: error instanceof Error ? error.message : 'Something went wrong',
+      });
+    }
+  };
+
   const handleHistorySelect = async (item: HistoryItem) => {
     setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
+    setInsightState(null);
+    setActiveInsightTab('quick-summary');
+    setPollingInsightWorkflowId(null);
 
     if (!item.sourceId) {
       navigateToPath('/history');
@@ -931,6 +1124,7 @@ export default function App() {
     setSelectedVideo(null);
     setSelectedHistoryTranscript(null);
     setSelectedResearchTopic(null);
+    setActiveInsightTab('quick-summary');
     if (nav !== 'summarizer') {
       resetSummarizer();
     }
@@ -978,6 +1172,13 @@ export default function App() {
               quality: analysisTranscript.sourceFilePath ? 'Whisper transcript' : 'YouTube subtitles',
             }}
             onChangeUrl={handleChangeUrl}
+            insightState={insightState}
+            activeInsightTab={activeInsightTab}
+            onInsightTabChange={setActiveInsightTab}
+            onRequestInsight={handleRequestInsight}
+            billingBalance={billingBalance}
+            billingBalanceLoading={billingBalanceLoading}
+            billingBalanceError={billingBalanceError}
           />
         );
       }
@@ -1009,6 +1210,13 @@ export default function App() {
           transcript={selectedHistoryTranscript.transcript}
           videoMeta={selectedHistoryTranscript.videoMeta}
           onChangeUrl={handleChangeUrl}
+          insightState={insightState}
+          activeInsightTab={activeInsightTab}
+          onInsightTabChange={setActiveInsightTab}
+          onRequestInsight={handleRequestInsight}
+          billingBalance={billingBalance}
+          billingBalanceLoading={billingBalanceLoading}
+          billingBalanceError={billingBalanceError}
         />
       );
     }
@@ -1020,6 +1228,13 @@ export default function App() {
           transcript={selectedTranscriptSource.transcript}
           videoMeta={selectedTranscriptSource.videoMeta}
           onChangeUrl={handleChangeUrl}
+          insightState={insightState}
+          activeInsightTab={activeInsightTab}
+          onInsightTabChange={setActiveInsightTab}
+          onRequestInsight={handleRequestInsight}
+          billingBalance={billingBalance}
+          billingBalanceLoading={billingBalanceLoading}
+          billingBalanceError={billingBalanceError}
         />
       );
     }
@@ -1138,11 +1353,69 @@ export default function App() {
   };
 
   const renderRight = () => {
-    if (selectedHistoryTranscript && activeNav === 'transcript') return <TranscriptRightSidebar />;
-    if (selectedTranscriptSource && activeNav === 'transcript') return <TranscriptRightSidebar />;
-    if (selectedVideoState && activeNav === 'transcript') return <TranscriptRightSidebar />;
+    const transcriptSourceId =
+      analysisTranscript?.sourceId
+      ?? selectedHistoryTranscript?.transcript.sourceId
+      ?? selectedTranscriptSource?.transcript.sourceId
+      ?? null;
+
+    if (selectedHistoryTranscript && activeNav === 'transcript') {
+      return (
+        <TranscriptRightSidebar
+          sourceId={transcriptSourceId}
+          requestedByUserId={getCurrentUserId()}
+          insightState={insightState}
+          billingBalance={billingBalance}
+          billingBalanceLoading={billingBalanceLoading}
+          billingBalanceError={billingBalanceError}
+          onSelectInsightTab={setActiveInsightTab}
+          onRequestInsight={handleRequestInsight}
+        />
+      );
+    }
+    if (selectedTranscriptSource && activeNav === 'transcript') {
+      return (
+        <TranscriptRightSidebar
+          sourceId={transcriptSourceId}
+          requestedByUserId={getCurrentUserId()}
+          insightState={insightState}
+          billingBalance={billingBalance}
+          billingBalanceLoading={billingBalanceLoading}
+          billingBalanceError={billingBalanceError}
+          onSelectInsightTab={setActiveInsightTab}
+          onRequestInsight={handleRequestInsight}
+        />
+      );
+    }
+    if (selectedVideoState && activeNav === 'transcript') {
+      return (
+        <TranscriptRightSidebar
+          sourceId={transcriptSourceId}
+          requestedByUserId={getCurrentUserId()}
+          insightState={insightState}
+          billingBalance={billingBalance}
+          billingBalanceLoading={billingBalanceLoading}
+          billingBalanceError={billingBalanceError}
+          onSelectInsightTab={setActiveInsightTab}
+          onRequestInsight={handleRequestInsight}
+        />
+      );
+    }
     if (activeNav === 'summarizer') {
-      if (analysisPhase === 'ready' && analysisTranscript) return <TranscriptRightSidebar />;
+      if (analysisPhase === 'ready' && analysisTranscript) {
+        return (
+          <TranscriptRightSidebar
+            sourceId={analysisTranscript.sourceId}
+            requestedByUserId={getCurrentUserId()}
+            insightState={insightState}
+            billingBalance={billingBalance}
+            billingBalanceLoading={billingBalanceLoading}
+            billingBalanceError={billingBalanceError}
+            onSelectInsightTab={setActiveInsightTab}
+            onRequestInsight={handleRequestInsight}
+          />
+        );
+      }
       if (isSummarizerBusy) return <ProcessingRightSidebar state={summarizerProcessingState} />;
       return <RightSidebar />;
     }

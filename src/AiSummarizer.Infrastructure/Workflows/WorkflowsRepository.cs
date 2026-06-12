@@ -43,10 +43,25 @@ public sealed class WorkflowsRepository(NpgsqlDataSource dataSource, ISqlScriptL
             cmd.Parameters.AddWithValue("source_id", sourceId);
         }, cancellationToken);
 
+    public Task<Workflow?> GetActiveWorkflowBySourceIdAndTypeAsync(Guid sourceId, string workflowType, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Workflows/GetActiveWorkflowBySourceIdAndType.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("source_id", sourceId);
+            cmd.Parameters.AddWithValue("workflow_type", workflowType);
+        }, cancellationToken);
+
     public Task<Workflow?> GetActiveWorkflowBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("Workflows/GetActiveWorkflowBySourceUrl.sql", cmd =>
         {
             cmd.Parameters.AddWithValue("source_url", sourceUrl);
+        }, cancellationToken);
+
+    public Task<IReadOnlyList<Workflow>> ListInsightWorkflowsBySourceIdAsync(Guid sourceId, int limit, int offset, CancellationToken cancellationToken)
+        => QueryManyAsync("Workflows/ListInsightWorkflowsBySourceId.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("source_id", sourceId);
+            cmd.Parameters.AddWithValue("limit_value", limit);
+            cmd.Parameters.AddWithValue("offset_value", offset);
         }, cancellationToken);
 
     public Task<IReadOnlyList<Workflow>> ListActiveWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken)

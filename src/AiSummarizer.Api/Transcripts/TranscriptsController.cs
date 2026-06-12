@@ -1,5 +1,6 @@
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.PublicRequests;
+using AiSummarizer.Api.Workflows;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
@@ -14,6 +15,7 @@ namespace AiSummarizer.Api.Transcripts;
 [Route("api/transcripts")]
 public sealed class TranscriptsController(
     ITranscriptSchedulingService transcriptSchedulingService,
+    ITranscriptInsightsService transcriptInsightsService,
     ITranscriptsRepository transcriptsRepository,
     IUserVideoLibraryRepository userVideoLibraryRepository,
     IMediaSourcesRepository mediaSourcesRepository,
@@ -231,6 +233,28 @@ public sealed class TranscriptsController(
         return Ok(Map(transcript));
     }
 
+    [HttpPost("source/{sourceId:guid}/insights")]
+    public async Task<ActionResult<TranscriptInsightWorkflowResponse>> CreateInsightWorkflow(
+        [FromRoute] Guid sourceId,
+        [FromBody] CreateTranscriptInsightWorkflowRequest request,
+        CancellationToken cancellationToken)
+        => Ok(Map(await transcriptInsightsService.CreateInsightWorkflowAsync(
+            new CreateTranscriptInsightWorkflowCommand(
+                request.RequestedByUserId,
+                sourceId,
+                request.ActionKey,
+                request.Question,
+                request.ConversationContext),
+            cancellationToken)));
+
+    [HttpGet("source/{sourceId:guid}/insights/history")]
+    public async Task<ActionResult<IReadOnlyList<WorkflowResponse>>> ListInsightWorkflows(
+        [FromRoute] Guid sourceId,
+        [FromQuery] int limit = 12,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+        => Ok((await transcriptInsightsService.ListInsightWorkflowsAsync(sourceId, limit, offset, cancellationToken)).Select(Map).ToArray());
+
     private static AiSummarizer.Api.Workflows.WorkflowResponse Map(WorkflowDto workflow)
         => new(
             workflow.Id,
@@ -256,6 +280,15 @@ public sealed class TranscriptsController(
             workflow.ProgressMessage,
             workflow.CreatedAt,
             workflow.UpdatedAt);
+
+    private static TranscriptInsightWorkflowResponse Map(TranscriptInsightScheduleResultDto result)
+        => new(
+            result.Status,
+            result.ActionKey,
+            result.PromptKey,
+            result.EstimatedCredits,
+            result.Workflow is null ? null : Map(result.Workflow),
+            result.Result);
 
     private static PublicRequestRunResponse Map(PublicRequestRun run)
         => new(

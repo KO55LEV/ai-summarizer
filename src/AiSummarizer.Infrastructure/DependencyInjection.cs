@@ -76,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<ITodosService, TodosService>();
         services.AddScoped<IBillingService, BillingService>();
         services.AddScoped<IPromptsService, PromptsService>();
+        services.AddScoped<ITranscriptInsightsService, TranscriptInsightsService>();
         services.AddScoped<IAdminUsersService, AdminUsersService>();
         services.AddScoped<IAdminWorkflowCostsService, AdminWorkflowCostsService>();
         services.AddAdminSettings(configuration);

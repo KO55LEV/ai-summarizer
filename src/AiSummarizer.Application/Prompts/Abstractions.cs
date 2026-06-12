@@ -7,6 +7,7 @@ public interface IPromptsRepository
 {
     Task<Prompt> CreatePromptAsync(Prompt prompt, CancellationToken cancellationToken);
     Task<Prompt?> GetPromptByIdAsync(Guid promptId, CancellationToken cancellationToken);
+    Task<Prompt?> GetPromptByKeyAsync(string promptKey, CancellationToken cancellationToken);
     Task<IReadOnlyList<Prompt>> ListPromptsAsync(int limit, int offset, CancellationToken cancellationToken);
     Task<Prompt> UpdatePromptAsync(Prompt prompt, CancellationToken cancellationToken);
     Task DeletePromptAsync(Guid promptId, CancellationToken cancellationToken);

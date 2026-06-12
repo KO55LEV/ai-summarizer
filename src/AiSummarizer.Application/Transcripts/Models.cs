@@ -34,6 +34,21 @@ public sealed record TranscriptScheduleResultDto(
     TranscriptSummaryDto? Transcript,
     WorkflowDto? Workflow);
 
+public sealed record CreateTranscriptInsightWorkflowCommand(
+    Guid? RequestedByUserId,
+    Guid SourceId,
+    string ActionKey,
+    string? Question,
+    string? ConversationContext);
+
+public sealed record TranscriptInsightScheduleResultDto(
+    string Status,
+    string ActionKey,
+    string PromptKey,
+    decimal EstimatedCredits,
+    WorkflowDto? Workflow,
+    JsonElement? Result);
+
 public sealed record UserVideoLibraryDto(
     Guid Id,
     Guid RequestedByUserId,

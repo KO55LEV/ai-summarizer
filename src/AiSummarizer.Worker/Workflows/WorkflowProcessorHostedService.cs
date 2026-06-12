@@ -5,11 +5,15 @@ using System.Text.RegularExpressions;
 using AiSummarizer.Application.Billing;
 using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Jobs;
+using AiSummarizer.Application.Prompts;
+using AiSummarizer.Application.Reasoning;
 using AiSummarizer.Application.Settings;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
 using AiSummarizer.Domain.Jobs;
+using AiSummarizer.Domain.Prompts;
+using AiSummarizer.Domain.Transcripts;
 using AiSummarizer.Domain.Workflows;
 using AiSummarizer.Worker.JobsProcessing.Handlers;
 using Microsoft.Extensions.Options;
@@ -19,10 +23,13 @@ namespace AiSummarizer.Worker.Workflows;
 public sealed class WorkflowProcessorHostedService(
     IBillingService billingService,
     IMediaSourcesRepository mediaSourcesRepository,
+    ITranscriptsRepository transcriptsRepository,
+    IPromptsRepository promptsRepository,
     IWorkflowsRepository workflowsRepository,
     IJobsRepository jobsRepository,
     IUserVideoLibraryRepository userVideoLibraryRepository,
     IAdminSettingsService adminSettingsService,
+    IReasoningClientFactory reasoningClientFactory,
     IOptions<WorkflowOptions> options,
     IOptions<YouTubeDownloadOptions> youtubeDownloadOptions,
     IOptions<WhisperTranscribeOptions> whisperTranscribeOptions,
@@ -32,7 +39,11 @@ public sealed class WorkflowProcessorHostedService(
     private static readonly HashSet<string> SupportedWorkflowTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "youtube.summary",
-        "youtube.transcript"
+        "youtube.transcript",
+        "youtube.summary.quick_summary",
+        "youtube.summary.key_takeaways",
+        "youtube.summary.ask_this_video",
+        "youtube.summary.study_guide"
     };
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -71,6 +82,12 @@ public sealed class WorkflowProcessorHostedService(
 
     private async Task ProcessWorkflowAsync(Workflow workflow, string workerId, TimeSpan leaseDuration, WorkflowOptions workflowOptions, CancellationToken cancellationToken)
     {
+        if (IsInsightWorkflowType(workflow.WorkflowType))
+        {
+            await ProcessInsightWorkflowAsync(workflow, workerId, leaseDuration, cancellationToken);
+            return;
+        }
+
         if (!SupportedWorkflowTypes.Contains(workflow.WorkflowType))
         {
             await workflowsRepository.AddWorkflowEventAsync(workflow.Id, workflow.CurrentStepKey, "warning", "Unsupported workflow type.", JsonSerializer.SerializeToElement(new { workflow.WorkflowType }), null, cancellationToken);
@@ -679,7 +696,204 @@ public sealed class WorkflowProcessorHostedService(
         await SettleWorkflowBillingAsync(workflow, "Workflow completed.", cancellationToken);
     }
 
-    private async Task FailWorkflowAsync(Workflow workflow, string errorCode, string errorMessage, CancellationToken cancellationToken)
+    private async Task ProcessInsightWorkflowAsync(Workflow workflow, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        var input = workflow.Input;
+        var sourceId = workflow.SourceId ?? ReadGuid(input, "sourceId");
+        var transcriptId = ReadGuid(input, "transcriptId");
+        var actionKey = NormalizeKey(ReadString(input, "actionKey") ?? workflow.WorkflowType);
+        var promptKey = ReadString(input, "promptKey") ?? workflow.WorkflowType;
+        var question = ReadString(input, "question");
+        var conversationContext = ReadString(input, "conversationContext");
+
+        if (sourceId is null)
+        {
+            await FailWorkflowAsync(workflow, "invalid_input", "Workflow input is missing sourceId.", cancellationToken);
+            return;
+        }
+
+        var mediaSource = await mediaSourcesRepository.GetMediaSourceByIdAsync(sourceId.Value, cancellationToken);
+        if (mediaSource is null)
+        {
+            await FailWorkflowAsync(workflow, "source_not_found", $"Media source {sourceId.Value} was not found.", cancellationToken);
+            return;
+        }
+
+        var transcript = await transcriptsRepository.GetTranscriptBySourceIdAsync(sourceId.Value, cancellationToken);
+
+        if (transcript is null)
+        {
+            var sourceUrl = mediaSource.CanonicalUrl;
+            transcript = await transcriptsRepository.GetTranscriptBySourceUrlAsync(sourceUrl, cancellationToken)
+                ?? await transcriptsRepository.GetTranscriptBySourceUrlAsync(mediaSource.OriginalUrl, cancellationToken);
+        }
+
+        if (transcript is null)
+        {
+            await FailWorkflowAsync(workflow, "transcript_not_found", $"Transcript for source {sourceId.Value} was not found.", cancellationToken, markLibraryFailed: false);
+            return;
+        }
+
+        var prompt = await promptsRepository.GetPromptByKeyAsync(promptKey, cancellationToken);
+        if (prompt is null)
+        {
+            await FailWorkflowAsync(workflow, "prompt_not_found", $"Prompt {promptKey} was not found.", cancellationToken, markLibraryFailed: false);
+            return;
+        }
+
+        if (!prompt.IsActive)
+        {
+            await FailWorkflowAsync(workflow, "prompt_inactive", $"Prompt {promptKey} is not active.", cancellationToken, markLibraryFailed: false);
+            return;
+        }
+
+        string? transcriptExcerpt = null;
+        if (string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase))
+        {
+            var segments = await transcriptsRepository.GetTranscriptSegmentsByTranscriptIdAsync(transcript.Id, cancellationToken);
+            transcriptExcerpt = BuildTranscriptExcerpt(transcript, segments, question, conversationContext);
+        }
+
+        var currentStep = await GetLatestStepAsync(workflow.Id, cancellationToken);
+        if (currentStep is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var step = new WorkflowStep
+            {
+                Id = Guid.NewGuid(),
+                WorkflowId = workflow.Id,
+                StepOrder = 0,
+                StepKey = "generate_insight",
+                StepType = "llm",
+                JobId = null,
+                Status = "running",
+                Input = BuildInsightRequestJson(workflow, prompt, transcript, mediaSource, actionKey, question, conversationContext, transcriptExcerpt),
+                Output = null,
+                StartedAt = now,
+                FinishedAt = null,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            workflow = workflow with
+            {
+                Status = "running",
+                CurrentStepKey = step.StepKey,
+                ProgressPercent = 20,
+                ProgressMessage = $"Generating {FormatInsightLabel(actionKey)}",
+                LockedBy = workerId,
+                LockedAt = now,
+                LockedUntil = now.Add(leaseDuration),
+                StartedAt = workflow.StartedAt ?? now,
+                HeartbeatAt = now,
+                AttemptCount = workflow.AttemptCount + 1,
+                UpdatedAt = now
+            };
+
+            await workflowsRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
+            {
+                await repository.CreateWorkflowStepAsync(step, transaction, cancellationToken);
+                await repository.UpdateWorkflowAsync(workflow, transaction, cancellationToken);
+                await repository.AddWorkflowEventAsync(workflow.Id, step.StepKey, "info", $"Generating {FormatInsightLabel(actionKey)}.", step.Input, transaction, cancellationToken);
+                return 0;
+            }, cancellationToken);
+
+            currentStep = step;
+        }
+
+        var startedAt = DateTimeOffset.UtcNow;
+        ReasoningResponse reasoningResponse;
+        try
+        {
+            var client = reasoningClientFactory.GetClient(ParseReasoningProvider(prompt.Provider));
+            var systemPrompt = prompt.SystemPrompt.Trim();
+            var userPrompt = RenderPrompt(prompt.UserPrompt, transcript, mediaSource, question, conversationContext, transcriptExcerpt);
+            reasoningResponse = await client.CompleteAsync(new ReasoningRequest(
+                prompt.Model,
+                systemPrompt,
+                userPrompt,
+                null,
+                Temperature: 0.2,
+                MaxTokens: null,
+                ResponseFormat: "json"), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await FailWorkflowAsync(workflow, "reasoning_failed", ex.Message, cancellationToken, markLibraryFailed: false);
+            return;
+        }
+
+        JsonElement parsedResult;
+        try
+        {
+            parsedResult = ParseInsightResult(reasoningResponse.Text);
+        }
+        catch (Exception ex)
+        {
+            await RecordPromptRunAndFailAsync(workflow, currentStep, prompt, transcript, mediaSource, actionKey, question, conversationContext, transcriptExcerpt, startedAt, reasoningResponse, "invalid_llm_output", ex.Message, cancellationToken);
+            return;
+        }
+
+        var completedStep = currentStep with
+        {
+            Status = "succeeded",
+            Output = parsedResult,
+            FinishedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        var workflowResult = parsedResult;
+        var runNow = DateTimeOffset.UtcNow;
+        await workflowsRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
+        {
+            await promptsRepository.CreatePromptRunAsync(new PromptRun
+            {
+                Id = Guid.NewGuid(),
+                PromptId = prompt.Id,
+                WorkflowId = workflow.Id,
+                StepKey = completedStep.StepKey,
+                PromptKey = prompt.PromptKey,
+                Title = prompt.Title,
+                WorkflowType = prompt.WorkflowType,
+                Provider = prompt.Provider,
+                Model = reasoningResponse.Model,
+                Request = BuildPromptRunRequestJson(workflow, prompt, transcript, mediaSource, actionKey, question, conversationContext, transcriptExcerpt, completedStep.Input),
+                Response = BuildPromptRunResponseJson(reasoningResponse),
+                Status = "succeeded",
+                ErrorCode = null,
+                ErrorMessage = null,
+                InputTokens = reasoningResponse.Usage?.PromptTokens,
+                OutputTokens = reasoningResponse.Usage?.CompletionTokens,
+                TotalTokens = reasoningResponse.Usage?.TotalTokens,
+                DurationMs = null,
+                StartedAt = startedAt,
+                FinishedAt = runNow,
+                CreatedAt = runNow,
+                UpdatedAt = runNow
+            }, cancellationToken);
+
+            await repository.UpdateWorkflowStepAsync(completedStep, transaction, cancellationToken);
+            await repository.UpdateWorkflowAsync(workflow with
+            {
+                Status = "succeeded",
+                Result = workflowResult,
+                CurrentStepKey = completedStep.StepKey,
+                ProgressPercent = 100,
+                ProgressMessage = $"{FormatInsightLabel(actionKey)} ready",
+                LockedBy = null,
+                LockedAt = null,
+                LockedUntil = null,
+                FinishedAt = runNow,
+                UpdatedAt = runNow
+            }, transaction, cancellationToken);
+            await repository.AddWorkflowEventAsync(workflow.Id, completedStep.StepKey, "info", $"{FormatInsightLabel(actionKey)} completed.", workflowResult, transaction, cancellationToken);
+            return 0;
+        }, cancellationToken);
+
+        await SettleWorkflowBillingAsync(workflow with { Result = workflowResult, Status = "succeeded", CurrentStepKey = completedStep.StepKey, FinishedAt = runNow }, $"Completed {FormatInsightLabel(actionKey)}.", cancellationToken);
+    }
+
+    private async Task FailWorkflowAsync(Workflow workflow, string errorCode, string errorMessage, CancellationToken cancellationToken, bool markLibraryFailed = true)
     {
         var now = DateTimeOffset.UtcNow;
         workflow = workflow with
@@ -701,7 +915,7 @@ public sealed class WorkflowProcessorHostedService(
             return 0;
         }, cancellationToken);
 
-        if (workflow.SourceId is not null)
+        if (markLibraryFailed && workflow.SourceId is not null)
         {
             await userVideoLibraryRepository.FailByMediaSourceIdAsync(workflow.SourceId.Value, now, null, cancellationToken);
         }
@@ -950,6 +1164,348 @@ public sealed class WorkflowProcessorHostedService(
     }
 
     private static bool IsTerminal(JobStatus status) => status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Dead;
+
+    private static bool IsInsightWorkflowType(string workflowType)
+        => workflowType.Trim().StartsWith("youtube.summary.", StringComparison.OrdinalIgnoreCase);
+
+    private static ReasoningProvider ParseReasoningProvider(string provider)
+        => Enum.TryParse<ReasoningProvider>(provider, true, out var parsed) ? parsed : ReasoningProvider.OpenRouter;
+
+    private static string FormatInsightLabel(string actionKey)
+        => actionKey switch
+        {
+            "quick-summary" => "quick summary",
+            "key-takeaways" => "key takeaways",
+            "ask-this-video" => "question answer",
+            "study-guide" => "study guide",
+            _ => actionKey.Replace('-', ' ')
+        };
+
+    private static JsonElement BuildInsightRequestJson(Workflow workflow, Prompt prompt, Domain.Transcripts.Transcript transcript, MediaSource mediaSource, string actionKey, string? question, string? conversationContext, string? transcriptExcerpt)
+    {
+        var transcriptContent = string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase)
+            ? transcriptExcerpt ?? transcript.TranscriptText
+            : transcript.TranscriptText;
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            workflowId = workflow.Id,
+            sourceId = workflow.SourceId,
+            transcriptId = transcript.Id,
+            actionKey,
+            promptKey = prompt.PromptKey,
+            video = new
+            {
+                title = TryGetMetadataString(mediaSource.Metadata, "title"),
+                channel = TryGetMetadataString(mediaSource.Metadata, "channel"),
+                language = transcript.Language,
+                url = transcript.SourceUrl ?? mediaSource.CanonicalUrl
+            },
+            question,
+            conversationContext,
+            transcriptExcerpt,
+            transcript = transcriptContent,
+            systemPrompt = prompt.SystemPrompt,
+            userPrompt = prompt.UserPrompt
+        });
+    }
+
+    private static JsonElement BuildPromptRunRequestJson(Workflow workflow, Prompt prompt, Domain.Transcripts.Transcript transcript, MediaSource mediaSource, string actionKey, string? question, string? conversationContext, string? transcriptExcerpt, JsonElement stepInput)
+    {
+        var transcriptContent = string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase)
+            ? transcriptExcerpt ?? transcript.TranscriptText
+            : transcript.TranscriptText;
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            workflowId = workflow.Id,
+            promptId = prompt.Id,
+            promptKey = prompt.PromptKey,
+            actionKey,
+            question,
+            conversationContext,
+            transcriptExcerpt,
+            stepInput,
+            video = new
+            {
+                title = TryGetMetadataString(mediaSource.Metadata, "title"),
+                channel = TryGetMetadataString(mediaSource.Metadata, "channel"),
+                language = transcript.Language
+            },
+            transcript = transcriptContent
+        });
+    }
+
+    private static JsonElement BuildPromptRunResponseJson(ReasoningResponse reasoningResponse)
+        => JsonSerializer.SerializeToElement(new
+        {
+            text = reasoningResponse.Text,
+            raw = reasoningResponse.RawResponseJson,
+            usage = reasoningResponse.Usage is null ? null : new
+            {
+                promptTokens = reasoningResponse.Usage.PromptTokens,
+                completionTokens = reasoningResponse.Usage.CompletionTokens,
+                totalTokens = reasoningResponse.Usage.TotalTokens
+            }
+        });
+
+    private async Task RecordPromptRunAndFailAsync(Workflow workflow, WorkflowStep currentStep, Prompt prompt, Domain.Transcripts.Transcript transcript, MediaSource mediaSource, string actionKey, string? question, string? conversationContext, string? transcriptExcerpt, DateTimeOffset startedAt, ReasoningResponse reasoningResponse, string errorCode, string errorMessage, CancellationToken cancellationToken)
+    {
+        var failedAt = DateTimeOffset.UtcNow;
+        await workflowsRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
+        {
+            await promptsRepository.CreatePromptRunAsync(new PromptRun
+            {
+                Id = Guid.NewGuid(),
+                PromptId = prompt.Id,
+                WorkflowId = workflow.Id,
+                StepKey = currentStep.StepKey,
+                PromptKey = prompt.PromptKey,
+                Title = prompt.Title,
+                WorkflowType = prompt.WorkflowType,
+                Provider = prompt.Provider,
+                Model = reasoningResponse.Model,
+                Request = BuildPromptRunRequestJson(workflow, prompt, transcript, mediaSource, actionKey, question, conversationContext, transcriptExcerpt, currentStep.Input),
+                Response = BuildPromptRunResponseJson(reasoningResponse),
+                Status = "failed",
+                ErrorCode = errorCode,
+                ErrorMessage = errorMessage,
+                InputTokens = reasoningResponse.Usage?.PromptTokens,
+                OutputTokens = reasoningResponse.Usage?.CompletionTokens,
+                TotalTokens = reasoningResponse.Usage?.TotalTokens,
+                DurationMs = null,
+                StartedAt = startedAt,
+                FinishedAt = failedAt,
+                CreatedAt = failedAt,
+                UpdatedAt = failedAt
+            }, cancellationToken);
+
+            await repository.UpdateWorkflowStepAsync(currentStep with
+            {
+                Status = "failed",
+                ErrorCode = errorCode,
+                ErrorMessage = errorMessage,
+                FinishedAt = failedAt,
+                UpdatedAt = failedAt
+            }, transaction, cancellationToken);
+
+            await repository.UpdateWorkflowAsync(workflow with
+            {
+                Status = "failed",
+                ErrorCode = errorCode,
+                ErrorMessage = errorMessage,
+                CurrentStepKey = currentStep.StepKey,
+                LockedBy = null,
+                LockedAt = null,
+                LockedUntil = null,
+                FinishedAt = failedAt,
+                UpdatedAt = failedAt
+            }, transaction, cancellationToken);
+
+            await repository.AddWorkflowEventAsync(workflow.Id, currentStep.StepKey, "error", errorMessage, JsonSerializer.SerializeToElement(new { errorCode }), transaction, cancellationToken);
+            return 0;
+        }, cancellationToken);
+
+        await ReleaseWorkflowBillingAsync(workflow with
+        {
+            Status = "failed",
+            ErrorCode = errorCode,
+            ErrorMessage = errorMessage,
+            CurrentStepKey = currentStep.StepKey,
+            FinishedAt = failedAt
+        }, errorMessage, cancellationToken);
+    }
+
+    private static JsonElement ParseInsightResult(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            trimmed = trimmed.Trim('`').Trim();
+            if (trimmed.StartsWith("json", StringComparison.OrdinalIgnoreCase))
+            {
+                trimmed = trimmed[4..].Trim();
+            }
+        }
+
+        return JsonDocument.Parse(trimmed).RootElement.Clone();
+    }
+
+    private static string? TryGetMetadataString(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+    }
+
+    private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
+
+    private static string RenderPrompt(string template, Domain.Transcripts.Transcript transcript, MediaSource mediaSource, string? question, string? conversationContext, string? transcriptExcerpt)
+    {
+        var replacements = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["video_title"] = TryGetMetadataString(mediaSource.Metadata, "title"),
+            ["channel_name"] = TryGetMetadataString(mediaSource.Metadata, "channel"),
+            ["language"] = transcript.Language,
+            ["question"] = question,
+            ["conversation_context"] = conversationContext,
+            ["transcript_excerpt"] = transcriptExcerpt ?? transcript.TranscriptText,
+            ["transcript"] = transcriptExcerpt ?? transcript.TranscriptText
+        };
+
+        var result = template;
+        foreach (var (key, value) in replacements)
+        {
+            result = result.Replace($"{{{{{key}}}}}", JsonEncodedText.Encode(value ?? string.Empty).ToString(), StringComparison.Ordinal);
+        }
+
+        return result;
+    }
+
+    private static string BuildTranscriptExcerpt(Domain.Transcripts.Transcript transcript, IReadOnlyList<TranscriptSegment> segments, string? question, string? conversationContext)
+    {
+        if (segments.Count == 0)
+        {
+            return transcript.TranscriptText;
+        }
+
+        var contextParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(question))
+        {
+            contextParts.Add(question);
+        }
+
+        if (!string.IsNullOrWhiteSpace(conversationContext))
+        {
+            contextParts.Add(conversationContext);
+        }
+
+        var keywords = ExtractKeywords(string.Join(' ', contextParts));
+        var selectedSegments = SelectRelevantSegments(segments, keywords);
+        if (selectedSegments.Count == 0)
+        {
+            selectedSegments = segments.Take(Math.Min(6, segments.Count)).ToList();
+        }
+
+        var builder = new StringBuilder();
+        foreach (var segment in selectedSegments)
+        {
+            var line = $"[{FormatTimestamp(segment.StartSeconds)}-{FormatTimestamp(segment.EndSeconds)}] {segment.Text.Trim()}";
+            if (builder.Length > 0)
+            {
+                builder.AppendLine();
+            }
+
+            if (builder.Length + line.Length > 3600)
+            {
+                break;
+            }
+
+            builder.Append(line);
+        }
+
+        var excerpt = builder.ToString().Trim();
+        return excerpt.Length > 0 ? excerpt : transcript.TranscriptText;
+    }
+
+    private static List<TranscriptSegment> SelectRelevantSegments(IReadOnlyList<TranscriptSegment> segments, IReadOnlyCollection<string> keywords)
+    {
+        if (keywords.Count == 0)
+        {
+            return segments.Take(Math.Min(6, segments.Count)).ToList();
+        }
+
+        var scored = segments
+            .Select((segment, index) => new
+            {
+                Segment = segment,
+                Index = index,
+                Score = ScoreSegment(segment.Text, keywords)
+            })
+            .Where(item => item.Score > 0)
+            .OrderByDescending(item => item.Score)
+            .ThenBy(item => item.Index)
+            .Take(6)
+            .ToList();
+
+        var selected = new Dictionary<int, TranscriptSegment>();
+        foreach (var item in scored)
+        {
+            AddNeighborhood(segments, selected, item.Index, 1);
+        }
+
+        return selected
+            .OrderBy(item => item.Key)
+            .Select(item => item.Value)
+            .ToList();
+    }
+
+    private static void AddNeighborhood(IReadOnlyList<TranscriptSegment> segments, IDictionary<int, TranscriptSegment> selected, int centerIndex, int radius)
+    {
+        for (var index = Math.Max(0, centerIndex - radius); index <= Math.Min(segments.Count - 1, centerIndex + radius); index++)
+        {
+            if (!selected.ContainsKey(index))
+            {
+                selected[index] = segments[index];
+            }
+        }
+    }
+
+    private static int ScoreSegment(string text, IReadOnlyCollection<string> keywords)
+    {
+        var normalized = text.ToLowerInvariant();
+        var score = 0;
+        foreach (var keyword in keywords)
+        {
+            if (normalized.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                score++;
+            }
+        }
+
+        return score;
+    }
+
+    private static HashSet<string> ExtractKeywords(string? text)
+    {
+        var keywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return keywords;
+        }
+
+        foreach (var token in Regex.Split(text.ToLowerInvariant(), @"[^a-z0-9]+"))
+        {
+            if (token.Length < 4)
+            {
+                continue;
+            }
+
+            if (token is "this" or "that" or "with" or "from" or "what" or "when" or "where" or "which" or "about" or "video" or "context" or "answer")
+            {
+                continue;
+            }
+
+            keywords.Add(token);
+            if (keywords.Count >= 12)
+            {
+                break;
+            }
+        }
+
+        return keywords;
+    }
+
+    private static string FormatTimestamp(decimal seconds)
+    {
+        var duration = TimeSpan.FromSeconds((double)seconds);
+        return duration.TotalHours >= 1
+            ? duration.ToString(@"hh\:mm\:ss")
+            : duration.ToString(@"mm\:ss");
+    }
 
     private static string? ReadString(JsonElement element, string propertyName)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var property) ? property.GetString() : null;

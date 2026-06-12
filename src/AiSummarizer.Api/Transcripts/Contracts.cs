@@ -8,6 +8,12 @@ public sealed record ScheduleYoutubeTranscriptRequest(
     string? Language,
     bool? PreferNativeTranscript);
 
+public sealed record CreateTranscriptInsightWorkflowRequest(
+    Guid? RequestedByUserId,
+    string ActionKey,
+    string? Question,
+    string? ConversationContext);
+
 public sealed record TranscriptSummaryResponse(
     Guid Id,
     Guid JobId,
@@ -32,6 +38,14 @@ public sealed record TranscriptScheduleResponse(
     string Status,
     TranscriptSummaryResponse? Transcript,
     AiSummarizer.Api.Workflows.WorkflowResponse? Workflow);
+
+public sealed record TranscriptInsightWorkflowResponse(
+    string Status,
+    string ActionKey,
+    string PromptKey,
+    decimal EstimatedCredits,
+    AiSummarizer.Api.Workflows.WorkflowResponse? Workflow,
+    JsonElement? Result);
 
 public sealed record UserVideoLibraryItemResponse(
     Guid Id,

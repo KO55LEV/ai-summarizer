@@ -123,3 +123,18 @@ Current hardcoded fixture values:
 ```bash
 -- edit the values in db/seeds/0007_seed_youtube_summary_workflow.sql and run it
 ```
+
+## YouTube LLM prompt seeds
+
+`0010_seed_video_llm_prompts.sql` creates the prompt templates used by the video summary features that need LLM output:
+
+- `youtube.summary.quick_summary`
+- `youtube.summary.key_takeaways`
+- `youtube.summary.ask_this_video`
+- `youtube.summary.study_guide`
+
+These seeds are for the admin prompt library only. They do not start any runtime jobs by themselves.
+
+```bash
+-- edit the values in db/seeds/0010_seed_video_llm_prompts.sql and run it
+```
