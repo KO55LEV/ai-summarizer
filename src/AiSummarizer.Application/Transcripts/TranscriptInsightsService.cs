@@ -54,13 +54,14 @@ public sealed class TranscriptInsightsService(
         BillingReservationDto? reservation = null;
         try
         {
+            var workflowId = Guid.NewGuid();
             if (command.RequestedByUserId is not null)
             {
                 reservation = await billingService.ReserveAsync(
                     new ReserveBillingCreditsCommand(
                         command.RequestedByUserId.Value,
                         config.WorkflowType,
-                        sourceId,
+                        workflowId,
                         config.EstimatedCredits,
                         $"Reserve credits for {config.WorkflowType} workflow."),
                     cancellationToken);
@@ -68,7 +69,7 @@ public sealed class TranscriptInsightsService(
 
             var workflow = await workflowsRepository.CreateWorkflowAsync(new Workflow
             {
-                Id = Guid.NewGuid(),
+                Id = workflowId,
                 RequestedByUserId = command.RequestedByUserId,
                 SourceId = sourceId,
                 WorkflowType = config.WorkflowType,

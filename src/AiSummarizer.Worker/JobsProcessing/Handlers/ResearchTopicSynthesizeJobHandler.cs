@@ -96,6 +96,18 @@ public sealed class ResearchTopicSynthesizeJobHandler(
         string? outputJson = null;
         string? usageJson = null;
 
+        await context.LogInfoAsync("Research synthesis started", JsonSerializer.SerializeToElement(new
+        {
+            runId = run.Id,
+            topicId = topic.Id,
+            synthesisRunId,
+            rankingRunId = rankingRuns[^1].Id,
+            selectedDocumentCount = selectedDocuments.Length,
+            provider = options.Value.Provider.ToString(),
+            model = options.Value.Model,
+            promptVersion = options.Value.PromptVersion
+        }), cancellationToken);
+
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
             await repository.CreateTopicRunPhaseAsync(new ResearchTopicRunPhaseRecord(
@@ -152,6 +164,18 @@ public sealed class ResearchTopicSynthesizeJobHandler(
             var client = reasoningClientFactory.GetClient(options.Value.Provider);
             var systemPrompt = BuildSystemPrompt();
             var userPrompt = BuildUserPrompt(synthesisInput);
+            await context.LogInfoAsync("Research synthesis request prepared", JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                synthesisRunId,
+                selectedDocumentCount = selectedDocuments.Length,
+                maxCharsPerDocument = options.Value.MaxCharsPerDocument,
+                maxSelectedDocuments = options.Value.MaxSelectedDocuments,
+                provider = options.Value.Provider.ToString(),
+                model = options.Value.Model,
+                promptVersion = options.Value.PromptVersion
+            }), cancellationToken);
             reasoningResponse = await client.CompleteAsync(new ReasoningRequest(
                 options.Value.Model,
                 systemPrompt,
@@ -170,6 +194,19 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                 completionTokens = reasoningResponse.Usage.CompletionTokens,
                 totalTokens = reasoningResponse.Usage.TotalTokens
             }, JsonOptions);
+
+            await context.LogInfoAsync("Research synthesis response received", JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                synthesisRunId,
+                selectedDocumentCount = selectedDocuments.Length,
+                provider = reasoningResponse.Provider.ToString(),
+                model = reasoningResponse.Model,
+                promptTokens = reasoningResponse.Usage?.PromptTokens,
+                completionTokens = reasoningResponse.Usage?.CompletionTokens,
+                totalTokens = reasoningResponse.Usage?.TotalTokens
+            }), cancellationToken);
 
             await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
             {
@@ -320,6 +357,16 @@ public sealed class ResearchTopicSynthesizeJobHandler(
 
                 return 0;
             }, cancellationToken);
+
+            await context.LogInfoAsync("Research synthesis persisted", JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                synthesisRunId,
+                briefingId = briefing.Id,
+                selectedDocumentCount = selectedDocuments.Length,
+                previewText = briefing.PreviewText
+            }), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -425,14 +472,6 @@ public sealed class ResearchTopicSynthesizeJobHandler(
         }
 
         context.ReportProgress(100, "Completed");
-        await context.LogInfoAsync("Research synthesis completed", JsonSerializer.SerializeToElement(new
-        {
-            runId = run.Id,
-            topicId = topic.Id,
-            synthesisRunId,
-            briefingId = briefing!.Id,
-            selectedDocumentCount = selectedDocuments.Length
-        }), cancellationToken);
 
         return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new
         {

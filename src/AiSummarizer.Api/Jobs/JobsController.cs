@@ -35,6 +35,10 @@ public sealed class JobsController(IJobsService jobsService) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<JobLogResponse>>> GetLogs([FromRoute] Guid jobId, [FromQuery] int limit = 100, [FromQuery] int offset = 0, CancellationToken cancellationToken = default)
         => Ok((await jobsService.ListLogsAsync(jobId, limit, offset, cancellationToken)).Select(Map).ToArray());
 
+    [HttpPost("{jobId:guid}/request-cancel")]
+    public async Task<ActionResult<bool>> RequestCancel([FromRoute] Guid jobId, CancellationToken cancellationToken)
+        => Ok(await jobsService.RequestCancelAsync(jobId, cancellationToken));
+
     private static JobResponse Map(JobDto job)
         => new(
             job.Id,

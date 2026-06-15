@@ -45,6 +45,7 @@ public sealed class UserVideoLibraryRepository(NpgsqlDataSource dataSource, ISql
             cmd.Parameters.AddWithValue("id", item.Id);
             cmd.Parameters.AddWithValue("requested_by_user_id", item.RequestedByUserId);
             cmd.Parameters.AddWithValue("media_source_id", item.MediaSourceId);
+            cmd.Parameters.AddWithValue("project_id", (object?)item.ProjectId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("public_request_run_id", (object?)item.PublicRequestRunId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("workflow_id", (object?)item.WorkflowId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("transcript_id", (object?)item.TranscriptId ?? DBNull.Value);
@@ -74,12 +75,16 @@ public sealed class UserVideoLibraryRepository(NpgsqlDataSource dataSource, ISql
         }, transaction, cancellationToken);
     }
 
-    public Task<IReadOnlyList<UserVideoLibraryDto>> ListUserVideosAsync(Guid requestedByUserId, string? status, int limit, int offset, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<UserVideoLibraryDto>> ListUserVideosAsync(Guid requestedByUserId, Guid? projectId, string? status, int limit, int offset, CancellationToken cancellationToken)
         => QueryManyAsync("Transcripts/ListUserVideoLibrary.sql", cmd =>
         {
             cmd.Parameters.Add(new NpgsqlParameter("requested_by_user_id", NpgsqlDbType.Uuid)
             {
                 Value = requestedByUserId
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("project_id", NpgsqlDbType.Uuid)
+            {
+                Value = (object?)projectId ?? DBNull.Value
             });
             cmd.Parameters.Add(new NpgsqlParameter("status", NpgsqlDbType.Text)
             {
@@ -166,6 +171,7 @@ public sealed class UserVideoLibraryRepository(NpgsqlDataSource dataSource, ISql
             Id = reader.GetGuid(reader.GetOrdinal("id")),
             RequestedByUserId = reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
             MediaSourceId = reader.GetGuid(reader.GetOrdinal("media_source_id")),
+            ProjectId = reader.IsDBNull(reader.GetOrdinal("project_id")) ? null : reader.GetGuid(reader.GetOrdinal("project_id")),
             PublicRequestRunId = reader.IsDBNull(reader.GetOrdinal("public_request_run_id")) ? null : reader.GetGuid(reader.GetOrdinal("public_request_run_id")),
             WorkflowId = reader.IsDBNull(reader.GetOrdinal("workflow_id")) ? null : reader.GetGuid(reader.GetOrdinal("workflow_id")),
             TranscriptId = reader.IsDBNull(reader.GetOrdinal("transcript_id")) ? null : reader.GetGuid(reader.GetOrdinal("transcript_id")),

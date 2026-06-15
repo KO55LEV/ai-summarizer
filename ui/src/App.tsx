@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import LeftSidebar from './components/LeftSidebar';
 import MainContent from './components/MainContent';
 import RightSidebar from './components/RightSidebar';
@@ -32,6 +32,7 @@ import { getYouTubePreview } from './api/youtube';
 import { getCurrentUserId } from './config/currentUser';
 import { clearAuthenticated, getStoredAuthState, isAuthenticated, setStoredAuthState } from './config/auth';
 import type { NavItem, VideoMetadata, VideoRecord, WorkflowResponse, TranscriptInsightActionKey, TranscriptResponse } from './types';
+import type { DashboardVideo } from './api/types';
 import type { BillingBalanceResponse } from './api/adminBilling';
 import type { LogEntry, ProcessingState, PipelineStep } from './types/pipeline';
 import type { ResearchTopic, HistoryItem } from './api/types';
@@ -102,6 +103,8 @@ function buildFallbackVideoMeta(url: string): VideoMetadata {
     thumbnail: fallbackThumbnail(url),
   };
 }
+
+const USER_VISIBLE_INSIGHT_ERROR = 'We could not generate this insight. Please try again.';
 
 function buildAnalyzingVideoMeta(url: string, preview: Awaited<ReturnType<typeof getYouTubePreview>>): VideoMetadata {
   const base = buildFallbackVideoMeta(url);
@@ -365,7 +368,7 @@ function buildCompletedState(video: VideoRecord): ProcessingState {
 type AppLocation =
   | { kind: 'landing' }
   | { kind: 'auth'; mode: 'login' | 'signup' }
-  | { kind: 'admin'; section: 'users' | 'billing' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs' }
+  | { kind: 'admin'; section: 'users' | 'billing' | 'prompts' | 'llm-lab' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs' }
   | {
       kind: 'app';
       nav: NavItem;
@@ -435,7 +438,7 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
 
   if (path.startsWith('/admin/')) {
     const section = path.split('/')[2];
-    if (section === 'prompts' || section === 'search-providers' || section === 'runtime-settings' || section === 'users' || section === 'billing' || section === 'email-templates' || section === 'billing-rules' || section === 'workflow-costs') {
+    if (section === 'prompts' || section === 'llm-lab' || section === 'search-providers' || section === 'runtime-settings' || section === 'users' || section === 'billing' || section === 'email-templates' || section === 'billing-rules' || section === 'workflow-costs') {
       return { kind: 'admin', section };
     }
 
@@ -706,43 +709,42 @@ export default function App() {
     }
   }, [authenticated, authHydrating, isAdmin, location]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const refreshBillingBalance = useCallback(async () => {
     const userId = authState?.user.id?.trim();
 
     if (!authenticated || !userId) {
       setBillingBalance(null);
       setBillingBalanceError(null);
       setBillingBalanceLoading(false);
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
 
     setBillingBalanceLoading(true);
     setBillingBalanceError(null);
-    getBillingBalance(userId, authState?.session.accessToken)
-      .then((balance) => {
-        if (!cancelled) {
-          setBillingBalance(balance);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setBillingBalance(null);
-          setBillingBalanceError(error instanceof Error ? error.message : 'Failed to load billing balance');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setBillingBalanceLoading(false);
-        }
-      });
+    try {
+      const balance = await getBillingBalance(userId, authState?.session.accessToken);
+      setBillingBalance(balance);
+    } catch (error) {
+      setBillingBalance(null);
+      setBillingBalanceError(error instanceof Error ? error.message : 'Failed to load billing balance');
+    } finally {
+      setBillingBalanceLoading(false);
+    }
+  }, [authState?.session.accessToken, authState?.user.id, authenticated]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    refreshBillingBalance().catch(() => {
+      if (!cancelled) {
+        setBillingBalanceLoading(false);
+      }
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [authState?.session.accessToken, authState?.user.id, authenticated]);
+  }, [refreshBillingBalance]);
 
   useEffect(() => {
     let cancelled = false;
@@ -900,23 +902,25 @@ export default function App() {
             status: workflow.status,
             result: workflow.result as Record<string, unknown> | null,
             error: workflow.status === 'failed' || workflow.status === 'dead' || workflow.status === 'cancelled'
-              ? workflow.errorMessage ?? current.error
+              ? USER_VISIBLE_INSIGHT_ERROR
               : null,
           };
         });
 
         if (workflow.status === 'succeeded' || workflow.status === 'failed' || workflow.status === 'dead' || workflow.status === 'cancelled') {
           setPollingInsightWorkflowId(null);
+          void refreshBillingBalance();
           return;
         }
 
         timer = setTimeout(poll, 2000);
       } catch (error) {
         if (cancelled) return;
+        void error;
         setInsightState((current) => current ? {
           ...current,
           status: 'error',
-          error: error instanceof Error ? error.message : 'Something went wrong while polling insight workflow status',
+          error: USER_VISIBLE_INSIGHT_ERROR,
         } : current);
         setPollingInsightWorkflowId(null);
       }
@@ -1064,13 +1068,18 @@ export default function App() {
         workflowId: response.workflow?.id ?? null,
         status: response.workflow?.status ?? response.status,
         result: response.result,
-        error: null,
+        error: response.workflow && ['failed', 'dead', 'cancelled'].includes(response.workflow.status)
+          ? USER_VISIBLE_INSIGHT_ERROR
+          : null,
       });
 
       if (response.workflow && !['succeeded', 'failed', 'dead', 'cancelled'].includes(response.workflow.status)) {
         setPollingInsightWorkflowId(response.workflow.id);
       }
+
+      void refreshBillingBalance();
     } catch (error) {
+      void error;
       setInsightState({
         actionKey,
         promptKey: '',
@@ -1078,7 +1087,7 @@ export default function App() {
         workflowId: null,
         status: 'error',
         result: null,
-        error: error instanceof Error ? error.message : 'Something went wrong',
+        error: USER_VISIBLE_INSIGHT_ERROR,
       });
     }
   };
@@ -1110,6 +1119,17 @@ export default function App() {
     } catch {
       navigateToPath('/history');
     }
+  };
+
+  const handleDashboardVideoOpen = (video: DashboardVideo) => {
+    setSelectedVideo(null);
+    setSelectedHistoryTranscript(null);
+    setSelectedResearchTopic(null);
+    setInsightState(null);
+    setActiveInsightTab('quick-summary');
+    navigateToPath(
+      `/transcript?sourceId=${encodeURIComponent(video.sourceId)}&sourceUrl=${encodeURIComponent(video.url)}&title=${encodeURIComponent(video.title)}&channel=${encodeURIComponent(video.channel)}`,
+    );
   };
 
   const navigateToPath = (nextPath: string) => {
@@ -1253,7 +1273,7 @@ export default function App() {
     if (selectedVideoState && activeNav === 'transcript') {
       return <TranscriptView url={selectedVideoUrl} state={selectedVideoState} onChangeUrl={handleChangeUrl} />;
     }
-    if (activeNav === 'dashboard') return <DashboardPage />;
+    if (activeNav === 'dashboard') return <DashboardPage onVideoOpen={handleDashboardVideoOpen} />;
     if (activeNav === 'insights') return <InsightsPage />;
     if (activeNav === 'exports') return <ExportsPage />;
     if (activeNav === 'history') return <HistoryPage onVideoOpen={handleHistorySelect} />;
@@ -1557,6 +1577,9 @@ export default function App() {
             .join('')
             .slice(0, 2)
             .toUpperCase()}
+          billingBalance={billingBalance}
+          billingBalanceLoading={billingBalanceLoading}
+          billingBalanceError={billingBalanceError}
         />
       </div>
       <div className="min-w-0 flex min-h-0 flex-1 flex-col">

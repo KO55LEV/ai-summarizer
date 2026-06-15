@@ -55,13 +55,14 @@ public sealed class TranscriptSchedulingService(
         BillingReservationDto? reservation = null;
         try
         {
+            var workflowId = Guid.NewGuid();
             if (command.RequestedByUserId is not null)
             {
                 reservation = await billingService.ReserveAsync(
                     new ReserveBillingCreditsCommand(
                         command.RequestedByUserId.Value,
                         "youtube.transcript",
-                        mediaSource.Id,
+                        workflowId,
                         BillingUsageEstimator.EstimateWorkflowCredits("youtube.transcript"),
                         "Reserve credits for youtube transcript workflow."),
                     cancellationToken);
@@ -69,7 +70,7 @@ public sealed class TranscriptSchedulingService(
 
             var workflow = await workflowsRepository.CreateWorkflowAsync(new Workflow
             {
-                Id = Guid.NewGuid(),
+                Id = workflowId,
                 RequestedByUserId = command.RequestedByUserId,
                 SourceId = mediaSource.Id,
                 WorkflowType = "youtube.transcript",
@@ -209,6 +210,7 @@ public sealed class TranscriptSchedulingService(
             Id = Guid.NewGuid(),
             RequestedByUserId = command.RequestedByUserId.Value,
             MediaSourceId = mediaSource.Id,
+            ProjectId = command.ProjectId,
             PublicRequestRunId = publicRequestRunId ?? command.RequestRunId,
             WorkflowId = workflowId,
             TranscriptId = transcriptId ?? transcript?.Id,

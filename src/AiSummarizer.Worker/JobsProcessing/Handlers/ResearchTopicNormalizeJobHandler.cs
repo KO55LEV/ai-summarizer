@@ -125,15 +125,40 @@ public sealed class ResearchTopicNormalizeJobHandler(
         }
 
         context.ReportProgress(5, "Normalizing raw content");
+        await context.LogInfoAsync("Research normalization started", JsonSerializer.SerializeToElement(new
+        {
+            runId = run.Id,
+            topicId = topic.Id,
+            contentItemCount = candidates.Length,
+            normalizerVersion = NormalizerVersion
+        }), cancellationToken);
 
         foreach (var item in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            await context.LogInfoAsync("Research normalization item started", JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                contentItemId = item.Id,
+                source = item.SourceKey,
+                title = item.Title,
+                canonicalUrl = item.CanonicalUrl ?? item.SourceUrl
+            }), cancellationToken);
+
             var canonicalBody = NormalizeBody(item.RawText!);
             if (string.IsNullOrWhiteSpace(canonicalBody))
             {
                 skippedCount++;
+                await context.LogWarningAsync("Research normalization item skipped", JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    contentItemId = item.Id,
+                    source = item.SourceKey,
+                    reason = "empty_normalized_body"
+                }), cancellationToken);
                 continue;
             }
 
@@ -141,6 +166,14 @@ public sealed class ResearchTopicNormalizeJobHandler(
             if (!seenHashes.Add(canonicalHash))
             {
                 duplicateCount++;
+                await context.LogInfoAsync("Research normalization item deduplicated", JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    contentItemId = item.Id,
+                    source = item.SourceKey,
+                    canonicalUrl = item.CanonicalUrl ?? item.SourceUrl
+                }), cancellationToken);
                 continue;
             }
 
@@ -208,6 +241,17 @@ public sealed class ResearchTopicNormalizeJobHandler(
 
             documentCount++;
             chunkCount += chunks.Length;
+            await context.LogInfoAsync("Research normalization item completed", JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                contentItemId = item.Id,
+                documentId,
+                source = item.SourceKey,
+                title = item.Title,
+                wordCount = CountWords(canonicalBody),
+                chunkCount = chunks.Length
+            }), cancellationToken);
             context.ReportProgress((short)Math.Clamp(5 + (documentCount * 90 / Math.Max(1, candidates.Length)), 5, 95), $"Normalized {documentCount}/{candidates.Length}");
         }
 

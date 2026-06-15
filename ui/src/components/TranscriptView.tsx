@@ -132,6 +132,14 @@ export default function TranscriptView({ url, state, onChangeUrl }: TranscriptVi
               <Check size={12} className="text-blue-400" />
               <span className="text-[11px] text-text-muted ml-1">1.04K subscribers</span>
             </div>
+            <div className="mb-3 flex flex-wrap gap-2">
+              <div className="rounded-full border border-border bg-bg-input/40 px-3 py-1.5 text-[11px] text-text-muted">
+                {FAKE_TRANSCRIPT.length.toLocaleString()} segments
+              </div>
+              <div className="rounded-full border border-border bg-bg-input/40 px-3 py-1.5 text-[11px] text-text-muted">
+                8,532 words
+              </div>
+            </div>
             <div className="flex gap-6">
               <div>
                 <div className="text-[10px] text-text-muted mb-0.5">Duration</div>
@@ -218,19 +226,14 @@ export default function TranscriptView({ url, state, onChangeUrl }: TranscriptVi
         </div>
 
         {/* ── Footer ──────────────────────────────────── */}
-        <div className="flex items-center justify-between pb-2">
-          <p className="text-[11px] text-text-muted">
-            Word count: 8,532 &nbsp;•&nbsp; Character count: 56,321
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-text-muted">Auto-scroll</span>
-            <button
-              onClick={() => setAutoScroll(!autoScroll)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${autoScroll ? 'bg-accent' : 'bg-bg-input border border-border'}`}
-            >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${autoScroll ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-2 pb-2">
+          <span className="text-[11px] text-text-muted">Auto-scroll</span>
+          <button
+            onClick={() => setAutoScroll(!autoScroll)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${autoScroll ? 'bg-accent' : 'bg-bg-input border border-border'}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${autoScroll ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+          </button>
         </div>
       </div>
     </main>

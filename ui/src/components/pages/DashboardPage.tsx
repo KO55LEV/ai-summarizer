@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { DashboardData } from '../../api/types';
 import { getDashboardData } from '../../api/dashboard';
+import type { DashboardVideo } from '../../api/types';
 
 const STAT_ICONS: Record<string, JSX.Element> = {
   play:        <Play size={16} />,
@@ -45,7 +46,11 @@ function PageSkeleton() {
   );
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({
+  onVideoOpen,
+}: {
+  onVideoOpen?: (video: DashboardVideo) => void;
+}) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -133,7 +138,13 @@ export default function DashboardPage() {
             </div>
             <div className="divide-y divide-border">
               {dashboard.recentVideos.map((v, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-bg-input/40 transition-colors cursor-pointer">
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onVideoOpen?.(v)}
+                  className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-bg-input/40 cursor-pointer"
+                  disabled={!onVideoOpen}
+                >
                   <div className="w-[64px] h-[36px] rounded-md bg-bg-input overflow-hidden flex-shrink-0">
                     <img src={v.thumbnail} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
@@ -145,7 +156,7 @@ export default function DashboardPage() {
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-bg-input text-text-muted">{v.language}</span>
                     <span className="text-[10px] text-text-muted">{v.age}</span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

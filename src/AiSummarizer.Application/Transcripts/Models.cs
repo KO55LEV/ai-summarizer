@@ -25,6 +25,7 @@ public sealed record TranscriptSummaryDto(
 public sealed record ScheduleYoutubeTranscriptCommand(
     Guid? RequestRunId,
     Guid? RequestedByUserId,
+    Guid? ProjectId,
     string YoutubeUrl,
     string? Language,
     bool PreferNativeTranscript);

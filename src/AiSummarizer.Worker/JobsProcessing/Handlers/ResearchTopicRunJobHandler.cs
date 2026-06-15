@@ -44,6 +44,17 @@ public sealed class ResearchTopicRunJobHandler(
         var phaseId = Guid.NewGuid();
         var plannerVersion = "v1";
 
+        await context.LogInfoAsync("Research topic run started", JsonSerializer.SerializeToElement(new
+        {
+            runId,
+            topicId = topic.Id,
+            topicName = topic.Name,
+            sourceCount = topic.Sources.Count,
+            frequency = topic.Frequency,
+            triggeredBy = payload.TriggeredBy,
+            forceRun = payload.ForceRun
+        }), cancellationToken);
+
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
             await repository.CreateTopicRunAsync(new ResearchTopicRunRecord(
@@ -85,6 +96,26 @@ public sealed class ResearchTopicRunJobHandler(
         var queries = searchQueryPlanner.BuildQueries(topicSeed, topic.Sources, topic.Frequency);
         var groupedQueries = queries.GroupBy(query => query.Source).ToArray();
 
+        await context.LogInfoAsync("Research queries planned", JsonSerializer.SerializeToElement(new
+        {
+            runId,
+            topicId = topic.Id,
+            plannerVersion,
+            queryCount = queries.Count,
+            sources = groupedQueries.Select(group => new
+            {
+                source = group.Key.ToString().ToLowerInvariant(),
+                queryCount = group.Count(),
+                queries = group.Select(query => new
+                {
+                    query = query.Query,
+                    maxResults = query.MaxResults,
+                    startDate = query.StartDate,
+                    endDate = query.EndDate
+                })
+            })
+        }), cancellationToken);
+
         var totalResults = 0;
         var failedSources = 0;
         var failedSourceNames = new List<string>();
@@ -98,6 +129,23 @@ public sealed class ResearchTopicRunJobHandler(
             var searchRunNow = DateTimeOffset.UtcNow;
             var sourceKey = sourceGroup.Key.ToString().ToLowerInvariant();
             var sourceQueries = sourceGroup.ToArray();
+
+            await context.LogInfoAsync("Research source search started", JsonSerializer.SerializeToElement(new
+            {
+                runId,
+                topicId = topic.Id,
+                searchRunId,
+                source = sourceKey,
+                adapter = adapter.DisplayName,
+                queryCount = sourceQueries.Length,
+                queries = sourceQueries.Select(query => new
+                {
+                    query = query.Query,
+                    maxResults = query.MaxResults,
+                    startDate = query.StartDate,
+                    endDate = query.EndDate
+                })
+            }), cancellationToken);
 
             await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
             {
@@ -127,6 +175,21 @@ public sealed class ResearchTopicRunJobHandler(
                 {
                     var results = await adapter.SearchAsync(query, cancellationToken);
                     combinedResults.AddRange(results);
+                    await context.LogInfoAsync("Research search query completed", JsonSerializer.SerializeToElement(new
+                    {
+                        runId,
+                        topicId = topic.Id,
+                        searchRunId,
+                        source = sourceKey,
+                        query = query.Query,
+                        resultCount = results.Count,
+                        topResults = results.Take(5).Select(result => new
+                        {
+                            title = result.Title,
+                            url = result.Url,
+                            score = result.Score
+                        })
+                    }), cancellationToken);
                 }
 
                 var uniqueResults = combinedResults
@@ -136,6 +199,26 @@ public sealed class ResearchTopicRunJobHandler(
                         .First())
                     .OrderByDescending(item => item.Score)
                     .ToArray();
+
+                await context.LogInfoAsync("Research source search finished", JsonSerializer.SerializeToElement(new
+                {
+                    runId,
+                    topicId = topic.Id,
+                    searchRunId,
+                    source = sourceKey,
+                    adapter = adapter.DisplayName,
+                    queryCount = sourceQueries.Length,
+                    combinedResultCount = combinedResults.Count,
+                    uniqueResultCount = uniqueResults.Length,
+                    topResults = uniqueResults.Take(10).Select(result => new
+                    {
+                        query = result.Query,
+                        title = result.Title,
+                        url = result.Url,
+                        score = result.Score,
+                        domain = TryGetDomain(result.Url)
+                    })
+                }), cancellationToken);
 
                 await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
                 {
@@ -198,6 +281,17 @@ public sealed class ResearchTopicRunJobHandler(
                 failedSources++;
                 failedSourceNames.Add(sourceKey);
                 logger.LogWarning(ex, "Research source {Source} failed during search intake", sourceKey);
+                await context.LogWarningAsync("Research source search failed", JsonSerializer.SerializeToElement(new
+                {
+                    runId,
+                    topicId = topic.Id,
+                    searchRunId,
+                    source = sourceKey,
+                    adapter = adapter.DisplayName,
+                    queryCount = sourceQueries.Length,
+                    error = ex.Message,
+                    exception = ex.GetType().FullName
+                }), cancellationToken);
 
                 await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
                 {

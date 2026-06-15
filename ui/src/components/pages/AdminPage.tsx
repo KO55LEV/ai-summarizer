@@ -14,6 +14,7 @@ import {
   Layers3,
   PenSquare,
   Plus,
+  PanelTop,
   RefreshCw,
   Search,
   Server,
@@ -49,6 +50,10 @@ import {
 } from '../../api/adminBilling';
 import type { WorkflowCostResponse } from '../../api/adminWorkflowCosts';
 import { listWorkflowCosts } from '../../api/adminWorkflowCosts';
+import type { WorkflowEventResponse } from '../../api/adminWorkflows';
+import { getWorkflowEvents, getWorkflowSteps, listActiveWorkflows } from '../../api/adminWorkflows';
+import type { JobLogResponse, JobResponse } from '../../api/adminJobs';
+import { getJobLogs, listActiveJobs, listHistoryJobs, requestJobCancel } from '../../api/adminJobs';
 import type {
   PromptArchiveResponse,
   PromptResponse,
@@ -107,11 +112,78 @@ import {
   listEmailTemplates,
   updateEmailTemplate,
 } from '../../api/adminEmailTemplates';
+import type { WorkflowResponse, WorkflowStepResponse } from '../../types';
+import AdminLlmLabPanel from './AdminLlmLabPanel';
 
-type AdminSection = 'users' | 'billing' | 'prompts' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs';
+type AdminSection = 'users' | 'billing' | 'prompts' | 'llm-lab' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs';
 type WorkflowCostStatusFilter = 'all' | 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'dead';
 type PromptTab = 'editor' | 'runs' | 'archive' | 'usage';
 type ProviderTab = 'editor' | 'usage';
+type WorkflowHostKind = 'active' | 'cost';
+type WorkflowHostSelection = string | null;
+type JobStatusFilter = 'all' | 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'dead';
+type JobSelection = string | null;
+
+interface WorkflowHostRow {
+  kind: WorkflowHostKind;
+  workflowId: string;
+  requestedByUserId: string | null;
+  requestedByUserEmail: string | null;
+  requestedByUserDisplayName: string | null;
+  workflowType: string;
+  workflowStatus: string;
+  sourceId: string | null;
+  sourceLabel: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  progressPercent: number | null;
+  progressMessage: string | null;
+  currentStepKey: string | null;
+  attemptCount: number | null;
+  maxAttempts: number | null;
+  lockedBy: string | null;
+  lockedAt: string | null;
+  lockedUntil: string | null;
+  heartbeatAt: string | null;
+  estimatedCredits: number | null;
+  finalCredits: number | null;
+  reservationStatus: string | null;
+  sourceType: string | null;
+  reason: string | null;
+  diagnosticProvider: string | null;
+  diagnosticMessage: string | null;
+}
+
+interface JobHostRow {
+  jobId: string;
+  parentJobId: string | null;
+  requestedByUserId: string | null;
+  jobType: string;
+  jobStatus: string;
+  priority: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  attemptCount: number;
+  maxAttempts: number;
+  progressPercent: number | null;
+  progressMessage: string | null;
+  availableAt: string;
+  lockedBy: string | null;
+  lockedAt: string | null;
+  lockedUntil: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  heartbeatAt: string | null;
+  cancelRequestedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  errorDetails: Record<string, unknown> | null;
+}
 
 interface AdminPageProps {
   initialSection: AdminSection;
@@ -595,11 +667,36 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   const [billingTopUpForm, setBillingTopUpForm] = useState<BillingTopUpFormState>(EMPTY_BILLING_TOPUP_FORM);
 
   const [workflowCosts, setWorkflowCosts] = useState<WorkflowCostResponse[]>([]);
-  const [selectedWorkflowCostId, setSelectedWorkflowCostId] = useState<string | null>(null);
+  const [activeWorkflows, setActiveWorkflows] = useState<WorkflowResponse[]>([]);
+  const [selectedWorkflowKey, setSelectedWorkflowKey] = useState<WorkflowHostSelection>(null);
   const [workflowCostsLoading, setWorkflowCostsLoading] = useState(true);
+  const [workflowHostLoading, setWorkflowHostLoading] = useState(true);
   const [workflowCostsError, setWorkflowCostsError] = useState<string | null>(null);
+  const [workflowHostError, setWorkflowHostError] = useState<string | null>(null);
   const [workflowCostSearch, setWorkflowCostSearch] = useState('');
   const [workflowCostStatusFilter, setWorkflowCostStatusFilter] = useState<WorkflowCostStatusFilter>('all');
+  const [workflowSteps, setWorkflowSteps] = useState<WorkflowStepResponse[]>([]);
+  const [selectedWorkflowStepId, setSelectedWorkflowStepId] = useState<string | null>(null);
+  const [workflowStepsLoading, setWorkflowStepsLoading] = useState(false);
+  const [workflowStepsError, setWorkflowStepsError] = useState<string | null>(null);
+  const [workflowStepJobLogs, setWorkflowStepJobLogs] = useState<JobLogResponse[]>([]);
+  const [workflowStepJobLogsLoading, setWorkflowStepJobLogsLoading] = useState(false);
+  const [workflowStepJobLogsError, setWorkflowStepJobLogsError] = useState<string | null>(null);
+  const [workflowCanceling, setWorkflowCanceling] = useState(false);
+  const [workflowEvents, setWorkflowEvents] = useState<WorkflowEventResponse[]>([]);
+  const [workflowEventsLoading, setWorkflowEventsLoading] = useState(false);
+  const [workflowEventsError, setWorkflowEventsError] = useState<string | null>(null);
+  const [workflowRefreshNonce, setWorkflowRefreshNonce] = useState(0);
+  const [jobsActive, setJobsActive] = useState<JobResponse[]>([]);
+  const [jobsHistory, setJobsHistory] = useState<JobResponse[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<JobSelection>(null);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobSearch, setJobSearch] = useState('');
+  const [jobStatusFilter, setJobStatusFilter] = useState<JobStatusFilter>('all');
+  const [jobLogs, setJobLogs] = useState<JobLogResponse[]>([]);
+  const [jobLogsLoading, setJobLogsLoading] = useState(false);
+  const [jobLogsError, setJobLogsError] = useState<string | null>(null);
 
   const changeSection = (nextSection: AdminSection) => {
     setSection(nextSection);
@@ -941,29 +1038,37 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   useEffect(() => {
     if (section !== 'workflow-costs') {
       setWorkflowCostsLoading(false);
+      setWorkflowHostLoading(false);
       return;
     }
 
     let cancelled = false;
     setWorkflowCostsError(null);
+    setWorkflowHostError(null);
     setWorkflowCostsLoading(true);
+    setWorkflowHostLoading(true);
 
-    listWorkflowCosts(100, 0)
-      .then((items) => {
+    Promise.all([
+      listWorkflowCosts(100, 0),
+      listActiveWorkflows(100, 0),
+    ])
+      .then(([items, activeItems]) => {
         if (cancelled) return;
         setWorkflowCosts(items);
-        if (items.length > 0 && (!selectedWorkflowCostId || !items.some((item) => item.workflowId === selectedWorkflowCostId))) {
-          setSelectedWorkflowCostId(items[0].workflowId);
-        }
-        if (items.length === 0) {
-          setSelectedWorkflowCostId(null);
-        }
+        setActiveWorkflows(activeItems);
       })
       .catch((err) => {
-        if (!cancelled) setWorkflowCostsError(err instanceof Error ? err.message : 'Failed to load workflow costs');
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load workflows';
+          setWorkflowCostsError(message);
+          setWorkflowHostError(message);
+        }
       })
       .finally(() => {
-        if (!cancelled) setWorkflowCostsLoading(false);
+        if (!cancelled) {
+          setWorkflowCostsLoading(false);
+          setWorkflowHostLoading(false);
+        }
       });
 
     return () => {
@@ -972,19 +1077,212 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   }, [section]);
 
   useEffect(() => {
+    if (section !== 'workflow-costs' || !selectedWorkflowKey) {
+      setWorkflowEvents([]);
+      setWorkflowEventsError(null);
+      setWorkflowEventsLoading(false);
+      return;
+    }
+
+    const selectedWorkflowId = selectedWorkflowKey;
+    let cancelled = false;
+    setWorkflowEventsError(null);
+    setWorkflowEventsLoading(true);
+
+    getWorkflowEvents(selectedWorkflowId, 100, 0)
+      .then((items) => {
+        if (!cancelled) {
+          setWorkflowEvents(items);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setWorkflowEventsError(err instanceof Error ? err.message : 'Failed to load workflow events');
+          setWorkflowEvents([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkflowEventsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, selectedWorkflowKey, workflowRefreshNonce, workflowCosts, activeWorkflows]);
+
+  useEffect(() => {
+    const currentWorkflow = selectedWorkflowKey
+      ? workflowHostRows.find((item) => workflowKey(item) === selectedWorkflowKey) ?? null
+      : null;
+
+    if (section !== 'workflow-costs' || !currentWorkflow) {
+      setWorkflowSteps([]);
+      setSelectedWorkflowStepId(null);
+      setWorkflowStepsError(null);
+      setWorkflowStepsLoading(false);
+      return;
+    }
+
+    const selectedWorkflowId = currentWorkflow.workflowId;
+    let cancelled = false;
+    setWorkflowStepsError(null);
+    setWorkflowStepsLoading(true);
+
+    getWorkflowSteps(selectedWorkflowId)
+      .then((items) => {
+        if (cancelled) {
+          return;
+        }
+
+        setWorkflowSteps(items);
+        setSelectedWorkflowStepId((current) => {
+          if (current && items.some((item) => item.id === current)) {
+            return current;
+          }
+
+          const preferredStep =
+            items.find((item) => item.stepKey === currentWorkflow.currentStepKey) ??
+            [...items].sort((a, b) => b.stepOrder - a.stepOrder)[0] ??
+            null;
+
+          return preferredStep?.id ?? null;
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setWorkflowStepsError(err instanceof Error ? err.message : 'Failed to load workflow steps');
+          setWorkflowSteps([]);
+          setSelectedWorkflowStepId(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkflowStepsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, selectedWorkflowKey, workflowRefreshNonce, workflowCosts, activeWorkflows]);
+
+  const selectedWorkflowStep = selectedWorkflowStepId
+    ? workflowSteps.find((item) => item.id === selectedWorkflowStepId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (section !== 'workflow-costs' || !selectedWorkflowStep?.jobId) {
+      setWorkflowStepJobLogs([]);
+      setWorkflowStepJobLogsError(null);
+      setWorkflowStepJobLogsLoading(false);
+      return;
+    }
+
+    const jobId = selectedWorkflowStep.jobId;
+    let cancelled = false;
+    setWorkflowStepJobLogsError(null);
+    setWorkflowStepJobLogsLoading(true);
+
+    getJobLogs(jobId, 100, 0)
+      .then((items) => {
+        if (!cancelled) {
+          setWorkflowStepJobLogs(items);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setWorkflowStepJobLogsError(err instanceof Error ? err.message : 'Failed to load job logs');
+          setWorkflowStepJobLogs([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkflowStepJobLogsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, selectedWorkflowStep?.jobId, workflowRefreshNonce, workflowCosts, activeWorkflows]);
+
+  useEffect(() => {
     if (section !== 'workflow-costs') {
+      setJobsActive([]);
+      setJobsHistory([]);
+      setJobsLoading(false);
+      setJobsError(null);
       return;
     }
 
-    if (workflowCosts.length === 0) {
-      setSelectedWorkflowCostId(null);
+    let cancelled = false;
+    setJobsError(null);
+    setJobsLoading(true);
+
+    Promise.all([listActiveJobs(100, 0), listHistoryJobs(100, 0)])
+      .then(([activeItems, historyItems]) => {
+        if (cancelled) return;
+        setJobsActive(activeItems);
+        setJobsHistory(historyItems);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setJobsError(err instanceof Error ? err.message : 'Failed to load jobs');
+          setJobsActive([]);
+          setJobsHistory([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setJobsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, workflowRefreshNonce]);
+
+  const selectedJob = selectedJobId
+    ? [...jobsActive, ...jobsHistory].find((item) => item.id === selectedJobId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (section !== 'workflow-costs' || !selectedJob?.id) {
+      setJobLogs([]);
+      setJobLogsLoading(false);
+      setJobLogsError(null);
       return;
     }
 
-    if (!selectedWorkflowCostId || !workflowCosts.some((item) => item.workflowId === selectedWorkflowCostId)) {
-      setSelectedWorkflowCostId(workflowCosts[0].workflowId);
-    }
-  }, [section, workflowCosts, selectedWorkflowCostId]);
+    let cancelled = false;
+    setJobLogsError(null);
+    setJobLogsLoading(true);
+
+    getJobLogs(selectedJob.id, 100, 0)
+      .then((items) => {
+        if (!cancelled) {
+          setJobLogs(items);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setJobLogsError(err instanceof Error ? err.message : 'Failed to load job logs');
+          setJobLogs([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setJobLogsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section, selectedJob?.id, workflowRefreshNonce]);
 
   useEffect(() => {
     if (userMode === 'new') {
@@ -1018,7 +1316,225 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   const selectedProvider = selectedProviderId ? providers.find((item) => item.id === selectedProviderId) ?? null : null;
   const selectedBillingRule = selectedBillingRuleId ? billingRules.find((item) => item.id === selectedBillingRuleId) ?? null : null;
   const selectedBillingUser = selectedBillingUserId ? billingUsers.find((item) => item.id === selectedBillingUserId) ?? null : null;
-  const selectedWorkflowCost = selectedWorkflowCostId ? workflowCosts.find((item) => item.workflowId === selectedWorkflowCostId) ?? null : null;
+  function workflowKey(item: WorkflowHostRow): WorkflowHostSelection {
+    return item.workflowId;
+  }
+
+  function mapWorkflowCost(item: WorkflowCostResponse): WorkflowHostRow {
+    return {
+      kind: 'cost',
+      workflowId: item.workflowId,
+      requestedByUserId: item.requestedByUserId,
+      requestedByUserEmail: item.requestedByUserEmail,
+      requestedByUserDisplayName: item.requestedByUserDisplayName,
+      workflowType: item.workflowType,
+      workflowStatus: item.workflowStatus,
+      sourceId: item.sourceId,
+      sourceLabel: item.sourceLabel,
+      errorCode: item.errorCode,
+      errorMessage: item.errorMessage,
+      createdAt: item.createdAt,
+      startedAt: item.startedAt,
+      finishedAt: item.finishedAt,
+      progressPercent: null,
+      progressMessage: null,
+      currentStepKey: null,
+      attemptCount: null,
+      maxAttempts: null,
+      lockedBy: null,
+      lockedAt: null,
+      lockedUntil: null,
+      heartbeatAt: null,
+      estimatedCredits: item.estimatedCredits,
+      finalCredits: item.finalCredits,
+      reservationStatus: item.reservationStatus,
+      sourceType: item.sourceType,
+      reason: item.reason,
+      diagnosticProvider: item.diagnosticProvider,
+      diagnosticMessage: item.diagnosticMessage,
+    };
+  }
+
+  function mapActiveWorkflow(item: WorkflowResponse): WorkflowHostRow {
+    const input = item.input && typeof item.input === 'object' ? item.input : {};
+    const sourceId = typeof input.sourceId === 'string' ? input.sourceId : item.sourceId;
+    const sourceLabel =
+      typeof input.sourceLabel === 'string'
+        ? input.sourceLabel
+        : typeof input.youtubeUrl === 'string'
+          ? input.youtubeUrl
+          : typeof input.sourceUrl === 'string'
+            ? input.sourceUrl
+            : sourceId;
+
+    return {
+      kind: 'active',
+      workflowId: item.id,
+      requestedByUserId: item.requestedByUserId,
+      requestedByUserEmail: null,
+      requestedByUserDisplayName: null,
+      workflowType: item.workflowType,
+      workflowStatus: item.status,
+      sourceId,
+      sourceLabel,
+      errorCode: item.errorCode,
+      errorMessage: item.errorMessage,
+      createdAt: item.createdAt,
+      startedAt: item.startedAt,
+      finishedAt: item.finishedAt,
+      progressPercent: item.progressPercent,
+      progressMessage: item.progressMessage,
+      currentStepKey: item.currentStepKey,
+      attemptCount: item.attemptCount,
+      maxAttempts: item.maxAttempts,
+      lockedBy: item.lockedBy,
+      lockedAt: item.lockedAt,
+      lockedUntil: item.lockedUntil,
+      heartbeatAt: item.heartbeatAt,
+      estimatedCredits: null,
+      finalCredits: null,
+      reservationStatus: null,
+      sourceType: sourceId ? 'workflow' : null,
+      reason: typeof input.reason === 'string' ? input.reason : null,
+      diagnosticProvider: null,
+      diagnosticMessage: null,
+    };
+  }
+
+  const activeWorkflowRows = activeWorkflows.map(mapActiveWorkflow);
+  const costWorkflowRows = workflowCosts.map(mapWorkflowCost);
+  const workflowHostRows = [...activeWorkflowRows, ...costWorkflowRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  function mapJob(item: JobResponse): JobHostRow {
+    const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+    const result = item.result && typeof item.result === 'object' ? item.result : null;
+    const errorDetails = item.errorDetails && typeof item.errorDetails === 'object' ? item.errorDetails : null;
+
+    return {
+      jobId: item.id,
+      parentJobId: item.parentJobId,
+      requestedByUserId: item.requestedByUserId,
+      jobType: item.jobType,
+      jobStatus: item.status,
+      priority: item.priority,
+      errorCode: item.errorCode,
+      errorMessage: item.errorMessage,
+      attemptCount: item.attemptCount,
+      maxAttempts: item.maxAttempts,
+      progressPercent: item.progressPercent,
+      progressMessage: item.progressMessage,
+      availableAt: item.availableAt,
+      lockedBy: item.lockedBy,
+      lockedAt: item.lockedAt,
+      lockedUntil: item.lockedUntil,
+      startedAt: item.startedAt,
+      finishedAt: item.finishedAt,
+      heartbeatAt: item.heartbeatAt,
+      cancelRequestedAt: item.cancelRequestedAt,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      payload,
+      result,
+      errorDetails,
+    };
+  }
+
+  const jobHostRows = [...jobsActive.map(mapJob), ...jobsHistory.map(mapJob)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const filteredWorkflowRows = (() => {
+    const search = workflowCostSearch.trim().toLowerCase();
+
+    const matchesSearch = (item: WorkflowHostRow) => {
+      if (!search) return true;
+      return [
+        item.workflowId,
+        item.requestedByUserEmail ?? '',
+        item.requestedByUserDisplayName ?? '',
+        item.workflowType,
+        item.workflowStatus,
+        item.sourceLabel ?? '',
+        item.reason ?? '',
+        item.sourceType ?? '',
+        item.currentStepKey ?? '',
+        item.progressMessage ?? '',
+        item.errorCode ?? '',
+        item.errorMessage ?? '',
+        item.diagnosticProvider ?? '',
+        item.diagnosticMessage ?? '',
+      ].join(' ').toLowerCase().includes(search);
+    };
+
+    const matchesStatus = (item: WorkflowHostRow) => {
+      if (workflowCostStatusFilter === 'all') return true;
+      return item.workflowStatus === workflowCostStatusFilter;
+    };
+
+    return workflowHostRows.filter((item) => matchesSearch(item) && matchesStatus(item)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  })();
+
+  const filteredJobRows = (() => {
+    const search = jobSearch.trim().toLowerCase();
+
+    const matchesSearch = (item: JobHostRow) => {
+      if (!search) return true;
+      return [
+        item.jobId,
+        item.parentJobId ?? '',
+        item.requestedByUserId ?? '',
+        item.jobType,
+        item.jobStatus,
+        item.errorCode ?? '',
+        item.errorMessage ?? '',
+        item.progressMessage ?? '',
+        JSON.stringify(item.payload),
+        JSON.stringify(item.result ?? {}),
+        JSON.stringify(item.errorDetails ?? {}),
+      ].join(' ').toLowerCase().includes(search);
+    };
+
+    const matchesStatus = (item: JobHostRow) => {
+      if (jobStatusFilter === 'all') return true;
+      return item.jobStatus === jobStatusFilter;
+    };
+
+    return jobHostRows.filter((item) => matchesSearch(item) && matchesStatus(item)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  })();
+
+  const selectedWorkflow = selectedWorkflowKey
+    ? filteredWorkflowRows.find((item) => workflowKey(item) === selectedWorkflowKey) ?? null
+    : null;
+
+  useEffect(() => {
+    if (section !== 'workflow-costs') {
+      return;
+    }
+
+    const visibleJobs = filteredJobRows;
+    if (visibleJobs.length === 0) {
+      setSelectedJobId(null);
+      return;
+    }
+
+    if (!selectedJobId || !visibleJobs.some((item) => item.jobId === selectedJobId)) {
+      setSelectedJobId(visibleJobs[0].jobId);
+    }
+  }, [section, selectedJobId, filteredJobRows]);
+
+  useEffect(() => {
+    if (section !== 'workflow-costs') {
+      return;
+    }
+
+    const visible = filteredWorkflowRows;
+    if (visible.length === 0) {
+      setSelectedWorkflowKey(null);
+      return;
+    }
+
+    if (!selectedWorkflowKey || !visible.some((item) => workflowKey(item) === selectedWorkflowKey)) {
+      setSelectedWorkflowKey(workflowKey(visible[0]));
+    }
+  }, [section, selectedWorkflowKey, filteredWorkflowRows]);
 
   const filteredPrompts = prompts.filter((prompt) => {
     const haystack = [prompt.promptKey, prompt.title, prompt.description ?? '', prompt.provider, prompt.model, prompt.workflowType ?? ''].join(' ').toLowerCase();
@@ -1081,23 +1597,6 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     return matchesSearch && matchesStatus;
   });
 
-  const filteredWorkflowCosts = workflowCosts.filter((item) => {
-    const haystack = [
-      item.workflowId,
-      item.requestedByUserEmail ?? '',
-      item.requestedByUserDisplayName ?? '',
-      item.workflowType,
-      item.workflowStatus,
-      item.sourceLabel ?? '',
-      item.reason ?? '',
-      item.sourceType ?? '',
-    ].join(' ').toLowerCase();
-    const matchesSearch = haystack.includes(workflowCostSearch.toLowerCase());
-    const matchesStatus =
-      workflowCostStatusFilter === 'all' ? true : item.workflowStatus === workflowCostStatusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
   const promptStats = {
     total: prompts.length,
     active: prompts.filter((item) => item.isActive).length,
@@ -1134,8 +1633,8 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   };
 
   const workflowCostStats = {
-    total: workflowCosts.length,
-    active: workflowCosts.filter((item) => ['queued', 'running', 'waiting'].includes(item.workflowStatus)).length,
+    total: workflowCosts.length + activeWorkflows.length,
+    active: activeWorkflows.filter((item) => ['queued', 'running', 'waiting'].includes(item.status)).length,
     succeeded: workflowCosts.filter((item) => item.workflowStatus === 'succeeded').length,
     charged: workflowCosts.reduce((sum, item) => sum + (item.finalCredits ?? 0), 0),
   };
@@ -1578,7 +2077,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     }
   };
 
-  if (userLoading || billingLoading || promptLoading || providerLoading || runtimeSettingsLoading || emailTemplateLoading || billingRuleLoading || workflowCostsLoading) return <PageSkeleton />;
+  if (userLoading || billingLoading || promptLoading || providerLoading || runtimeSettingsLoading || emailTemplateLoading || billingRuleLoading || workflowCostsLoading || workflowHostLoading || jobsLoading) return <PageSkeleton />;
 
   const renderUserPanel = () => {
     const toggleRole = (roleKey: string) => {
@@ -3191,13 +3690,40 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     );
   };
 
-  const renderWorkflowCostsPanel = () => {
-    const userInitials = (item: WorkflowCostResponse | null) => {
+  const renderWorkflowsPanel = () => {
+    const userInitials = (item: WorkflowHostRow | null) => {
       if (!item) return 'W';
       const source = item.requestedByUserDisplayName?.trim() || item.requestedByUserEmail || item.workflowId;
       const parts = source.split(/[\s@._-]+/).filter(Boolean);
       return (parts.slice(0, 2).map((part) => part[0]).join('') || 'W').toUpperCase();
     };
+
+    const eventContextText = (context: Record<string, unknown>) => {
+      const keys = Object.keys(context);
+      if (keys.length === 0) return 'No extra context.';
+      try {
+        return JSON.stringify(context, null, 2);
+      } catch {
+        return 'Context could not be serialized.';
+      }
+    };
+
+    const refreshWorkflows = async () => {
+      setWorkflowCostsError(null);
+      setWorkflowHostError(null);
+      try {
+        setWorkflowRefreshNonce((current) => current + 1);
+        const [items, activeItems] = await Promise.all([listWorkflowCosts(100, 0), listActiveWorkflows(100, 0)]);
+        setWorkflowCosts(items);
+        setActiveWorkflows(activeItems);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to refresh workflows';
+        setWorkflowCostsError(message);
+        setWorkflowHostError(message);
+      }
+    };
+
+    const selectedStepLogsHeader = selectedWorkflowStep ? `${selectedWorkflowStep.stepKey} logs` : 'Step logs';
 
     return (
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -3205,21 +3731,13 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
           <div className="border-b border-border px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-[15px] font-semibold text-text-primary">Workflow costs</h2>
-                <p className="text-[11px] text-text-muted">Track estimated and final charge per workflow.</p>
+                <h2 className="text-[15px] font-semibold text-text-primary">Workflows</h2>
+                <p className="text-[11px] text-text-muted">Inspect live workflows, completed runs, and their logs.</p>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setWorkflowCostsError(null);
-                  void listWorkflowCosts(100, 0).then((items) => {
-                    setWorkflowCosts(items);
-                    if (items.length === 0) {
-                      setSelectedWorkflowCostId(null);
-                    }
-                  }).catch((err) => {
-                    setWorkflowCostsError(err instanceof Error ? err.message : 'Failed to refresh workflow costs');
-                  });
+                  void refreshWorkflows();
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-input px-3.5 py-2 text-[12px] font-semibold text-text-secondary transition-colors hover:bg-bg-card hover:text-text-primary"
               >
@@ -3235,7 +3753,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                   type="text"
                   value={workflowCostSearch}
                   onChange={(e) => setWorkflowCostSearch(e.target.value)}
-                  placeholder="Search by user, workflow, source or ID..."
+                  placeholder="Search by user, workflow, source, status, or ID..."
                   className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
                 />
               </div>
@@ -3261,22 +3779,23 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
           </div>
 
           <div className="max-h-[calc(100vh-310px)] overflow-y-auto p-3">
-            {filteredWorkflowCosts.length === 0 ? (
+            {filteredWorkflowRows.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
                 <div className="text-[13px] font-medium text-text-primary">No workflows match your filters.</div>
                 <div className="mt-1 text-[11px] text-text-muted">Try a different search or status filter.</div>
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredWorkflowCosts.map((item) => {
-                  const isSelected = item.workflowId === selectedWorkflowCostId;
+                {filteredWorkflowRows.map((item) => {
+                  const isSelected = item.workflowId === selectedWorkflowKey;
                   return (
                     <button
                       key={item.workflowId}
                       type="button"
                       onClick={() => {
-                        setSelectedWorkflowCostId(item.workflowId);
+                        setSelectedWorkflowKey(item.workflowId);
                         setWorkflowCostsError(null);
+                        setWorkflowHostError(null);
                       }}
                       className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
                         isSelected
@@ -3298,13 +3817,25 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                                 {item.workflowType} • {item.sourceLabel ?? item.workflowId}
                               </div>
                             </div>
-                            <Badge tone={item.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{item.workflowStatus}</Badge>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <Badge tone={item.kind === 'active' ? 'accent' : 'muted'}>{item.kind === 'active' ? 'Live' : 'History'}</Badge>
+                              <Badge tone={item.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{item.workflowStatus}</Badge>
+                            </div>
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            <Badge>{formatCredits(item.estimatedCredits)} est</Badge>
-                            <Badge tone={item.finalCredits !== null ? 'accent' : 'muted'}>
-                              {item.finalCredits !== null ? `${formatCredits(item.finalCredits)} final` : 'Open'}
-                            </Badge>
+                            {item.kind === 'cost' ? (
+                              <>
+                                <Badge>{formatCredits(item.estimatedCredits ?? 0)} est</Badge>
+                                <Badge tone={item.finalCredits !== null ? 'accent' : 'muted'}>
+                                  {item.finalCredits !== null ? `${formatCredits(item.finalCredits)} final` : 'Open'}
+                                </Badge>
+                              </>
+                            ) : (
+                              <>
+                                <Badge>{item.progressPercent !== null ? `${item.progressPercent}%` : 'Live'}</Badge>
+                                <Badge tone={item.currentStepKey ? 'accent' : 'muted'}>{item.currentStepKey ?? 'No step'}</Badge>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3322,38 +3853,75 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[16px] font-semibold text-text-primary">
-                    {selectedWorkflowCost
-                      ? selectedWorkflowCost.requestedByUserDisplayName ?? selectedWorkflowCost.requestedByUserEmail ?? 'Workflow cost'
+                    {selectedWorkflow
+                      ? selectedWorkflow.requestedByUserDisplayName ?? selectedWorkflow.requestedByUserEmail ?? 'Workflow'
                       : 'Select a workflow'}
                   </h2>
-                  {selectedWorkflowCost && <Badge tone={selectedWorkflowCost.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{selectedWorkflowCost.workflowStatus}</Badge>}
+                  {selectedWorkflow && <Badge tone={selectedWorkflow.kind === 'active' ? 'accent' : 'muted'}>{selectedWorkflow.kind === 'active' ? 'Live' : 'History'}</Badge>}
+                  {selectedWorkflow && <Badge tone={selectedWorkflow.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{selectedWorkflow.workflowStatus}</Badge>}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
-                  {selectedWorkflowCost ? (
+                  {selectedWorkflow ? (
                     <>
-                      <span>{selectedWorkflowCost.workflowType}</span>
+                      <span>{selectedWorkflow.workflowType}</span>
                       <span>•</span>
-                      <span>{selectedWorkflowCost.sourceLabel ?? selectedWorkflowCost.workflowId}</span>
+                      <span>{selectedWorkflow.sourceLabel ?? selectedWorkflow.workflowId}</span>
                       <span>•</span>
-                      <span>Created {formatDateTime(selectedWorkflowCost.createdAt)}</span>
+                      <span>Created {formatDateTime(selectedWorkflow.createdAt)}</span>
                     </>
                   ) : (
                     <span>No workflow selected.</span>
                   )}
                 </div>
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedWorkflow?.kind === 'active' && selectedWorkflowStep?.jobId && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedWorkflowStep?.jobId) return;
+                      setWorkflowCanceling(true);
+                      setWorkflowStepJobLogsError(null);
+                      try {
+                        await requestJobCancel(selectedWorkflowStep.jobId);
+                        setWorkflowRefreshNonce((current) => current + 1);
+                      } catch (err) {
+                        setWorkflowStepJobLogsError(err instanceof Error ? err.message : 'Failed to request cancel');
+                      } finally {
+                        setWorkflowCanceling(false);
+                      }
+                    }}
+                    disabled={workflowCanceling}
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px] font-semibold text-amber-200 transition-colors hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <CircleDashed size={14} />
+                    {workflowCanceling ? 'Stopping…' : 'Stop job'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void refreshWorkflows();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-bg-primary transition-colors hover:bg-accent-hover"
+                >
+                  <RefreshCw size={14} />
+                  Refresh
+                </button>
+              </div>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
               <StatCard label="Total" value={String(workflowCostStats.total)} icon={<Layers3 size={14} />} />
               <StatCard label="Succeeded" value={String(workflowCostStats.succeeded)} icon={<CircleCheck size={14} />} accent />
-              <StatCard label="Active" value={String(workflowCostStats.active)} icon={<Clock3 size={14} />} />
+              <StatCard label="Running" value={String(workflowCostStats.active)} icon={<Clock3 size={14} />} />
               <StatCard label="Charged" value={formatCredits(workflowCostStats.charged)} icon={<Database size={14} />} />
             </div>
           </div>
 
           <div className="p-5">
-            {workflowCostsLoading ? (
+            {workflowCostsLoading || workflowHostLoading ? (
               <div className="grid gap-4">
                 <div className="h-28 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
                 <div className="h-64 rounded-2xl border border-border bg-bg-input/60 animate-pulse" />
@@ -3364,90 +3932,459 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                   <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
                     <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
                       <Database size={14} className="text-accent" />
-                      Cost snapshot
+                      {selectedWorkflow?.kind === 'active' ? 'Live workflow' : 'History snapshot'}
                     </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] text-text-muted">
-                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
-                        <div className="text-text-muted">Estimated</div>
-                        <div className="mt-1 text-[16px] font-semibold text-text-primary">
-                          {selectedWorkflowCost ? formatCredits(selectedWorkflowCost.estimatedCredits) : '—'}
+                    {selectedWorkflow ? (
+                      selectedWorkflow.kind === 'cost' ? (
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] text-text-muted">
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Estimated</div>
+                            <div className="mt-1 text-[16px] font-semibold text-text-primary">{formatCredits(selectedWorkflow.estimatedCredits ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Final</div>
+                            <div className="mt-1 text-[16px] font-semibold text-text-primary">
+                              {selectedWorkflow.finalCredits !== null ? formatCredits(selectedWorkflow.finalCredits) : 'Open'}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Reservation</div>
+                            <div className="mt-1 text-[12px] font-semibold text-text-primary">{selectedWorkflow.reservationStatus ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Source type</div>
+                            <div className="mt-1 text-[12px] font-semibold text-text-primary">{selectedWorkflow.sourceType ?? '—'}</div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
-                        <div className="text-text-muted">Final</div>
-                        <div className="mt-1 text-[16px] font-semibold text-text-primary">
-                          {selectedWorkflowCost?.finalCredits !== null && selectedWorkflowCost?.finalCredits !== undefined
-                            ? formatCredits(selectedWorkflowCost.finalCredits)
-                            : 'Open'}
+                      ) : (
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] text-text-muted">
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Progress</div>
+                            <div className="mt-1 text-[16px] font-semibold text-text-primary">
+                              {selectedWorkflow.progressPercent !== null ? `${selectedWorkflow.progressPercent}%` : 'Live'}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Current step</div>
+                            <div className="mt-1 truncate text-[12px] font-semibold text-text-primary">{selectedWorkflow.currentStepKey ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Attempts</div>
+                            <div className="mt-1 text-[12px] font-semibold text-text-primary">
+                              {selectedWorkflow.attemptCount ?? 0}/{selectedWorkflow.maxAttempts ?? '—'}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                            <div className="text-text-muted">Heartbeat</div>
+                            <div className="mt-1 text-[12px] font-semibold text-text-primary">{formatDateTime(selectedWorkflow.heartbeatAt)}</div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
-                        <div className="text-text-muted">Reservation</div>
-                        <div className="mt-1 text-[12px] font-semibold text-text-primary">
-                          {selectedWorkflowCost?.reservationStatus ?? '—'}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
-                        <div className="text-text-muted">Source type</div>
-                        <div className="mt-1 text-[12px] font-semibold text-text-primary">
-                          {selectedWorkflowCost?.sourceType ?? '—'}
-                        </div>
-                      </div>
-                    </div>
+                      )
+                    ) : (
+                      <div className="mt-3 text-[11px] text-text-muted">Select a workflow on the left to inspect live state or history details.</div>
+                    )}
                   </div>
                   <div className="rounded-2xl border border-border bg-bg-input/40 p-4">
                     <div className="flex items-center gap-2 text-[12px] font-semibold text-text-primary">
                       <Shield size={14} className="text-accent" />
-                      Lifecycle
+                      Workflow details
                     </div>
-                    <div className="mt-3 space-y-2 text-[11px] text-text-muted">
-                      <div>Workflows reserve credits when they are created.</div>
-                      <div>When a workflow finishes, the reservation settles or releases.</div>
-                      <div>Final credits are written only once the workflow has usage data.</div>
-                    </div>
+                    {selectedWorkflow ? (
+                      <div className="mt-3 space-y-2 text-[11px] text-text-muted">
+                        <div><span className="text-text-primary">Workflow ID:</span> {selectedWorkflow.workflowId}</div>
+                        <div><span className="text-text-primary">User:</span> {selectedWorkflow.requestedByUserDisplayName ?? selectedWorkflow.requestedByUserEmail ?? 'System'}</div>
+                        <div><span className="text-text-primary">Email:</span> {selectedWorkflow.requestedByUserEmail ?? '—'}</div>
+                        <div><span className="text-text-primary">Source:</span> {selectedWorkflow.sourceLabel ?? '—'}</div>
+                        <div><span className="text-text-primary">Source ID:</span> {selectedWorkflow.sourceId ?? '—'}</div>
+                        <div><span className="text-text-primary">Error code:</span> {selectedWorkflow.errorCode ?? '—'}</div>
+                        <div><span className="text-text-primary">Error message:</span> {selectedWorkflow.errorMessage ?? '—'}</div>
+                        <div><span className="text-text-primary">Created:</span> {formatDateTime(selectedWorkflow.createdAt)}</div>
+                        <div><span className="text-text-primary">Started:</span> {formatDateTime(selectedWorkflow.startedAt)}</div>
+                        <div><span className="text-text-primary">Finished:</span> {formatDateTime(selectedWorkflow.finishedAt)}</div>
+                        {selectedWorkflow.kind === 'active' ? (
+                          <>
+                            <div><span className="text-text-primary">Locked by:</span> {selectedWorkflow.lockedBy ?? '—'}</div>
+                            <div><span className="text-text-primary">Locked at:</span> {formatDateTime(selectedWorkflow.lockedAt)}</div>
+                            <div><span className="text-text-primary">Locked until:</span> {formatDateTime(selectedWorkflow.lockedUntil)}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div><span className="text-text-primary">Provider:</span> {selectedWorkflow.diagnosticProvider ?? '—'}</div>
+                            <div>
+                              <span className="text-text-primary">Provider diagnostic:</span>
+                              <div className="mt-1 max-h-44 overflow-auto rounded-xl border border-border bg-bg-card/70 p-2 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                                {selectedWorkflow.diagnosticMessage ?? '—'}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-[11px] text-text-muted">Choose a workflow to inspect metadata.</div>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[12px] font-semibold text-text-primary">Workflow details</div>
-                      {selectedWorkflowCost && <Badge tone={selectedWorkflowCost.workflowStatus === 'succeeded' ? 'accent' : 'muted'}>{selectedWorkflowCost.workflowStatus}</Badge>}
+                <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[12px] font-semibold text-text-primary">Steps</div>
+                    <Badge tone={workflowStepsLoading ? 'muted' : workflowStepsError ? 'muted' : 'accent'}>
+                      {workflowStepsLoading ? 'Loading' : workflowStepsError ? 'Error' : `${workflowSteps.length} steps`}
+                    </Badge>
+                  </div>
+                  {workflowStepsError ? (
+                    <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+                      {workflowStepsError}
                     </div>
-                    {selectedWorkflowCost ? (
-                      <div className="mt-3 space-y-2 text-[11px] text-text-muted">
-                        <div><span className="text-text-primary">Workflow ID:</span> {selectedWorkflowCost.workflowId}</div>
-                        <div><span className="text-text-primary">User:</span> {selectedWorkflowCost.requestedByUserDisplayName ?? selectedWorkflowCost.requestedByUserEmail ?? 'System'}</div>
-                        <div><span className="text-text-primary">Email:</span> {selectedWorkflowCost.requestedByUserEmail ?? '—'}</div>
-                        <div><span className="text-text-primary">Source:</span> {selectedWorkflowCost.sourceLabel ?? '—'}</div>
-                        <div><span className="text-text-primary">Created:</span> {formatDateTime(selectedWorkflowCost.createdAt)}</div>
-                        <div><span className="text-text-primary">Started:</span> {formatDateTime(selectedWorkflowCost.startedAt)}</div>
-                        <div><span className="text-text-primary">Finished:</span> {formatDateTime(selectedWorkflowCost.finishedAt)}</div>
-                      </div>
-                    ) : (
-                      <div className="mt-3 text-[11px] text-text-muted">Select a workflow on the left to inspect cost details.</div>
-                    )}
-                  </section>
+                  ) : workflowStepsLoading ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                    </div>
+                  ) : workflowSteps.length === 0 ? (
+                    <div className="mt-3 text-[11px] text-text-muted">No step details recorded for this workflow.</div>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {workflowSteps
+                        .slice()
+                        .sort((a, b) => a.stepOrder - b.stepOrder)
+                        .map((step) => {
+                          const isSelected = step.id === selectedWorkflowStepId;
+                          return (
+                            <button
+                              key={step.id}
+                              type="button"
+                              onClick={() => setSelectedWorkflowStepId(step.id)}
+                              className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                                isSelected
+                                  ? 'border-accent/40 bg-accent/10'
+                                  : 'border-border bg-bg-card/70 hover:border-border/80 hover:bg-bg-card'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-[12px] font-semibold text-text-primary">
+                                    {step.stepOrder}. {step.stepKey}
+                                  </div>
+                                  <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                                    {step.stepType}
+                                    {step.jobId ? ` • ${step.jobId}` : ''}
+                                  </div>
+                                </div>
+                                <Badge tone={step.status === 'succeeded' ? 'accent' : step.status === 'failed' ? 'muted' : 'default'}>
+                                  {step.status}
+                                </Badge>
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
+                </section>
 
-                  <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[12px] font-semibold text-text-primary">Reservation details</div>
-                      {selectedWorkflowCost && <Badge tone={selectedWorkflowCost.reservationStatus === 'settled' ? 'accent' : 'muted'}>{selectedWorkflowCost.reservationStatus ?? 'none'}</Badge>}
+                <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[12px] font-semibold text-text-primary">Workflow events</div>
+                    <Badge tone={workflowEventsLoading ? 'muted' : workflowEventsError ? 'muted' : 'accent'}>
+                      {workflowEventsLoading ? 'Loading' : workflowEventsError ? 'Error' : `${workflowEvents.length} events`}
+                    </Badge>
+                  </div>
+                  {workflowEventsError ? (
+                    <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+                      {workflowEventsError}
                     </div>
-                    {selectedWorkflowCost ? (
-                      <div className="mt-3 space-y-2 text-[11px] text-text-muted">
-                        <div><span className="text-text-primary">Reservation ID:</span> {selectedWorkflowCost.reservationId ?? '—'}</div>
-                        <div><span className="text-text-primary">Estimated:</span> {formatCredits(selectedWorkflowCost.estimatedCredits)} credits</div>
-                        <div><span className="text-text-primary">Final:</span> {selectedWorkflowCost.finalCredits !== null ? `${formatCredits(selectedWorkflowCost.finalCredits)} credits` : 'Open'}</div>
-                        <div><span className="text-text-primary">Reason:</span> {selectedWorkflowCost.reason ?? '—'}</div>
-                        <div><span className="text-text-primary">Settled:</span> {formatDateTime(selectedWorkflowCost.settledAt)}</div>
-                        <div><span className="text-text-primary">Released:</span> {formatDateTime(selectedWorkflowCost.releasedAt)}</div>
+                  ) : workflowEventsLoading ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                    </div>
+                  ) : workflowEvents.length === 0 ? (
+                    <div className="mt-3 text-[11px] text-text-muted">No events recorded for this workflow.</div>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {workflowEvents.map((event) => (
+                        <div key={event.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Badge tone={event.level === 'error' ? 'muted' : 'accent'}>{event.level}</Badge>
+                              <div className="truncate text-[11px] font-semibold text-text-primary">{event.message}</div>
+                            </div>
+                            <div className="text-[10px] text-text-muted">{formatDateTime(event.createdAt)}</div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+                            <span>{event.stepKey ?? 'root'}</span>
+                            <span>•</span>
+                            <span>{event.workflowId}</span>
+                          </div>
+                          <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-border bg-bg-secondary/60 p-2 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                            {eventContextText(event.context)}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[12px] font-semibold text-text-primary">{selectedStepLogsHeader}</div>
+                    <div className="flex items-center gap-2">
+                      {selectedWorkflowStep?.jobId && <Badge tone="muted">Job {selectedWorkflowStep.jobId}</Badge>}
+                      <Badge tone={workflowStepJobLogsLoading ? 'muted' : workflowStepJobLogsError ? 'muted' : 'accent'}>
+                        {workflowStepJobLogsLoading ? 'Loading' : workflowStepJobLogsError ? 'Error' : `${workflowStepJobLogs.length} logs`}
+                      </Badge>
+                    </div>
+                  </div>
+                  {workflowStepJobLogsError ? (
+                    <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+                      {workflowStepJobLogsError}
+                    </div>
+                  ) : workflowStepJobLogsLoading ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                    </div>
+                  ) : !selectedWorkflowStep?.jobId ? (
+                    <div className="mt-3 text-[11px] text-text-muted">Pick a step with a job ID to inspect worker logs.</div>
+                  ) : workflowStepJobLogs.length === 0 ? (
+                    <div className="mt-3 text-[11px] text-text-muted">No logs recorded for this job.</div>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {workflowStepJobLogs.map((log) => (
+                        <div key={log.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Badge tone={log.level === 'error' ? 'muted' : log.level === 'warn' ? 'default' : 'accent'}>{log.level}</Badge>
+                              <div className="truncate text-[11px] font-semibold text-text-primary">{log.message}</div>
+                            </div>
+                            <div className="text-[10px] text-text-muted">{formatDateTime(log.createdAt)}</div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+                            <span>{log.attemptNo !== null ? `attempt ${log.attemptNo}` : 'attempt —'}</span>
+                            <span>•</span>
+                            <span>{log.jobId}</span>
+                          </div>
+                          <pre className="mt-2 max-h-44 overflow-auto rounded-lg border border-border bg-bg-secondary/60 p-2 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                            {eventContextText(log.context)}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[12px] font-semibold text-text-primary">Jobs</div>
+                      <div className="mt-0.5 text-[10px] text-text-muted">All queued, running, and completed jobs.</div>
+                    </div>
+                    <Badge tone={jobsLoading ? 'muted' : jobsError ? 'muted' : 'accent'}>
+                      {jobsLoading ? 'Loading' : jobsError ? 'Error' : `${filteredJobRows.length} jobs`}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                      <input
+                        type="text"
+                        value={jobSearch}
+                        onChange={(e) => setJobSearch(e.target.value)}
+                        placeholder="Search by job type, status, payload, or ID..."
+                        className="w-full rounded-xl border border-border bg-bg-input py-2.5 pl-9 pr-3 text-[13px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/60"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Filter size={13} className="text-text-muted" />
+                      {(['all', 'queued', 'running', 'waiting', 'succeeded', 'failed', 'cancelled', 'dead'] as const).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setJobStatusFilter(value)}
+                          className={`rounded-full px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
+                            jobStatusFilter === value
+                              ? 'bg-accent text-bg-primary'
+                              : 'border border-border bg-bg-input text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {jobsError ? (
+                    <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+                      {jobsError}
+                    </div>
+                  ) : jobsLoading ? (
+                    <div className="mt-3 grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+                      <div className="space-y-2">
+                        <div className="h-16 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                        <div className="h-16 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
                       </div>
-                    ) : (
-                      <div className="mt-3 text-[11px] text-text-muted">Reservation data appears after the workflow creates or settles a charge.</div>
-                    )}
-                  </section>
-                </div>
+                      <div className="h-56 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+                      <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                        {filteredJobRows.length === 0 ? (
+                          <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                            <div className="text-[13px] font-medium text-text-primary">No jobs match your filters.</div>
+                            <div className="mt-1 text-[11px] text-text-muted">Try a different search or status filter.</div>
+                          </div>
+                        ) : (
+                          filteredJobRows.map((item) => {
+                            const isSelected = item.jobId === selectedJobId;
+                            const sourceLabel =
+                              typeof item.payload.sourceLabel === 'string'
+                                ? item.payload.sourceLabel
+                                : typeof item.payload.sourceId === 'string'
+                                  ? item.payload.sourceId
+                                  : item.jobType;
+
+                            return (
+                              <button
+                                key={item.jobId}
+                                type="button"
+                                onClick={() => setSelectedJobId(item.jobId)}
+                                className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                                  isSelected
+                                    ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]'
+                                    : 'border-border bg-bg-card/70 hover:border-border/80 hover:bg-bg-card'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[12px] font-semibold text-text-primary">{item.jobType}</div>
+                                    <div className="mt-0.5 truncate text-[11px] text-text-muted">{sourceLabel}</div>
+                                  </div>
+                                  <Badge tone={item.jobStatus === 'succeeded' ? 'accent' : item.jobStatus === 'failed' ? 'muted' : 'default'}>
+                                    {item.jobStatus}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Badge tone="muted">{item.jobId}</Badge>
+                                  <Badge>{formatDateTime(item.createdAt)}</Badge>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-border bg-bg-card/70 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-semibold text-text-primary">
+                                {selectedJob ? selectedJob.jobType : 'Select a job'}
+                              </div>
+                              <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                                {selectedJob ? selectedJob.jobId : 'Choose a job from the list to inspect details and logs.'}
+                              </div>
+                            </div>
+                            {selectedJob && <Badge tone={selectedJob.jobStatus === 'succeeded' ? 'accent' : selectedJob.jobStatus === 'failed' ? 'muted' : 'default'}>{selectedJob.jobStatus}</Badge>}
+                          </div>
+
+                          {selectedJob ? (
+                            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Job ID</div>
+                                <div className="mt-1 break-all text-[12px] font-semibold text-text-primary">{selectedJob.jobId}</div>
+                              </div>
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Type</div>
+                                <div className="mt-1 text-[12px] font-semibold text-text-primary">{selectedJob.jobType}</div>
+                              </div>
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Progress</div>
+                                <div className="mt-1 text-[12px] font-semibold text-text-primary">
+                                  {selectedJob.progressPercent !== null ? `${selectedJob.progressPercent}%` : '—'}
+                                  {selectedJob.progressMessage ? ` • ${selectedJob.progressMessage}` : ''}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Attempts</div>
+                                <div className="mt-1 text-[12px] font-semibold text-text-primary">
+                                  {selectedJob.attemptCount}/{selectedJob.maxAttempts}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Started</div>
+                                <div className="mt-1 text-[12px] font-semibold text-text-primary">{formatDateTime(selectedJob.startedAt)}</div>
+                              </div>
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Finished</div>
+                                <div className="mt-1 text-[12px] font-semibold text-text-primary">{formatDateTime(selectedJob.finishedAt)}</div>
+                              </div>
+                              <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3 md:col-span-2">
+                                <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Payload</div>
+                                <pre className="mt-1 max-h-36 overflow-auto text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                                  {JSON.stringify(selectedJob.payload, null, 2)}
+                                </pre>
+                              </div>
+                              {(selectedJob.errorMessage || selectedJob.errorCode) && (
+                                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3 md:col-span-2">
+                                  <div className="text-[10px] uppercase tracking-[0.14em] text-red-200">Error</div>
+                                  <div className="mt-1 text-[12px] font-semibold text-red-100">{selectedJob.errorCode ?? 'error'}</div>
+                                  <div className="mt-1 text-[11px] text-red-100/90">{selectedJob.errorMessage ?? 'No error message'}</div>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-[12px] font-semibold text-text-primary">Job logs</div>
+                            <Badge tone={jobLogsLoading ? 'muted' : jobLogsError ? 'muted' : 'accent'}>
+                              {jobLogsLoading ? 'Loading' : jobLogsError ? 'Error' : `${jobLogs.length} logs`}
+                            </Badge>
+                          </div>
+                          {jobLogsError ? (
+                            <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+                              {jobLogsError}
+                            </div>
+                          ) : jobLogsLoading ? (
+                            <div className="mt-3 space-y-2">
+                              <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                              <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
+                            </div>
+                          ) : !selectedJob ? (
+                            <div className="mt-3 text-[11px] text-text-muted">Select a job to inspect its logs.</div>
+                          ) : jobLogs.length === 0 ? (
+                            <div className="mt-3 text-[11px] text-text-muted">No logs recorded for this job.</div>
+                          ) : (
+                            <div className="mt-3 space-y-2">
+                              {jobLogs.map((log) => (
+                                <div key={log.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Badge tone={log.level === 'error' ? 'muted' : log.level === 'warn' ? 'default' : 'accent'}>{log.level}</Badge>
+                                      <div className="truncate text-[11px] font-semibold text-text-primary">{log.message}</div>
+                                    </div>
+                                    <div className="text-[10px] text-text-muted">{formatDateTime(log.createdAt)}</div>
+                                  </div>
+                                  <div className="mt-2 text-[10px] text-text-muted">
+                                    attempt {log.attemptNo ?? '—'} • {log.jobId}
+                                  </div>
+                                  <pre className="mt-2 max-h-44 overflow-auto rounded-lg border border-border bg-bg-secondary/60 p-2 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                                    {eventContextText(log.context)}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      </div>
+                    </div>
+                  )}
+                </section>
               </div>
             )}
           </div>
@@ -3456,7 +4393,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     );
   };
 
-  void renderWorkflowCostsPanel;
+  void renderWorkflowsPanel;
 
   const renderRuntimeSettingsPanel = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -3603,6 +4540,8 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         ? 'User billing'
       : section === 'prompts'
         ? 'Prompt management'
+        : section === 'llm-lab'
+          ? 'LLM lab'
         : section === 'email-templates'
           ? 'Email template management'
         : section === 'search-providers'
@@ -3610,7 +4549,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         : section === 'billing-rules'
         ? 'Billing rules'
         : section === 'workflow-costs'
-        ? 'Workflow costs'
+        ? 'Workflows'
         : 'Runtime settings';
   const currentDescription =
     section === 'users'
@@ -3619,6 +4558,8 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         ? 'Search a user, inspect credits, review transactions, and add balance.'
       : section === 'prompts'
         ? 'Scan, edit, archive, and delete prompt templates.'
+        : section === 'llm-lab'
+          ? 'Test reasoning providers and inspect the exact request and raw response payloads.'
         : section === 'email-templates'
           ? 'View, edit, add, and remove email templates used by the worker.'
       : section === 'search-providers'
@@ -3626,7 +4567,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         : section === 'billing-rules'
         ? 'Configure pricing rules for workflow billing and usage metering.'
         : section === 'workflow-costs'
-        ? 'Review workflow charges, reservation state, and final credits by user.'
+        ? 'Inspect workflows, jobs, steps, logs, and cancellations.'
         : 'Choose active email and transcription providers.';
 
   const currentHeaderStats = section === 'users'
@@ -3650,6 +4591,13 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
         { label: 'Inactive', value: String(promptStats.inactive), icon: <CircleDashed size={14} /> },
         { label: 'Archive', value: String(promptStats.archives), icon: <Archive size={14} /> },
       ]
+    : section === 'llm-lab'
+      ? [
+          { label: 'Providers', value: '4', icon: <Server size={14} /> },
+          { label: 'Presets', value: '12', icon: <Sparkles size={14} />, accent: true },
+          { label: 'Raw JSON', value: 'Yes', icon: <Database size={14} /> },
+          { label: 'Freeform', value: 'Yes', icon: <KeyRound size={14} /> },
+        ]
     : section === 'email-templates'
       ? [
           { label: 'Total', value: String(emailTemplateStats.total), icon: <Layers3 size={14} /> },
@@ -3725,6 +4673,16 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               </button>
               <button
                 type="button"
+                onClick={() => changeSection('llm-lab')}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
+                  section === 'llm-lab' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
+                }`}
+              >
+                <PanelTop size={16} />
+                LLM lab
+              </button>
+              <button
+                type="button"
                 onClick={() => changeSection('billing')}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors ${
                   section === 'billing' ? 'bg-accent text-bg-primary font-semibold' : 'text-text-secondary hover:text-text-primary hover:bg-bg-card'
@@ -3771,7 +4729,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                 }`}
               >
                 <Layers3 size={16} />
-                Workflow costs
+                Workflows
               </button>
               <button
                 type="button"
@@ -3811,6 +4769,12 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                         { label: 'Role assignments', value: 'Multi-role access', icon: <UserCog size={14} /> },
                         { label: 'Session insight', value: 'Login and activity state', icon: <Server size={14} /> },
                       ]
+                  : section === 'llm-lab'
+                    ? [
+                        { label: 'Model tests', value: 'Run prompts against live providers', icon: <Sparkles size={14} /> },
+                        { label: 'Payloads', value: 'Inspect raw request JSON', icon: <Database size={14} /> },
+                        { label: 'Outputs', value: 'View parsed and raw responses', icon: <PanelTop size={14} /> },
+                      ]
                     : section === 'billing'
                       ? [
                           { label: 'Balance', value: 'Credits, reserved, available', icon: <Database size={14} /> },
@@ -3831,9 +4795,10 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                       ]
                     : section === 'workflow-costs'
                     ? [
-                        { label: 'Workflow ledger', value: 'Estimated and final credits', icon: <Database size={14} /> },
-                        { label: 'Reservation state', value: 'Active, settled, or released', icon: <Clock3 size={14} /> },
-                        { label: 'Per-user view', value: 'Charge history by account', icon: <Users size={14} /> },
+                        { label: 'Workflow timeline', value: 'Live status, history, and steps', icon: <Database size={14} /> },
+                        { label: 'Jobs', value: 'Queued, running, and completed jobs', icon: <Layers3 size={14} /> },
+                        { label: 'Cancel control', value: 'Stop a running job', icon: <Clock3 size={14} /> },
+                        { label: 'Per-user view', value: 'Workflow history by account', icon: <Users size={14} /> },
                       ]
                     : [
                         { label: 'Runtime providers', value: 'Email and transcription', icon: <Settings2 size={14} /> },
@@ -3893,6 +4858,8 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                 )}
                 {renderUserPanel()}
               </>
+            ) : section === 'llm-lab' ? (
+              <AdminLlmLabPanel />
             ) : section === 'billing' ? (
               <>
                 {billingError && (
@@ -3945,13 +4912,13 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               </>
             ) : section === 'workflow-costs' ? (
               <>
-                {workflowCostsError && (
+                {(workflowCostsError || workflowHostError) && (
                   <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
                     <CircleAlert size={16} className="mt-0.5 shrink-0" />
-                    <div>{workflowCostsError}</div>
+                    <div>{workflowCostsError ?? workflowHostError}</div>
                   </div>
                 )}
-                {renderWorkflowCostsPanel()}
+                {renderWorkflowsPanel()}
               </>
             ) : (
               <>

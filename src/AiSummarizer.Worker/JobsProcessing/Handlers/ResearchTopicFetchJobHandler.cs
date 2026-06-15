@@ -67,6 +67,15 @@ public sealed class ResearchTopicFetchJobHandler(
         var contentPhaseId = Guid.NewGuid();
         var contentRunStartedAt = now;
 
+        await context.LogInfoAsync("Research content acquisition started", JsonSerializer.SerializeToElement(new
+        {
+            runId = run.Id,
+            topicId = topic.Id,
+            contentRunId,
+            searchResultCount = searchResults.Count,
+            sourceCount = searchResults.Select(item => item.SourceKey).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+        }), cancellationToken);
+
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
             await repository.CreateTopicRunPhaseAsync(new ResearchTopicRunPhaseRecord(
@@ -127,6 +136,17 @@ public sealed class ResearchTopicFetchJobHandler(
             var itemId = Guid.NewGuid();
             var itemStartedAt = DateTimeOffset.UtcNow;
 
+            await context.LogInfoAsync("Research content fetch started", JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                contentRunId,
+                itemId,
+                source = result.SourceKey,
+                url = result.Url,
+                title = result.Title
+            }), cancellationToken);
+
             try
             {
                 var fetched = await FetchAsync(result, cancellationToken);
@@ -160,12 +180,38 @@ public sealed class ResearchTopicFetchJobHandler(
                 }, cancellationToken);
 
                 successfulItems++;
+                await context.LogInfoAsync("Research content fetch completed", JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    contentRunId,
+                    itemId,
+                    source = result.SourceKey,
+                    url = result.Url,
+                    fetchMethod = fetched.FetchMethod,
+                    contentType = fetched.ContentType,
+                    canonicalUrl = fetched.CanonicalUrl,
+                    contentHash = fetched.ContentHash,
+                    rawTextLength = fetched.RawText?.Length ?? 0
+                }), cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Content acquisition failed for {Url}", result.Url);
                 itemErrors.Add(result.Url);
                 failedItems++;
+                await context.LogWarningAsync("Research content fetch failed", JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    contentRunId,
+                    itemId,
+                    source = result.SourceKey,
+                    url = result.Url,
+                    title = result.Title,
+                    error = ex.Message,
+                    exception = ex.GetType().FullName
+                }), cancellationToken);
 
                 var failedRecord = new ResearchContentItemRecord(
                     itemId,

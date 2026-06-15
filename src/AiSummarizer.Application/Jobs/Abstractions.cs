@@ -26,4 +26,5 @@ public interface IJobsService
     Task<IReadOnlyList<JobDto>> ListActiveJobsAsync(int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<JobDto>> ListHistoryJobsAsync(int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<JobLogDto>> ListLogsAsync(Guid jobId, int limit, int offset, CancellationToken cancellationToken);
+    Task<bool> RequestCancelAsync(Guid jobId, CancellationToken cancellationToken);
 }

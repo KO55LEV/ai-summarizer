@@ -74,6 +74,7 @@ public sealed class TranscriptsController(
                 new ScheduleYoutubeTranscriptCommand(
                     requestRun.Id,
                     request.RequestedByUserId,
+                    request.ProjectId,
                     request.YoutubeUrl,
                     request.Language,
                     request.PreferNativeTranscript ?? true),
@@ -127,6 +128,7 @@ public sealed class TranscriptsController(
     [HttpGet("library")]
     public async Task<ActionResult<IReadOnlyList<UserVideoLibraryItemResponse>>> GetLibrary(
         [FromQuery] Guid? requestedByUserId = null,
+        [FromQuery] Guid? projectId = null,
         [FromQuery] string? status = null,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
@@ -141,7 +143,7 @@ public sealed class TranscriptsController(
             });
         }
 
-        return Ok((await userVideoLibraryRepository.ListUserVideosAsync(requestedByUserId.Value, status, limit, offset, cancellationToken)).Select(Map).ToArray());
+        return Ok((await userVideoLibraryRepository.ListUserVideosAsync(requestedByUserId.Value, projectId, status, limit, offset, cancellationToken)).Select(Map).ToArray());
     }
 
     private async Task SafeUpdateRequestRunAsync(PublicRequestRun requestRun)

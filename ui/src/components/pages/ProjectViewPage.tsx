@@ -102,9 +102,10 @@ function fallbackVideoPreview(url: string): { title: string; channel: string } {
   };
 }
 
-async function loadVideoLibraryItems(): Promise<VideoLibraryItem[]> {
+async function loadVideoLibraryItems(projectId: string): Promise<VideoLibraryItem[]> {
   const params = new URLSearchParams();
   params.set('requestedByUserId', getCurrentUserId());
+  params.set('projectId', projectId);
   params.set('status', 'completed');
   params.set('limit', '200');
   params.set('offset', '0');
@@ -1259,7 +1260,7 @@ export default function ProjectViewPage({
     Promise.all([
       getProject(projectId),
       getNotes({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 }),
-      loadVideoLibraryItems(),
+      loadVideoLibraryItems(projectId),
       getResearchList(getCurrentUserId()),
       getTodos({ requestedByUserId: getCurrentUserId(), projectId, limit: 200, offset: 0 }),
     ])
@@ -2012,7 +2013,7 @@ export default function ProjectViewPage({
               >
                 <div className="divide-y divide-border">
                   {videoItems.length === 0 ? (
-                    <div className="px-1 py-6 text-center text-[12px] text-text-muted">No transcribed videos in your library yet.</div>
+                    <div className="px-1 py-6 text-center text-[12px] text-text-muted">No imported videos in this project yet.</div>
                   ) : (
                     videoItems.map((video) => (
                       <ItemRow

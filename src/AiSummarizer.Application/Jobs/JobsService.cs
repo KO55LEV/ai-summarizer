@@ -36,6 +36,9 @@ public sealed class JobsService(IJobsRepository repository) : IJobsService
     public async Task<IReadOnlyList<JobLogDto>> ListLogsAsync(Guid jobId, int limit, int offset, CancellationToken cancellationToken)
         => (await repository.ListLogsAsync(jobId, limit, offset, cancellationToken)).Select(Map).ToArray();
 
+    public Task<bool> RequestCancelAsync(Guid jobId, CancellationToken cancellationToken)
+        => repository.RequestCancelAsync(jobId, cancellationToken);
+
     private static JobDto Map(Job job)
         => new(
             job.Id,

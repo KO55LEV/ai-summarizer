@@ -1,6 +1,7 @@
 export type NavItem = 'dashboard' | 'summarizer' | 'transcript' | 'insights' | 'exports' | 'history' | 'research' | 'projects' | 'todo' | 'notes' | 'settings' | 'profile';
 
 export interface VideoRecord {
+  sourceId: string;
   title: string;
   channel: string;
   duration: string;

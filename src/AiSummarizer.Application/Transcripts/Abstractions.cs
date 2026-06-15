@@ -22,7 +22,7 @@ public interface IUserVideoLibraryRepository
     Task<UserVideoLibraryItem> UpsertUserVideoAsync(UserVideoLibraryItem item, DbTransaction? transaction, CancellationToken cancellationToken);
     Task<int> CompleteByMediaSourceIdAsync(Guid mediaSourceId, Guid transcriptId, DateTimeOffset completedAt, DbTransaction? transaction, CancellationToken cancellationToken);
     Task<int> FailByMediaSourceIdAsync(Guid mediaSourceId, DateTimeOffset failedAt, DbTransaction? transaction, CancellationToken cancellationToken);
-    Task<IReadOnlyList<UserVideoLibraryDto>> ListUserVideosAsync(Guid requestedByUserId, string? status, int limit, int offset, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UserVideoLibraryDto>> ListUserVideosAsync(Guid requestedByUserId, Guid? projectId, string? status, int limit, int offset, CancellationToken cancellationToken);
 }
 
 public interface ITranscriptInsightsService

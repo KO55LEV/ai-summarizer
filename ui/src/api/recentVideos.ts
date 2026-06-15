@@ -111,6 +111,7 @@ export async function getRecentVideos(): Promise<VideoRecord[]> {
     const source = item.sourceProvider.toLowerCase().includes('youtube') ? 'YouTube' : item.sourceProvider;
 
     return {
+      sourceId: item.mediaSourceId,
       title: preview?.title ?? fallback.title,
       channel: preview?.channel ?? fallback.channel,
       duration: formatDuration(item.durationSeconds),

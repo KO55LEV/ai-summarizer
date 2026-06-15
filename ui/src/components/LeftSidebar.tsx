@@ -8,9 +8,12 @@ import {
   StickyNote,
   ChevronRight,
   LogOut,
+  Wallet,
+  CircleDollarSign,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { NavItem } from '../types';
+import type { BillingBalanceResponse } from '../api/adminBilling';
 
 type NavEntry = {
   key: NavItem;
@@ -29,6 +32,9 @@ interface LeftSidebarProps {
   userName?: string;
   userEmail?: string;
   userInitials?: string;
+  billingBalance?: BillingBalanceResponse | null;
+  billingBalanceLoading?: boolean;
+  billingBalanceError?: string | null;
 }
 
 function deriveFallbackInitials(userName?: string, userEmail?: string): string {
@@ -51,6 +57,9 @@ export default function LeftSidebar({
   userName,
   userEmail,
   userInitials,
+  billingBalance,
+  billingBalanceLoading,
+  billingBalanceError,
 }: LeftSidebarProps) {
   const displayName = userName?.trim() || 'Researcher Pro';
   const displayEmail = userEmail?.trim() || 'researcher.pro@example.com';
@@ -154,10 +163,42 @@ export default function LeftSidebar({
           </div>
           <div className="mt-2 text-[11px] text-text-muted">Plan renews Jun 12, 2026</div>
         </button>
-        <div className="mt-2.5">
-          <div className="text-[11px] text-text-muted mb-1">42 / 500 videos this month</div>
-          <div className="w-full h-1 bg-bg-card rounded-full overflow-hidden">
-            <div className="h-full bg-accent rounded-full" style={{ width: '8.4%' }} />
+        <div className="mt-3 overflow-hidden rounded-2xl border border-accent/20 bg-[linear-gradient(180deg,rgba(10,17,32,0.98),rgba(13,22,42,0.94))] p-3 shadow-[0_0_0_1px_rgba(0,212,170,0.06)]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+                <Wallet size={12} className="text-accent" />
+                Credits
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-[22px] font-bold leading-none text-text-primary">
+                  {billingBalance
+                    ? billingBalance.availableCredits.toFixed(0)
+                    : billingBalanceLoading
+                      ? '—'
+                      : '0'}
+                </span>
+                <span className="text-[11px] text-text-muted">available</span>
+              </div>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent">
+              <CircleDollarSign size={18} />
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between rounded-xl border border-border/60 bg-bg-input/25 px-3 py-2 text-[10px] text-text-muted">
+            <span>
+              {billingBalance
+                ? `${Math.max(0, billingBalance.balanceCredits - billingBalance.availableCredits)} reserved`
+                : billingBalanceError
+                  ? billingBalanceError
+                  : billingBalanceLoading
+                    ? 'Loading balance...'
+                    : 'Balance not loaded'}
+            </span>
+            <span>
+              {billingBalance ? `${billingBalance.balanceCredits.toFixed(0)} total` : '—'}
+            </span>
           </div>
         </div>
         {isAdmin && onOpenAdmin && (

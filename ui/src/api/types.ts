@@ -9,6 +9,7 @@ export interface DashboardStat {
 }
 
 export interface DashboardVideo {
+  sourceId: string;
   title: string;
   channel: string;
   duration: string;

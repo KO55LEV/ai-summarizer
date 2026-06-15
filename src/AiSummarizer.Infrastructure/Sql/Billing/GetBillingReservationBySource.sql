@@ -2,5 +2,4 @@ select id, user_id, source_type, source_id, estimated_credits, final_credits, st
 from billing_reservations
 where user_id = @user_id
   and source_type = @source_type
-  and source_id = @source_id
-  and status = 'active';
+  and source_id = @source_id;

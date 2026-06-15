@@ -19,6 +19,7 @@ from user_video_library u
 join media_sources m on m.id = u.media_source_id
 left join transcripts t on t.id = u.transcript_id
 where u.requested_by_user_id = @requested_by_user_id
+  and (@project_id is null or u.project_id = @project_id)
   and (@status is null or u.status = @status)
 order by u.updated_at desc
 limit @limit_value offset @offset_value;

@@ -5,6 +5,7 @@ public sealed record UserVideoLibraryItem
     public Guid Id { get; init; }
     public Guid RequestedByUserId { get; init; }
     public Guid MediaSourceId { get; init; }
+    public Guid? ProjectId { get; init; }
     public Guid? PublicRequestRunId { get; init; }
     public Guid? WorkflowId { get; init; }
     public Guid? TranscriptId { get; init; }

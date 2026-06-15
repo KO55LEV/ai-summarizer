@@ -4,6 +4,7 @@ namespace AiSummarizer.Api.Transcripts;
 
 public sealed record ScheduleYoutubeTranscriptRequest(
     Guid? RequestedByUserId,
+    Guid? ProjectId,
     string YoutubeUrl,
     string? Language,
     bool? PreferNativeTranscript);

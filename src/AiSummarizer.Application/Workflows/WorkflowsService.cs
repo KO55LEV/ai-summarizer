@@ -39,13 +39,14 @@ public sealed class WorkflowsService(
         BillingReservationDto? reservation = null;
         try
         {
+            var workflowId = Guid.NewGuid();
             if (command.RequestedByUserId is not null)
             {
                 reservation = await billingService.ReserveAsync(
                     new ReserveBillingCreditsCommand(
                         command.RequestedByUserId.Value,
                         "youtube.summary",
-                        mediaSource.Id,
+                        workflowId,
                         BillingUsageEstimator.EstimateWorkflowCredits("youtube.summary"),
                         "Reserve credits for youtube summary workflow."),
                     cancellationToken);
@@ -53,7 +54,7 @@ public sealed class WorkflowsService(
 
             var workflow = await repository.CreateWorkflowAsync(new Workflow
             {
-                Id = Guid.NewGuid(),
+                Id = workflowId,
                 RequestedByUserId = command.RequestedByUserId,
                 SourceId = mediaSource.Id,
                 WorkflowType = "youtube.summary",

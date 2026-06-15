@@ -8,6 +8,10 @@ export interface WorkflowCostResponse {
   requestedByUserDisplayName: string | null;
   workflowType: string;
   workflowStatus: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  diagnosticProvider: string | null;
+  diagnosticMessage: string | null;
   sourceId: string | null;
   sourceLabel: string | null;
   reservationId: string | null;

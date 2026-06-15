@@ -81,11 +81,12 @@ public static class DependencyInjection
         services.AddScoped<IAdminWorkflowCostsService, AdminWorkflowCostsService>();
         services.AddAdminSettings(configuration);
         services.AddEmailing(configuration);
-        services.AddHttpClient<ISearchProvider, TavilySearchProvider>(client =>
+        services.AddHttpClient<TavilySearchProvider>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AiSummarizer/1.0");
         });
+        services.AddScoped<ISearchProvider>(sp => sp.GetRequiredService<TavilySearchProvider>());
         services.AddScoped<WebSearchAdapter>();
         services.AddScoped<NewsSearchAdapter>();
         services.AddScoped<ArchiveSearchAdapter>();

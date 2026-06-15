@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiSummarizer.Application.Billing;
@@ -36,6 +37,8 @@ public sealed class WorkflowProcessorHostedService(
     ILogger<WorkflowProcessorHostedService> logger) : BackgroundService
 {
     private static readonly Regex VttTimestampRegex = new(@"^(?<start>\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(?<end>\d{2}:\d{2}:\d{2}\.\d{3})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private const int InsightTranscriptMaxCharacters = 24_000;
+    private const int AskTranscriptMaxCharacters = 3_600;
     private static readonly HashSet<string> SupportedWorkflowTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "youtube.summary",
@@ -747,12 +750,12 @@ public sealed class WorkflowProcessorHostedService(
             return;
         }
 
-        string? transcriptExcerpt = null;
-        if (string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase))
-        {
-            var segments = await transcriptsRepository.GetTranscriptSegmentsByTranscriptIdAsync(transcript.Id, cancellationToken);
-            transcriptExcerpt = BuildTranscriptExcerpt(transcript, segments, question, conversationContext);
-        }
+        var segments = await transcriptsRepository.GetTranscriptSegmentsByTranscriptIdAsync(transcript.Id, cancellationToken);
+        var transcriptExcerpt = string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase)
+            ? BuildTranscriptExcerpt(transcript, segments, question, conversationContext)
+            : string.Equals(actionKey, "quick-summary", StringComparison.OrdinalIgnoreCase)
+                ? transcript.TranscriptText
+                : BuildTranscriptOverview(transcript, segments);
 
         var currentStep = await GetLatestStepAsync(workflow.Id, cancellationToken);
         if (currentStep is null)
@@ -817,9 +820,52 @@ public sealed class WorkflowProcessorHostedService(
                 MaxTokens: null,
                 ResponseFormat: "json"), cancellationToken);
         }
+        catch (ReasoningClientException ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Reasoning provider failed for workflow {WorkflowId}, step {StepKey}, provider {Provider}.",
+                workflow.Id,
+                currentStep.StepKey,
+                ex.Provider);
+            await FailWorkflowAsync(
+                workflow,
+                "reasoning_failed",
+                "The AI provider request failed. Please try again.",
+                cancellationToken,
+                markLibraryFailed: false,
+                failedStep: currentStep,
+                diagnosticContext: JsonSerializer.SerializeToElement(new
+                {
+                    errorCode = "reasoning_failed",
+                    provider = ex.Provider.ToString(),
+                    exceptionType = ex.GetType().Name,
+                    providerMessage = ex.Message,
+                    innerException = ex.InnerException?.Message
+                }));
+            return;
+        }
         catch (Exception ex)
         {
-            await FailWorkflowAsync(workflow, "reasoning_failed", ex.Message, cancellationToken, markLibraryFailed: false);
+            logger.LogError(
+                ex,
+                "Unexpected reasoning failure for workflow {WorkflowId}, step {StepKey}.",
+                workflow.Id,
+                currentStep.StepKey);
+            await FailWorkflowAsync(
+                workflow,
+                "reasoning_failed",
+                "Something went wrong while generating the summary.",
+                cancellationToken,
+                markLibraryFailed: false,
+                failedStep: currentStep,
+                diagnosticContext: JsonSerializer.SerializeToElement(new
+                {
+                    errorCode = "reasoning_failed",
+                    exceptionType = ex.GetType().Name,
+                    exceptionMessage = ex.Message,
+                    innerException = ex.InnerException?.Message
+                }));
             return;
         }
 
@@ -830,7 +876,12 @@ public sealed class WorkflowProcessorHostedService(
         }
         catch (Exception ex)
         {
-            await RecordPromptRunAndFailAsync(workflow, currentStep, prompt, transcript, mediaSource, actionKey, question, conversationContext, transcriptExcerpt, startedAt, reasoningResponse, "invalid_llm_output", ex.Message, cancellationToken);
+            logger.LogWarning(
+                ex,
+                "Failed to parse reasoning output for workflow {WorkflowId}, step {StepKey}.",
+                workflow.Id,
+                currentStep.StepKey);
+            await RecordPromptRunAndFailAsync(workflow, currentStep, prompt, transcript, mediaSource, actionKey, question, conversationContext, transcriptExcerpt, startedAt, reasoningResponse, "invalid_llm_output", "The AI response could not be read. Please try again.", cancellationToken);
             return;
         }
 
@@ -893,7 +944,7 @@ public sealed class WorkflowProcessorHostedService(
         await SettleWorkflowBillingAsync(workflow with { Result = workflowResult, Status = "succeeded", CurrentStepKey = completedStep.StepKey, FinishedAt = runNow }, $"Completed {FormatInsightLabel(actionKey)}.", cancellationToken);
     }
 
-    private async Task FailWorkflowAsync(Workflow workflow, string errorCode, string errorMessage, CancellationToken cancellationToken, bool markLibraryFailed = true)
+    private async Task FailWorkflowAsync(Workflow workflow, string errorCode, string errorMessage, CancellationToken cancellationToken, bool markLibraryFailed = true, WorkflowStep? failedStep = null, JsonElement? diagnosticContext = null)
     {
         var now = DateTimeOffset.UtcNow;
         workflow = workflow with
@@ -910,8 +961,20 @@ public sealed class WorkflowProcessorHostedService(
 
         await workflowsRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
+            if (failedStep is not null)
+            {
+                await repository.UpdateWorkflowStepAsync(failedStep with
+                {
+                    Status = "failed",
+                    ErrorCode = errorCode,
+                    ErrorMessage = errorMessage,
+                    FinishedAt = now,
+                    UpdatedAt = now
+                }, transaction, cancellationToken);
+            }
+
             await repository.UpdateWorkflowAsync(workflow, transaction, cancellationToken);
-            await repository.AddWorkflowEventAsync(workflow.Id, workflow.CurrentStepKey, "error", errorMessage, JsonSerializer.SerializeToElement(new { errorCode }), transaction, cancellationToken);
+            await repository.AddWorkflowEventAsync(workflow.Id, workflow.CurrentStepKey, "error", errorMessage, diagnosticContext ?? JsonSerializer.SerializeToElement(new { errorCode }), transaction, cancellationToken);
             return 0;
         }, cancellationToken);
 
@@ -932,7 +995,8 @@ public sealed class WorkflowProcessorHostedService(
 
         try
         {
-            var reservation = await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.SourceId.Value, cancellationToken);
+            var reservation = await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.Id, cancellationToken)
+                ?? await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.SourceId.Value, cancellationToken);
             if (reservation is null)
             {
                 return;
@@ -960,7 +1024,8 @@ public sealed class WorkflowProcessorHostedService(
 
         try
         {
-            var reservation = await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.SourceId.Value, cancellationToken);
+            var reservation = await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.Id, cancellationToken)
+                ?? await billingService.GetReservationBySourceAsync(workflow.RequestedByUserId.Value, workflow.WorkflowType, workflow.SourceId.Value, cancellationToken);
             if (reservation is null)
             {
                 return;
@@ -1183,9 +1248,7 @@ public sealed class WorkflowProcessorHostedService(
 
     private static JsonElement BuildInsightRequestJson(Workflow workflow, Prompt prompt, Domain.Transcripts.Transcript transcript, MediaSource mediaSource, string actionKey, string? question, string? conversationContext, string? transcriptExcerpt)
     {
-        var transcriptContent = string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase)
-            ? transcriptExcerpt ?? transcript.TranscriptText
-            : transcript.TranscriptText;
+        var transcriptContent = transcriptExcerpt ?? transcript.TranscriptText;
 
         return JsonSerializer.SerializeToElement(new
         {
@@ -1212,9 +1275,7 @@ public sealed class WorkflowProcessorHostedService(
 
     private static JsonElement BuildPromptRunRequestJson(Workflow workflow, Prompt prompt, Domain.Transcripts.Transcript transcript, MediaSource mediaSource, string actionKey, string? question, string? conversationContext, string? transcriptExcerpt, JsonElement stepInput)
     {
-        var transcriptContent = string.Equals(actionKey, "ask-this-video", StringComparison.OrdinalIgnoreCase)
-            ? transcriptExcerpt ?? transcript.TranscriptText
-            : transcript.TranscriptText;
+        var transcriptContent = transcriptExcerpt ?? transcript.TranscriptText;
 
         return JsonSerializer.SerializeToElement(new
         {
@@ -1318,17 +1379,34 @@ public sealed class WorkflowProcessorHostedService(
 
     private static JsonElement ParseInsightResult(string value)
     {
-        var trimmed = value.Trim();
+        var json = ExtractJson(value);
+        return JsonDocument.Parse(json).RootElement.Clone();
+    }
+
+    private static string ExtractJson(string text)
+    {
+        var trimmed = text.Trim();
         if (trimmed.StartsWith("```", StringComparison.Ordinal))
         {
-            trimmed = trimmed.Trim('`').Trim();
-            if (trimmed.StartsWith("json", StringComparison.OrdinalIgnoreCase))
-            {
-                trimmed = trimmed[4..].Trim();
-            }
+            trimmed = Regex.Replace(trimmed, "^```(?:json)?\\s*", string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            trimmed = Regex.Replace(trimmed, "\\s*```$", string.Empty, RegexOptions.CultureInvariant);
         }
 
-        return JsonDocument.Parse(trimmed).RootElement.Clone();
+        var firstObject = trimmed.IndexOf('{');
+        var lastObject = trimmed.LastIndexOf('}');
+        if (firstObject >= 0 && lastObject > firstObject)
+        {
+            return trimmed[firstObject..(lastObject + 1)];
+        }
+
+        var firstArray = trimmed.IndexOf('[');
+        var lastArray = trimmed.LastIndexOf(']');
+        if (firstArray >= 0 && lastArray > firstArray)
+        {
+            return trimmed[firstArray..(lastArray + 1)];
+        }
+
+        return trimmed;
     }
 
     private static string? TryGetMetadataString(JsonElement element, string propertyName)
@@ -1359,17 +1437,50 @@ public sealed class WorkflowProcessorHostedService(
         var result = template;
         foreach (var (key, value) in replacements)
         {
-            result = result.Replace($"{{{{{key}}}}}", JsonEncodedText.Encode(value ?? string.Empty).ToString(), StringComparison.Ordinal);
+            result = result.Replace($"{{{{{key}}}}}", JsonEncodedText.Encode(value ?? string.Empty, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).ToString(), StringComparison.Ordinal);
         }
 
         return result;
+    }
+
+    private static string BuildTranscriptOverview(Domain.Transcripts.Transcript transcript, IReadOnlyList<TranscriptSegment> segments)
+    {
+        if (transcript.TranscriptText.Length <= InsightTranscriptMaxCharacters)
+        {
+            return transcript.TranscriptText;
+        }
+
+        if (segments.Count == 0)
+        {
+            return TruncateAtWordBoundary(transcript.TranscriptText, InsightTranscriptMaxCharacters);
+        }
+
+        var targetSegmentCount = Math.Min(90, segments.Count);
+        var stride = Math.Max(1, (int)Math.Ceiling(segments.Count / (double)targetSegmentCount));
+        var builder = new StringBuilder();
+        builder.AppendLine("Transcript excerpt sampled across the full video because the original transcript is too long.");
+
+        for (var index = 0; index < segments.Count; index += stride)
+        {
+            var segment = segments[index];
+            var line = $"[{FormatTimestamp(segment.StartSeconds)}-{FormatTimestamp(segment.EndSeconds)}] {segment.Text.Trim()}";
+            if (builder.Length + line.Length + Environment.NewLine.Length > InsightTranscriptMaxCharacters)
+            {
+                break;
+            }
+
+            builder.AppendLine(line);
+        }
+
+        var excerpt = builder.ToString().Trim();
+        return excerpt.Length > 0 ? excerpt : TruncateAtWordBoundary(transcript.TranscriptText, InsightTranscriptMaxCharacters);
     }
 
     private static string BuildTranscriptExcerpt(Domain.Transcripts.Transcript transcript, IReadOnlyList<TranscriptSegment> segments, string? question, string? conversationContext)
     {
         if (segments.Count == 0)
         {
-            return transcript.TranscriptText;
+            return TruncateAtWordBoundary(transcript.TranscriptText, AskTranscriptMaxCharacters);
         }
 
         var contextParts = new List<string>();
@@ -1399,7 +1510,7 @@ public sealed class WorkflowProcessorHostedService(
                 builder.AppendLine();
             }
 
-            if (builder.Length + line.Length > 3600)
+            if (builder.Length + line.Length > AskTranscriptMaxCharacters)
             {
                 break;
             }
@@ -1408,7 +1519,19 @@ public sealed class WorkflowProcessorHostedService(
         }
 
         var excerpt = builder.ToString().Trim();
-        return excerpt.Length > 0 ? excerpt : transcript.TranscriptText;
+        return excerpt.Length > 0 ? excerpt : TruncateAtWordBoundary(transcript.TranscriptText, AskTranscriptMaxCharacters);
+    }
+
+    private static string TruncateAtWordBoundary(string value, int maxCharacters)
+    {
+        if (value.Length <= maxCharacters)
+        {
+            return value;
+        }
+
+        var truncated = value[..maxCharacters];
+        var lastWhitespace = truncated.LastIndexOfAny(new[] { ' ', '\n', '\r', '\t' });
+        return (lastWhitespace > maxCharacters / 2 ? truncated[..lastWhitespace] : truncated).Trim();
     }
 
     private static List<TranscriptSegment> SelectRelevantSegments(IReadOnlyList<TranscriptSegment> segments, IReadOnlyCollection<string> keywords)

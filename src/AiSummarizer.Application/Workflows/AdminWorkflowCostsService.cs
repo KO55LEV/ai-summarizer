@@ -33,15 +33,34 @@ public sealed class AdminWorkflowCostsService(
         }
 
         BillingReservationDto? reservation = null;
-        if (workflow.RequestedByUserId is not null && workflow.SourceId is not null)
+        if (workflow.RequestedByUserId is not null)
         {
             reservation = await billingRepository.GetBillingReservationBySourceAsync(
                 workflow.RequestedByUserId.Value,
                 workflow.WorkflowType,
-                workflow.SourceId.Value,
+                workflow.Id,
                 null,
                 cancellationToken);
+
+            if (reservation is null && workflow.SourceId is not null)
+            {
+                reservation = await billingRepository.GetBillingReservationBySourceAsync(
+                    workflow.RequestedByUserId.Value,
+                    workflow.WorkflowType,
+                    workflow.SourceId.Value,
+                    null,
+                    cancellationToken);
+            }
         }
+
+        var latestErrorEvent = workflow.Status is "failed" or "dead" or "cancelled"
+            ? (await workflowsRepository.ListEventsAsync(workflow.Id, 20, 0, cancellationToken))
+                .FirstOrDefault(item => string.Equals(item.Level, "error", StringComparison.OrdinalIgnoreCase))
+            : null;
+        var diagnosticProvider = TryGetContextString(latestErrorEvent?.Context, "provider");
+        var diagnosticMessage =
+            TryGetContextString(latestErrorEvent?.Context, "providerMessage") ??
+            TryGetContextString(latestErrorEvent?.Context, "exceptionMessage");
 
         return new WorkflowCostDto(
             workflow.Id,
@@ -50,6 +69,10 @@ public sealed class AdminWorkflowCostsService(
             user?.DisplayName,
             workflow.WorkflowType,
             workflow.Status,
+            workflow.ErrorCode,
+            workflow.ErrorMessage,
+            diagnosticProvider,
+            diagnosticMessage,
             workflow.SourceId,
             BuildSourceLabel(workflow),
             reservation?.Id,
@@ -101,5 +124,18 @@ public sealed class AdminWorkflowCostsService(
 
         value = property.GetString();
         return true;
+    }
+
+    private static string? TryGetContextString(JsonElement? element, string propertyName)
+    {
+        if (element is null ||
+            element.Value.ValueKind != JsonValueKind.Object ||
+            !element.Value.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return property.GetString();
     }
 }

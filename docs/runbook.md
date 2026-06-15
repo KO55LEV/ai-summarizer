@@ -2,7 +2,22 @@
 
 ## Local run
 
-Run the API in one terminal:
+Run the API and worker together:
+
+```bash
+./scripts/dev-backend.sh
+```
+
+The script loads `.env`, starts both backend processes, prefixes logs with `api` or `worker`, and stops both on `Ctrl+C`.
+
+Restart both backend processes:
+
+```bash
+Ctrl+C
+./scripts/dev-backend.sh
+```
+
+Run the API manually in one terminal:
 
 ```bash
 cd /Volumes/Data/Devs/Projects/AiSummarizer/src
