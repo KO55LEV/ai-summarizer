@@ -51,9 +51,9 @@ import {
 import type { WorkflowCostResponse } from '../../api/adminWorkflowCosts';
 import { listWorkflowCosts } from '../../api/adminWorkflowCosts';
 import type { WorkflowEventResponse } from '../../api/adminWorkflows';
-import { getWorkflowEvents, getWorkflowSteps, listActiveWorkflows } from '../../api/adminWorkflows';
+import { getWorkflowEvents, getWorkflowSteps, listActiveWorkflows, listHistoryWorkflows, requestWorkflowCancel } from '../../api/adminWorkflows';
 import type { JobLogResponse, JobResponse } from '../../api/adminJobs';
-import { getJobLogs, listActiveJobs, listHistoryJobs, requestJobCancel } from '../../api/adminJobs';
+import { getJobLogs, listActiveJobs, listHistoryJobs } from '../../api/adminJobs';
 import type {
   PromptArchiveResponse,
   PromptResponse,
@@ -119,7 +119,7 @@ type AdminSection = 'users' | 'billing' | 'prompts' | 'llm-lab' | 'search-provid
 type WorkflowCostStatusFilter = 'all' | 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'dead';
 type PromptTab = 'editor' | 'runs' | 'archive' | 'usage';
 type ProviderTab = 'editor' | 'usage';
-type WorkflowHostKind = 'active' | 'cost';
+type WorkflowHostKind = 'active' | 'history' | 'cost';
 type WorkflowHostSelection = string | null;
 type JobStatusFilter = 'all' | 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled' | 'dead';
 type JobSelection = string | null;
@@ -187,6 +187,7 @@ interface JobHostRow {
 
 interface AdminPageProps {
   initialSection: AdminSection;
+  initialSelectedWorkflowId?: string | null;
   onSectionChange: (section: AdminSection) => void;
   onBackToApp: () => void;
 }
@@ -580,7 +581,7 @@ function PageSkeleton() {
   );
 }
 
-export default function AdminPage({ initialSection, onSectionChange, onBackToApp }: AdminPageProps) {
+export default function AdminPage({ initialSection, initialSelectedWorkflowId, onSectionChange, onBackToApp }: AdminPageProps) {
   const [section, setSection] = useState<AdminSection>(initialSection);
 
   useEffect(() => {
@@ -668,6 +669,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
 
   const [workflowCosts, setWorkflowCosts] = useState<WorkflowCostResponse[]>([]);
   const [activeWorkflows, setActiveWorkflows] = useState<WorkflowResponse[]>([]);
+  const [historyWorkflows, setHistoryWorkflows] = useState<WorkflowResponse[]>([]);
   const [selectedWorkflowKey, setSelectedWorkflowKey] = useState<WorkflowHostSelection>(null);
   const [workflowCostsLoading, setWorkflowCostsLoading] = useState(true);
   const [workflowHostLoading, setWorkflowHostLoading] = useState(true);
@@ -697,6 +699,12 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   const [jobLogs, setJobLogs] = useState<JobLogResponse[]>([]);
   const [jobLogsLoading, setJobLogsLoading] = useState(false);
   const [jobLogsError, setJobLogsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialSection === 'workflow-costs' && initialSelectedWorkflowId) {
+      setSelectedWorkflowKey(initialSelectedWorkflowId);
+    }
+  }, [initialSection, initialSelectedWorkflowId]);
 
   const changeSection = (nextSection: AdminSection) => {
     setSection(nextSection);
@@ -1051,11 +1059,13 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     Promise.all([
       listWorkflowCosts(100, 0),
       listActiveWorkflows(100, 0),
+      listHistoryWorkflows(100, 0),
     ])
-      .then(([items, activeItems]) => {
+      .then(([items, activeItems, historyItems]) => {
         if (cancelled) return;
         setWorkflowCosts(items);
         setActiveWorkflows(activeItems);
+        setHistoryWorkflows(historyItems);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -1110,7 +1120,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     return () => {
       cancelled = true;
     };
-  }, [section, selectedWorkflowKey, workflowRefreshNonce, workflowCosts, activeWorkflows]);
+  }, [section, selectedWorkflowKey, workflowRefreshNonce, workflowCosts, activeWorkflows, historyWorkflows]);
 
   useEffect(() => {
     const currentWorkflow = selectedWorkflowKey
@@ -1166,7 +1176,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     return () => {
       cancelled = true;
     };
-  }, [section, selectedWorkflowKey, workflowRefreshNonce, workflowCosts, activeWorkflows]);
+  }, [section, selectedWorkflowKey, workflowRefreshNonce, workflowCosts, activeWorkflows, historyWorkflows]);
 
   const selectedWorkflowStep = selectedWorkflowStepId
     ? workflowSteps.find((item) => item.id === selectedWorkflowStepId) ?? null
@@ -1206,7 +1216,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     return () => {
       cancelled = true;
     };
-  }, [section, selectedWorkflowStep?.jobId, workflowRefreshNonce, workflowCosts, activeWorkflows]);
+  }, [section, selectedWorkflowStep?.jobId, workflowRefreshNonce, workflowCosts, activeWorkflows, historyWorkflows]);
 
   useEffect(() => {
     if (section !== 'workflow-costs') {
@@ -1355,7 +1365,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
     };
   }
 
-  function mapActiveWorkflow(item: WorkflowResponse): WorkflowHostRow {
+  function mapWorkflow(item: WorkflowResponse, kind: Extract<WorkflowHostKind, 'active' | 'history'>): WorkflowHostRow {
     const input = item.input && typeof item.input === 'object' ? item.input : {};
     const sourceId = typeof input.sourceId === 'string' ? input.sourceId : item.sourceId;
     const sourceLabel =
@@ -1365,10 +1375,14 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
           ? input.youtubeUrl
           : typeof input.sourceUrl === 'string'
             ? input.sourceUrl
-            : sourceId;
+            : typeof input.topicName === 'string'
+              ? input.topicName
+              : typeof input.researchTopicId === 'string'
+                ? input.researchTopicId
+                : sourceId;
 
     return {
-      kind: 'active',
+      kind,
       workflowId: item.id,
       requestedByUserId: item.requestedByUserId,
       requestedByUserEmail: null,
@@ -1395,15 +1409,18 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
       finalCredits: null,
       reservationStatus: null,
       sourceType: sourceId ? 'workflow' : null,
-      reason: typeof input.reason === 'string' ? input.reason : null,
+      reason: typeof input.reason === 'string' ? input.reason : typeof input.triggeredBy === 'string' ? input.triggeredBy : null,
       diagnosticProvider: null,
       diagnosticMessage: null,
     };
   }
 
-  const activeWorkflowRows = activeWorkflows.map(mapActiveWorkflow);
+  const activeWorkflowRows = activeWorkflows.map((item) => mapWorkflow(item, 'active'));
+  const historyWorkflowRows = historyWorkflows.map((item) => mapWorkflow(item, 'history'));
   const costWorkflowRows = workflowCosts.map(mapWorkflowCost);
-  const workflowHostRows = [...activeWorkflowRows, ...costWorkflowRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const workflowHostRows = [...activeWorkflowRows, ...costWorkflowRows, ...historyWorkflowRows]
+    .filter((item, index, rows) => rows.findIndex((candidate) => candidate.workflowId === item.workflowId) === index)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   function mapJob(item: JobResponse): JobHostRow {
     const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
@@ -1633,9 +1650,9 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
   };
 
   const workflowCostStats = {
-    total: workflowCosts.length + activeWorkflows.length,
-    active: activeWorkflows.filter((item) => ['queued', 'running', 'waiting'].includes(item.status)).length,
-    succeeded: workflowCosts.filter((item) => item.workflowStatus === 'succeeded').length,
+    total: workflowHostRows.length,
+    active: workflowHostRows.filter((item) => ['queued', 'running', 'waiting'].includes(item.workflowStatus)).length,
+    succeeded: workflowHostRows.filter((item) => item.workflowStatus === 'succeeded').length,
     charged: workflowCosts.reduce((sum, item) => sum + (item.finalCredits ?? 0), 0),
   };
 
@@ -3713,9 +3730,14 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
       setWorkflowHostError(null);
       try {
         setWorkflowRefreshNonce((current) => current + 1);
-        const [items, activeItems] = await Promise.all([listWorkflowCosts(100, 0), listActiveWorkflows(100, 0)]);
+        const [items, activeItems, historyItems] = await Promise.all([
+          listWorkflowCosts(100, 0),
+          listActiveWorkflows(100, 0),
+          listHistoryWorkflows(100, 0),
+        ]);
         setWorkflowCosts(items);
         setActiveWorkflows(activeItems);
+        setHistoryWorkflows(historyItems);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to refresh workflows';
         setWorkflowCostsError(message);
@@ -3876,18 +3898,18 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {selectedWorkflow?.kind === 'active' && selectedWorkflowStep?.jobId && (
+                {selectedWorkflow?.kind === 'active' && (
                   <button
                     type="button"
                     onClick={async () => {
-                      if (!selectedWorkflowStep?.jobId) return;
+                      if (!selectedWorkflow) return;
                       setWorkflowCanceling(true);
                       setWorkflowStepJobLogsError(null);
                       try {
-                        await requestJobCancel(selectedWorkflowStep.jobId);
+                        await requestWorkflowCancel(selectedWorkflow.workflowId);
                         setWorkflowRefreshNonce((current) => current + 1);
                       } catch (err) {
-                        setWorkflowStepJobLogsError(err instanceof Error ? err.message : 'Failed to request cancel');
+                        setWorkflowStepJobLogsError(err instanceof Error ? err.message : 'Failed to request workflow cancel');
                       } finally {
                         setWorkflowCanceling(false);
                       }
@@ -3896,7 +3918,7 @@ export default function AdminPage({ initialSection, onSectionChange, onBackToApp
                     className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12px] font-semibold text-amber-200 transition-colors hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <CircleDashed size={14} />
-                    {workflowCanceling ? 'Stopping…' : 'Stop job'}
+                    {workflowCanceling ? 'Stopping…' : 'Stop workflow'}
                   </button>
                 )}
                 <button

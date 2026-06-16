@@ -11,6 +11,7 @@ public interface IWorkflowsRepository
     Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId, CancellationToken cancellationToken);
     Task<Workflow?> GetActiveWorkflowBySourceIdAsync(Guid sourceId, CancellationToken cancellationToken);
     Task<Workflow?> GetActiveWorkflowBySourceIdAndTypeAsync(Guid sourceId, string workflowType, CancellationToken cancellationToken);
+    Task<Workflow?> GetActiveWorkflowByInputGuidAsync(string workflowType, string inputKey, Guid inputValue, CancellationToken cancellationToken);
     Task<Workflow?> GetActiveWorkflowBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken);
     Task<IReadOnlyList<Workflow>> ListInsightWorkflowsBySourceIdAsync(Guid sourceId, int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<Workflow>> ListActiveWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken);
@@ -33,6 +34,7 @@ public interface IWorkflowsService
     Task<IReadOnlyList<WorkflowDto>> ListHistoryWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkflowStepDto>> ListStepsAsync(Guid workflowId, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkflowEventDto>> ListEventsAsync(Guid workflowId, int limit, int offset, CancellationToken cancellationToken);
+    Task<bool> RequestCancelAsync(Guid workflowId, CancellationToken cancellationToken);
 }
 
 public interface IAdminWorkflowCostsService

@@ -1,6 +1,8 @@
-import type { ResearchListData, ResearchBriefing } from '../../api/types';
+import type { ResearchListData, ResearchBriefing, ResearchSearchResult, ResearchTopicRun } from '../../api/types';
 import listData from '../data/research.json';
 import briefingsData from '../data/researchBriefings.json';
+import runsData from '../data/researchRuns.json';
+import searchResultsData from '../data/researchSearchResults.json';
 import { delay } from './delay';
 
 export async function getMockResearchList(): Promise<ResearchListData> {
@@ -36,4 +38,16 @@ export async function getMockResearchBriefing(topicId: string): Promise<Research
       generatedAt: item.generatedAt ?? item.date,
     })),
   };
+}
+
+export async function listMockResearchRunSearchResults(runId: string): Promise<ResearchSearchResult[]> {
+  await delay();
+  const results = searchResultsData.results as unknown as Record<string, ResearchSearchResult[]>;
+  return results[runId] ?? [];
+}
+
+export async function listMockResearchRuns(topicId: string): Promise<ResearchTopicRun[]> {
+  await delay();
+  const runs = runsData.runs as unknown as Record<string, ResearchTopicRun[]>;
+  return runs[topicId] ?? [];
 }

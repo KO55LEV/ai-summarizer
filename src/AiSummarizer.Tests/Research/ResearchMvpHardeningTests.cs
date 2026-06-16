@@ -3,7 +3,9 @@ using System.Text.Json;
 using AiSummarizer.Api.Research;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
+using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.Jobs;
+using AiSummarizer.Domain.Workflows;
 using AiSummarizer.Worker;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,36 +22,39 @@ public sealed class ResearchMvpHardeningTests
         var topic = BuildTopic(status: "active");
         var researchService = new FakeResearchService(topic);
         var repository = new FakeResearchRepository { ActiveRun = null };
-        var jobs = new FakeJobsService();
+        var workflows = new FakeWorkflowsRepository();
         var controller = new ResearchController(researchService);
 
-        var result = await controller.StartRun(topic.Id, new StartResearchTopicRunRequest(topic.RequestedByUserId, "manual", true), jobs, repository, CancellationToken.None);
+        var result = await controller.StartRun(topic.Id, new StartResearchTopicRunRequest(topic.RequestedByUserId, "manual", true), workflows, repository, CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result).Value as StartResearchTopicRunResponse;
         Assert.NotNull(response);
         Assert.Equal("queued", response!.Status);
-        Assert.NotNull(response.JobId);
+        Assert.Null(response.JobId);
+        Assert.NotNull(response.WorkflowId);
         Assert.Null(response.ExistingRunId);
-        Assert.Single(jobs.Created);
+        Assert.Single(workflows.Created);
+        Assert.Equal("research.topic", workflows.Created.Single().WorkflowType);
+        Assert.Equal("queued", workflows.Created.Single().Status);
     }
 
     [Fact]
     public async Task Manual_run_does_not_enqueue_duplicate_when_active_run_exists()
     {
         var topic = BuildTopic(status: "active");
-        var activeRun = new ResearchActiveTopicRunDto(Guid.NewGuid(), Guid.NewGuid(), "queued", DateTimeOffset.UtcNow);
+        var activeRun = new ResearchActiveTopicRunDto(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "queued", DateTimeOffset.UtcNow);
         var researchService = new FakeResearchService(topic);
         var repository = new FakeResearchRepository { ActiveRun = activeRun };
-        var jobs = new FakeJobsService();
+        var workflows = new FakeWorkflowsRepository();
         var controller = new ResearchController(researchService);
 
-        var result = await controller.StartRun(topic.Id, new StartResearchTopicRunRequest(topic.RequestedByUserId, "manual", true), jobs, repository, CancellationToken.None);
+        var result = await controller.StartRun(topic.Id, new StartResearchTopicRunRequest(topic.RequestedByUserId, "manual", true), workflows, repository, CancellationToken.None);
 
         var response = Assert.IsType<OkObjectResult>(result.Result).Value as StartResearchTopicRunResponse;
         Assert.NotNull(response);
         Assert.Equal("already_running", response!.Status);
         Assert.Equal(activeRun.Id, response.ExistingRunId);
-        Assert.Empty(jobs.Created);
+        Assert.Empty(workflows.Created);
     }
 
     [Fact]
@@ -57,14 +62,15 @@ public sealed class ResearchMvpHardeningTests
     {
         var topic = BuildTopic(status: "active", nextRunAt: DateTimeOffset.UtcNow.AddMinutes(-1));
         var repository = new FakeResearchRepository { DueTopics = [topic] };
-        var jobs = new FakeJobsRepository();
-        var scheduler = CreateScheduler(repository, jobs);
+        var workflows = new FakeWorkflowsRepository();
+        var scheduler = CreateScheduler(repository, workflows);
 
         await scheduler.RunOnceAsync(CancellationToken.None);
 
-        Assert.Single(jobs.Created);
-        Assert.Equal("research.topic.run", jobs.Created.Single().JobType);
-        Assert.Equal(topic.Id.ToString(), jobs.Created.Single().Payload.GetProperty("researchTopicId").GetString());
+        Assert.Single(workflows.Created);
+        Assert.Equal("research.topic", workflows.Created.Single().WorkflowType);
+        Assert.Equal("queued", workflows.Created.Single().Status);
+        Assert.Equal(topic.Id.ToString(), workflows.Created.Single().Input.GetProperty("researchTopicId").GetString());
         Assert.NotNull(repository.UpdatedNextRunAt);
         Assert.True(repository.UpdatedNextRunAt > DateTimeOffset.UtcNow);
     }
@@ -76,21 +82,21 @@ public sealed class ResearchMvpHardeningTests
         var repository = new FakeResearchRepository
         {
             DueTopics = [topic],
-            ActiveRun = new ResearchActiveTopicRunDto(Guid.NewGuid(), Guid.NewGuid(), "running", DateTimeOffset.UtcNow)
+            ActiveRun = new ResearchActiveTopicRunDto(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "running", DateTimeOffset.UtcNow)
         };
-        var jobs = new FakeJobsRepository();
-        var scheduler = CreateScheduler(repository, jobs);
+        var workflows = new FakeWorkflowsRepository();
+        var scheduler = CreateScheduler(repository, workflows);
 
         await scheduler.RunOnceAsync(CancellationToken.None);
 
-        Assert.Empty(jobs.Created);
+        Assert.Empty(workflows.Created);
         Assert.Null(repository.UpdatedNextRunAt);
     }
 
-    private static ResearchTopicSchedulerHostedService CreateScheduler(FakeResearchRepository repository, FakeJobsRepository jobs)
+    private static ResearchTopicSchedulerHostedService CreateScheduler(FakeResearchRepository repository, FakeWorkflowsRepository workflows)
         => new(
             repository,
-            jobs,
+            workflows,
             Options.Create(new ResearchSchedulerOptions { Enabled = true, PollIntervalSeconds = 60, BatchSize = 10 }),
             NullLogger<ResearchTopicSchedulerHostedService>.Instance);
 
@@ -168,6 +174,7 @@ public sealed class ResearchMvpHardeningTests
         public Task<IReadOnlyList<JobDto>> ListActiveJobsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<IReadOnlyList<JobDto>> ListHistoryJobsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<IReadOnlyList<JobLogDto>> ListLogsAsync(Guid jobId, int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<bool> RequestCancelAsync(Guid jobId, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     private sealed class FakeJobsRepository : IJobsRepository
@@ -192,6 +199,51 @@ public sealed class ResearchMvpHardeningTests
         public Task<bool> CancelJobAsync(Guid jobId, string workerId, string reason, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<bool> RequestCancelAsync(Guid jobId, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<JobLog> AddLogAsync(Guid jobId, int? attemptNo, string level, string message, JsonElement? context, CancellationToken cancellationToken) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeWorkflowsRepository : IWorkflowsRepository
+    {
+        private readonly Dictionary<Guid, Workflow> _workflows = new();
+        public List<Workflow> Created { get; } = [];
+
+        public Task<T> ExecuteInTransactionAsync<T>(Func<IWorkflowsRepository, DbTransaction, Task<T>> action, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<Workflow> CreateWorkflowAsync(Workflow workflow, DbTransaction? transaction, CancellationToken cancellationToken)
+        {
+            _workflows[workflow.Id] = workflow;
+            Created.Add(workflow);
+            return Task.FromResult(workflow);
+        }
+
+        public Task<Workflow?> GetWorkflowByIdAsync(Guid workflowId, CancellationToken cancellationToken)
+            => Task.FromResult(_workflows.TryGetValue(workflowId, out var workflow) ? workflow : null);
+
+        public Task<Workflow?> GetActiveWorkflowBySourceIdAsync(Guid sourceId, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<Workflow?> GetActiveWorkflowBySourceIdAndTypeAsync(Guid sourceId, string workflowType, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<Workflow?> GetActiveWorkflowByInputGuidAsync(string workflowType, string inputKey, Guid inputValue, CancellationToken cancellationToken)
+            => Task.FromResult(_workflows.Values.FirstOrDefault(workflow =>
+                workflow.WorkflowType == workflowType
+                && workflow.Status is "queued" or "running" or "waiting"
+                && workflow.Input.ValueKind == JsonValueKind.Object
+                && workflow.Input.TryGetProperty(inputKey, out var property)
+                && property.ValueKind == JsonValueKind.String
+                && property.GetString() == inputValue.ToString()));
+        public Task<Workflow?> GetActiveWorkflowBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<Workflow>> ListInsightWorkflowsBySourceIdAsync(Guid sourceId, int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<Workflow>> ListActiveWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<Workflow>> ListHistoryWorkflowsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<WorkflowStep>> ListStepsAsync(Guid workflowId, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyList<WorkflowEvent>> ListEventsAsync(Guid workflowId, int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<Workflow?> ClaimNextWorkflowAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<bool> HeartbeatWorkflowAsync(Guid workflowId, string workerId, short? progressPercent, string? progressMessage, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<Workflow> UpdateWorkflowAsync(Workflow workflow, DbTransaction? transaction, CancellationToken cancellationToken)
+        {
+            _workflows[workflow.Id] = workflow;
+            return Task.FromResult(workflow);
+        }
+
+        public Task<WorkflowStep> CreateWorkflowStepAsync(WorkflowStep step, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<WorkflowStep> UpdateWorkflowStepAsync(WorkflowStep step, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<WorkflowEvent> AddWorkflowEventAsync(Guid workflowId, string? stepKey, string level, string message, JsonElement context, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     private sealed class FakeResearchRepository : IResearchRepository
@@ -231,6 +283,7 @@ public sealed class ResearchMvpHardeningTests
         public Task UpdateTopicBriefingStateAsync(Guid topicId, DateTimeOffset? lastRunAt, DateTimeOffset? nextRunAt, string? lastBriefingPreview, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<Guid> CreateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task UpdateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<bool> CancelTopicRunByWorkflowIdAsync(Guid workflowId, string reason, DbTransaction? transaction, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<ResearchTopicRunDto?> GetTopicRunByIdAsync(Guid runId, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<IReadOnlyList<ResearchTopicRunDto>> ListTopicRunsAsync(Guid topicId, int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<IReadOnlyList<ResearchTopicRunDto>> ListActiveTopicRunJobsAsync(Guid topicId, CancellationToken cancellationToken) => throw new NotImplementedException();

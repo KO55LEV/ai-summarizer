@@ -1,6 +1,6 @@
 import { getCurrentUserId } from '../config/currentUser';
-import type { ResearchBriefing, ResearchListData, ResearchTopic, ResearchTopicRun } from './types';
-import { getMockResearchList, getMockResearchBriefing } from '../mocks/api/research';
+import type { ResearchBriefing, ResearchListData, ResearchSearchResult, ResearchTopic, ResearchTopicRun } from './types';
+import { getMockResearchList, getMockResearchBriefing, listMockResearchRuns, listMockResearchRunSearchResults } from '../mocks/api/research';
 
 interface ApiResearchTopic {
   id: string;
@@ -67,6 +67,27 @@ interface ApiResearchBriefing {
   previewText: string;
 }
 
+interface ApiResearchSearchResult {
+  id: string;
+  researchTopicRunId: string;
+  researchTopicId: string;
+  sourceKey: string;
+  query: string;
+  title: string;
+  url: string;
+  canonicalUrl: string | null;
+  snippet: string | null;
+  score: number;
+  publishedAt: string | null;
+  authorName: string | null;
+  domain: string | null;
+  language: string | null;
+  resultRank: number;
+  rawResultJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface CreateResearchTopicInput {
   requestedByUserId: string;
   projectId?: string | null;
@@ -95,6 +116,7 @@ export interface UpdateResearchTopicInput {
 
 interface StartResearchRunResponse {
   jobId: string | null;
+  workflowId: string | null;
   topicId: string;
   existingRunId: string | null;
   jobType: string;
@@ -214,6 +236,29 @@ function mapBriefing(briefing: ApiResearchBriefing): ResearchBriefing {
       preview: item.previewText,
     })),
     previewText: briefing.previewText,
+  };
+}
+
+function mapSearchResult(item: ApiResearchSearchResult): ResearchSearchResult {
+  return {
+    id: item.id,
+    researchTopicRunId: item.researchTopicRunId,
+    researchTopicId: item.researchTopicId,
+    sourceKey: item.sourceKey,
+    query: item.query,
+    title: item.title,
+    url: item.url,
+    canonicalUrl: item.canonicalUrl,
+    snippet: item.snippet,
+    score: item.score,
+    publishedAt: item.publishedAt,
+    authorName: item.authorName,
+    domain: item.domain,
+    language: item.language,
+    resultRank: item.resultRank,
+    rawResultJson: item.rawResultJson,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
   };
 }
 
@@ -367,10 +412,26 @@ export async function startResearchRun(topicId: string, requestedByUserId = getC
 }
 
 export async function listResearchRuns(topicId: string): Promise<ResearchTopicRun[]> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return listMockResearchRuns(topicId);
+  }
+
   const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
   const res = await fetch(`/api/research/${encodeURIComponent(topicId)}/runs?${params.toString()}`);
   if (!res.ok) throw new Error('Failed to fetch research runs');
   return await res.json() as ResearchTopicRun[];
+}
+
+export async function listResearchRunSearchResults(runId: string): Promise<ResearchSearchResult[]> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return listMockResearchRunSearchResults(runId);
+  }
+
+  const params = new URLSearchParams({ requestedByUserId: getCurrentUserId() });
+  const res = await fetch(`/api/research/runs/${encodeURIComponent(runId)}/search-results?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch research run search results');
+  const data = await res.json() as ApiResearchSearchResult[];
+  return data.map(mapSearchResult);
 }
 
 export async function createResearchBriefing(topicId: string, input: CreateResearchBriefingInput): Promise<ResearchBriefing> {

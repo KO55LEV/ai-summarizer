@@ -41,6 +41,34 @@
       "isActive": false,
       "createdAt": "2026-05-12T16:10:00Z",
       "updatedAt": "2026-05-28T13:45:00Z"
+    },
+    {
+      "id": "c2f6a3c8-8ed4-4e0e-9a4f-3c5ce4b2a111",
+      "promptKey": "research.briefing.summary",
+      "title": "Research briefing summary",
+      "description": "Generates the final research briefing from ranked and selected evidence.",
+      "workflowType": "research.synthesis",
+      "provider": "openrouter",
+      "model": "openai/gpt-4.1-mini",
+      "systemPrompt": "You are a research synthesis engine.\nProduce only valid JSON matching this schema:\n{\n  \"periodLabel\": \"string\",\n  \"readTimeMinutes\": 12,\n  \"wordCount\": 1200,\n  \"summary\": \"string\",\n  \"previewText\": \"string\",\n  \"sections\": [\n    { \"title\": \"string\", \"sentiment\": \"positive|neutral|negative\", \"items\": [\"string\"] }\n  ],\n  \"sources\": [\n    { \"title\": \"string\", \"domain\": \"string\" }\n  ]\n}\nKeep the summary concise, structured, and grounded in the provided evidence.\nReturn only the JSON body, with no markdown or commentary.",
+      "userPrompt": "Use the evidence below to write a weekly or daily research briefing.\n{{evidence}}",
+      "isActive": true,
+      "createdAt": "2026-06-16T00:00:00Z",
+      "updatedAt": "2026-06-16T00:00:00Z"
+    },
+    {
+      "id": "7f8a8bca-9a31-47ad-b7ad-5e55f5d0e9c1",
+      "promptKey": "research.search.plan",
+      "title": "Research search planning",
+      "description": "Turns topic title and intent into compact source-specific search directives.",
+      "workflowType": "research.planning",
+      "provider": "openrouter",
+      "model": "openai/gpt-4.1-mini",
+      "systemPrompt": "You are a research search planner. Produce only valid JSON and nothing else.",
+      "userPrompt": "Topic title: {{title}}\n\nTopic intent: {{intent}}\n\nSelected sources: {{sources}}\n\nTopic tags: {{tags}}\n\nFrequency: {{frequency}}\n\nGenerate the shortest useful search plan.",
+      "isActive": true,
+      "createdAt": "2026-06-16T00:00:00Z",
+      "updatedAt": "2026-06-16T00:00:00Z"
     }
   ],
   "archives": {
@@ -100,7 +128,9 @@
         "archivedAt": "2026-05-12T16:10:00Z",
         "sourceUpdatedAt": "2026-05-12T16:10:00Z"
       }
-    ]
+    ],
+    "c2f6a3c8-8ed4-4e0e-9a4f-3c5ce4b2a111": [],
+    "7f8a8bca-9a31-47ad-b7ad-5e55f5d0e9c1": []
   },
   "runs": {
     "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001": [
@@ -195,7 +225,8 @@
         "createdAt": "2026-05-28T13:40:00Z",
         "updatedAt": "2026-05-28T13:40:30Z"
       }
-    ]
+    ],
+    "c2f6a3c8-8ed4-4e0e-9a4f-3c5ce4b2a111": []
   },
   "usage": {
     "b0a7edbc-61c9-43f0-8f72-0f4e8b1d0001": {
@@ -224,6 +255,24 @@
       "runningRuns": 0,
       "lastRunAt": "2026-05-28T13:40:00Z",
       "lastStatus": "failed"
+    },
+    "c2f6a3c8-8ed4-4e0e-9a4f-3c5ce4b2a111": {
+      "promptId": "c2f6a3c8-8ed4-4e0e-9a4f-3c5ce4b2a111",
+      "totalRuns": 0,
+      "succeededRuns": 0,
+      "failedRuns": 0,
+      "runningRuns": 0,
+      "lastRunAt": null,
+      "lastStatus": null
+    },
+    "7f8a8bca-9a31-47ad-b7ad-5e55f5d0e9c1": {
+      "promptId": "7f8a8bca-9a31-47ad-b7ad-5e55f5d0e9c1",
+      "totalRuns": 0,
+      "succeededRuns": 0,
+      "failedRuns": 0,
+      "runningRuns": 0,
+      "lastRunAt": null,
+      "lastStatus": null
     }
   }
 }

@@ -231,11 +231,33 @@ export interface ResearchBriefing {
   previewText: string;
 }
 
+export interface ResearchSearchResult {
+  id: string;
+  researchTopicRunId: string;
+  researchTopicId: string;
+  sourceKey: string;
+  query: string;
+  title: string;
+  url: string;
+  canonicalUrl: string | null;
+  snippet: string | null;
+  score: number;
+  publishedAt: string | null;
+  authorName: string | null;
+  domain: string | null;
+  language: string | null;
+  resultRank: number;
+  rawResultJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ResearchTopicRun {
   id: string;
   researchTopicId: string;
   requestedByUserId: string | null;
   jobId: string | null;
+  workflowId: string | null;
   status: string;
   triggeredBy: string | null;
   startedAt: string | null;

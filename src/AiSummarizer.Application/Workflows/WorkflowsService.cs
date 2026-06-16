@@ -1,6 +1,8 @@
 using System.Text.Json;
 using AiSummarizer.Application.Billing;
+using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.MediaSources;
+using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Transcripts;
 using AiSummarizer.Domain.MediaSources;
 using AiSummarizer.Domain.Transcripts;
@@ -10,7 +12,9 @@ namespace AiSummarizer.Application.Workflows;
 
 public sealed class WorkflowsService(
     IBillingService billingService,
+    IJobsRepository jobsRepository,
     IMediaSourcesRepository mediaSourcesRepository,
+    IResearchRepository researchRepository,
     IUserVideoLibraryRepository userVideoLibraryRepository,
     IWorkflowsRepository repository) : IWorkflowsService
 {
@@ -132,6 +136,77 @@ public sealed class WorkflowsService(
 
     public async Task<IReadOnlyList<WorkflowEventDto>> ListEventsAsync(Guid workflowId, int limit, int offset, CancellationToken cancellationToken)
         => (await repository.ListEventsAsync(workflowId, limit, offset, cancellationToken)).Select(Map).ToArray();
+
+    public async Task<bool> RequestCancelAsync(Guid workflowId, CancellationToken cancellationToken)
+    {
+        var workflow = await repository.GetWorkflowByIdAsync(workflowId, cancellationToken)
+            ?? throw new WorkflowNotFoundException("Workflow not found.");
+
+        if (workflow.Status is "succeeded" or "failed" or "cancelled" or "dead")
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var steps = await repository.ListStepsAsync(workflowId, cancellationToken);
+        var activeSteps = steps
+            .Where(step => step.Status is "queued" or "running" or "waiting")
+            .ToArray();
+
+        foreach (var step in activeSteps)
+        {
+            if (step.JobId is not null)
+            {
+                await jobsRepository.RequestCancelAsync(step.JobId.Value, cancellationToken);
+            }
+
+            await repository.UpdateWorkflowStepAsync(step with
+            {
+                Status = "cancelled",
+                ErrorCode = "cancelled",
+                ErrorMessage = "Workflow cancellation requested.",
+                FinishedAt = now,
+                UpdatedAt = now
+            }, null, cancellationToken);
+        }
+
+        await repository.UpdateWorkflowAsync(workflow with
+        {
+            Status = "cancelled",
+            ErrorCode = "cancelled",
+            ErrorMessage = "Workflow cancellation requested.",
+            FinishedAt = now,
+            ProgressMessage = "Cancelled",
+            UpdatedAt = now
+        }, null, cancellationToken);
+
+        var researchRunCancelled = false;
+        if (workflow.WorkflowType == "research.topic")
+        {
+            researchRunCancelled = await researchRepository.CancelTopicRunByWorkflowIdAsync(
+                workflowId,
+                "Workflow cancellation requested.",
+                null,
+                cancellationToken);
+        }
+
+        await repository.AddWorkflowEventAsync(
+            workflowId,
+            workflow.CurrentStepKey,
+            "warning",
+            "Workflow cancellation requested.",
+            JsonSerializer.SerializeToElement(new
+            {
+                workflowId,
+                cancelledStepCount = activeSteps.Length,
+                researchRunCancelled,
+                jobIds = activeSteps.Where(step => step.JobId is not null).Select(step => step.JobId).ToArray()
+            }),
+            null,
+            cancellationToken);
+
+        return true;
+    }
 
     private static WorkflowDto Map(Workflow workflow)
         => new(

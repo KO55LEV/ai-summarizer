@@ -1,14 +1,14 @@
 using System.Text.Json;
-using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
-using AiSummarizer.Domain.Jobs;
+using AiSummarizer.Application.Workflows;
+using AiSummarizer.Domain.Workflows;
 using Microsoft.Extensions.Options;
 
 namespace AiSummarizer.Worker;
 
 public sealed class ResearchTopicSchedulerHostedService(
     IResearchRepository researchRepository,
-    IJobsRepository jobsRepository,
+    IWorkflowsRepository workflowsRepository,
     IOptions<ResearchSchedulerOptions> options,
     ILogger<ResearchTopicSchedulerHostedService> logger) : BackgroundService
 {
@@ -55,6 +55,7 @@ public sealed class ResearchTopicSchedulerHostedService(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            Workflow? workflow = null;
             try
             {
                 // This prevents duplicate runs in the normal single-worker deployment.
@@ -65,40 +66,68 @@ public sealed class ResearchTopicSchedulerHostedService(
                     logger.LogInformation("Skipping scheduled research topic {TopicId}; an active run/job already exists", topic.Id);
                     continue;
                 }
-
-                var job = await jobsRepository.CreateJobAsync(new Job
+                if (await workflowsRepository.GetActiveWorkflowByInputGuidAsync("research.topic", "researchTopicId", topic.Id, cancellationToken) is not null)
                 {
-                    Id = Guid.NewGuid(),
+                    logger.LogInformation("Skipping scheduled research topic {TopicId}; an active workflow already exists", topic.Id);
+                    continue;
+                }
+
+                var workflowId = Guid.NewGuid();
+                workflow = await workflowsRepository.CreateWorkflowAsync(new Workflow
+                {
+                    Id = workflowId,
                     RequestedByUserId = topic.RequestedByUserId,
-                    JobType = "research.topic.run",
-                    Priority = 50,
-                    Status = JobStatus.Queued,
-                    Payload = JsonSerializer.SerializeToElement(new
+                    SourceId = null,
+                    WorkflowType = "research.topic",
+                    Status = "queued",
+                    Input = JsonSerializer.SerializeToElement(new
                     {
                         researchTopicId = topic.Id,
+                        topicName = topic.Name,
                         requestedByUserId = topic.RequestedByUserId,
                         triggeredBy = "scheduled",
                         forceRun = false
                     }),
+                    Result = null,
+                    CurrentStepKey = null,
                     AttemptCount = 0,
                     MaxAttempts = 3,
                     AvailableAt = now,
                     CreatedAt = now,
                     UpdatedAt = now
-                }, cancellationToken);
+                }, null, cancellationToken);
 
                 var nextRunAt = CalculateNextRunAt(topic.Frequency, now, topic.DeliveryTime);
                 await researchRepository.UpdateTopicNextRunAtAsync(topic.Id, nextRunAt, null, cancellationToken);
 
                 logger.LogInformation(
-                    "Queued scheduled research run. TopicId={TopicId}, JobId={JobId}, NextRunAt={NextRunAt}",
+                    "Queued scheduled research workflow. TopicId={TopicId}, WorkflowId={WorkflowId}, NextRunAt={NextRunAt}",
                     topic.Id,
-                    job.Id,
+                    workflow.Id,
                     nextRunAt);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to schedule due research topic {TopicId}", topic.Id);
+
+                if (workflow is not null)
+                {
+                    try
+                    {
+                        await workflowsRepository.UpdateWorkflowAsync(workflow with
+                        {
+                            Status = "failed",
+                            ErrorCode = "workflow_queue_failed",
+                            ErrorMessage = ex.Message,
+                            FinishedAt = DateTimeOffset.UtcNow,
+                            UpdatedAt = DateTimeOffset.UtcNow
+                        }, null, cancellationToken);
+                    }
+                    catch
+                    {
+                        // Best effort only.
+                    }
+                }
             }
         }
     }

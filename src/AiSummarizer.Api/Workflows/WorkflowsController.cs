@@ -49,6 +49,10 @@ public sealed class WorkflowsController(IWorkflowsService workflowsService) : Co
     public async Task<ActionResult<IReadOnlyList<WorkflowEventResponse>>> GetEvents([FromRoute] Guid workflowId, [FromQuery] int limit = 100, [FromQuery] int offset = 0, CancellationToken cancellationToken = default)
         => Ok((await workflowsService.ListEventsAsync(workflowId, limit, offset, cancellationToken)).Select(Map).ToArray());
 
+    [HttpPost("{workflowId:guid}/request-cancel")]
+    public async Task<ActionResult<bool>> RequestCancel([FromRoute] Guid workflowId, CancellationToken cancellationToken)
+        => Ok(await workflowsService.RequestCancelAsync(workflowId, cancellationToken));
+
     private static WorkflowResponse Map(WorkflowDto workflow)
         => new(
             workflow.Id,

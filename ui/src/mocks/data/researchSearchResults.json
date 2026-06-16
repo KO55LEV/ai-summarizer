@@ -1,0 +1,48 @@
+{
+  "results": {
+    "r1-latest-run": [
+      {
+        "id": "sr-1",
+        "researchTopicRunId": "r1-latest-run",
+        "researchTopicId": "r1",
+        "sourceKey": "youtube",
+        "query": "OpenAI GPT-5 preview interview",
+        "title": "OpenAI GPT-5 Preview: What Changes for Agents?",
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "canonicalUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "snippet": "A short interview about the model preview, agent reliability, and deployment tradeoffs.",
+        "score": 0.94,
+        "publishedAt": "2026-06-01T08:00:00Z",
+        "authorName": "AI Lab Talks",
+        "domain": "youtube.com",
+        "language": "en",
+        "resultRank": 1,
+        "rawResultJson": "{}",
+        "createdAt": "2026-06-01T08:01:00Z",
+        "updatedAt": "2026-06-01T08:01:00Z"
+      }
+    ],
+    "r4-latest-run": [
+      {
+        "id": "sr-2",
+        "researchTopicRunId": "r4-latest-run",
+        "researchTopicId": "r4",
+        "sourceKey": "youtube",
+        "query": "Starship IFT-4 launch analysis",
+        "title": "Starship IFT-4: Full Mission Success Explained",
+        "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
+        "canonicalUrl": "https://www.youtube.com/watch?v=9bZkp7q19f0",
+        "snippet": "Launch analysis, recovery, and next steps for the Artemis program.",
+        "score": 0.91,
+        "publishedAt": "2026-05-18T09:30:00Z",
+        "authorName": "Space News Daily",
+        "domain": "youtube.com",
+        "language": "en",
+        "resultRank": 1,
+        "rawResultJson": "{}",
+        "createdAt": "2026-05-18T09:31:00Z",
+        "updatedAt": "2026-05-18T09:31:00Z"
+      }
+    ]
+  }
+}

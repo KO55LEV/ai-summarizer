@@ -3,6 +3,7 @@ select
     @topic_id::uuid as research_topic_id,
     j.requested_by_user_id,
     j.id as job_id,
+    nullif(j.payload_json->>'workflowId', '')::uuid as workflow_id,
     case when j.status = 'retry_wait' then 'queued' else j.status end as status,
     nullif(j.payload_json->>'triggeredBy', '') as triggered_by,
     j.started_at,

@@ -4,39 +4,51 @@ namespace AiSummarizer.Infrastructure.Research;
 
 public sealed class ResearchQueryPlanner : ISearchQueryPlanner
 {
-    public IReadOnlyList<ResearchSearchQuery> BuildQueries(string topic, IReadOnlyList<string> sourceKeys, string frequency)
+    public IReadOnlyList<ResearchSearchQuery> BuildQueries(ResearchSearchPlan plan, string frequency)
     {
-        var baseQuery = topic.Trim();
-        var lookback = frequency.Trim().ToLowerInvariant() switch
-        {
-            "hourly" => TimeSpan.FromHours(2),
-            "daily" => TimeSpan.FromDays(1),
-            "weekly" => TimeSpan.FromDays(7),
-            "monthly" => TimeSpan.FromDays(30),
-            _ => TimeSpan.FromDays(7)
-        };
-
-        var end = DateTimeOffset.UtcNow;
-        var start = end - lookback;
-
-        return sourceKeys
-            .SelectMany(sourceKey =>
+        var now = DateTimeOffset.UtcNow;
+        var fallbackWindow = ResolveWindow(frequency);
+        return plan.SourcePlans
+            .SelectMany(sourcePlan =>
             {
-                var source = ParseSource(sourceKey);
-                return source switch
+                var source = ParseSource(sourcePlan.Source);
+                if (sourcePlan.Queries.Count == 0)
                 {
-                    ResearchSearchSource.Web => new[] { new ResearchSearchQuery($"{baseQuery} latest", source, start, end, 10) },
-                    ResearchSearchSource.News => new[] { new ResearchSearchQuery($"{baseQuery} news", source, start, end, 12) },
-                    ResearchSearchSource.Archive => new[] { new ResearchSearchQuery($"{baseQuery} background history", source, start, end, 8) },
-                    ResearchSearchSource.Reddit => new[] { new ResearchSearchQuery($"{baseQuery} reddit discussion", source, start, end, 10) },
-                    ResearchSearchSource.Financial => new[] { new ResearchSearchQuery($"{baseQuery} market earnings", source, start, end, 8) },
-                    ResearchSearchSource.Twitter => new[] { new ResearchSearchQuery($"{baseQuery} x twitter", source, start, end, 15) },
-                    ResearchSearchSource.YouTube => new[] { new ResearchSearchQuery($"{baseQuery} youtube", source, start, end, 10) },
-                    _ => Array.Empty<ResearchSearchQuery>()
-                };
+                    return Array.Empty<ResearchSearchQuery>();
+                }
+
+                var window = ResolveWindow(sourcePlan.Recency) ?? fallbackWindow;
+                var start = now - window;
+                var end = now;
+                var maxResults = sourcePlan.MaxResults ?? ResolveDefaultMaxResults(source);
+                return sourcePlan.Queries.Select(query => new ResearchSearchQuery(query, source, start, end, maxResults));
             })
             .ToArray();
     }
+
+    private static TimeSpan? ResolveWindow(string? frequency)
+        => frequency?.Trim().ToLowerInvariant() switch
+        {
+            "hour" or "hourly" => TimeSpan.FromHours(2),
+            "day" or "daily" => TimeSpan.FromDays(1),
+            "week" or "weekly" => TimeSpan.FromDays(7),
+            "month" or "monthly" => TimeSpan.FromDays(30),
+            null or "" => null,
+            _ => null
+        };
+
+    private static int ResolveDefaultMaxResults(ResearchSearchSource source)
+        => source switch
+        {
+            ResearchSearchSource.Web => 10,
+            ResearchSearchSource.News => 12,
+            ResearchSearchSource.Archive => 8,
+            ResearchSearchSource.Reddit => 10,
+            ResearchSearchSource.Financial => 8,
+            ResearchSearchSource.Twitter => 15,
+            ResearchSearchSource.YouTube => 10,
+            _ => 10
+        };
 
     private static ResearchSearchSource ParseSource(string raw)
         => Enum.TryParse<ResearchSearchSource>(raw, true, out var source)

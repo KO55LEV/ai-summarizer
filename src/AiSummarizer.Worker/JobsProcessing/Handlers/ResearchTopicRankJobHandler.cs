@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
+using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.Jobs;
 
 namespace AiSummarizer.Worker.JobsProcessing.Handlers;
@@ -8,6 +9,7 @@ namespace AiSummarizer.Worker.JobsProcessing.Handlers;
 public sealed class ResearchTopicRankJobHandler(
     IResearchRepository researchRepository,
     IJobsRepository jobsRepository,
+    IWorkflowsRepository workflowsRepository,
     ILogger<ResearchTopicRankJobHandler> logger) : IJobHandler
 {
     private const string ScoringVersion = "v1";
@@ -67,6 +69,23 @@ public sealed class ResearchTopicRankJobHandler(
         var now = DateTimeOffset.UtcNow;
         var rankingRunId = Guid.NewGuid();
         var phaseId = Guid.NewGuid();
+        var workflowStep = await ResearchWorkflowProgress.StartStepAsync(
+            workflowsRepository,
+            run.WorkflowId,
+            40,
+            "ranking",
+            "research.rank",
+            context.Job.Id,
+            JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                rankingRunId,
+                scoringVersion = ScoringVersion,
+                documentCount = documents.Count,
+                maxSelectedDocuments = MaxSelectedDocuments
+            }),
+            cancellationToken);
 
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
@@ -143,6 +162,7 @@ public sealed class ResearchTopicRankJobHandler(
                     run.ResearchTopicId,
                     run.RequestedByUserId,
                     run.JobId,
+                    run.WorkflowId,
                     ResearchTopicRunStatus.Failed,
                     run.TriggeredBy,
                     run.StartedAt,
@@ -156,6 +176,22 @@ public sealed class ResearchTopicRankJobHandler(
 
                 return 0;
             }, cancellationToken);
+
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                workflowStep,
+                "no_documents_to_rank",
+                "Research topic run has no normalized documents to rank.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    rankingRunId,
+                    scoringVersion = ScoringVersion,
+                    documentCount = 0,
+                    maxSelectedDocuments = MaxSelectedDocuments
+                }),
+                cancellationToken);
 
             return JobHandlerResult.DeadLetter(
                 "no_documents_to_rank",
@@ -301,6 +337,7 @@ public sealed class ResearchTopicRankJobHandler(
                 researchTopicId = topic.Id,
                 researchTopicRunId = run.Id,
                 requestedByUserId = payload.RequestedByUserId ?? run.RequestedByUserId ?? topic.RequestedByUserId,
+                workflowId = run.WorkflowId,
                 triggeredBy = payload.TriggeredBy
             }),
             AttemptCount = 0,
@@ -320,6 +357,21 @@ public sealed class ResearchTopicRankJobHandler(
             selectedCount,
             nextJobId = synthJob.Id
         }), cancellationToken);
+        await ResearchWorkflowProgress.CompleteStepAsync(
+            workflowsRepository,
+            workflowStep,
+            JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                rankingRunId,
+                scoringVersion = ScoringVersion,
+                documentCount = documents.Count,
+                selectedCount,
+                selectedBySource = selectedCountBySource,
+                nextJobId = synthJob.Id
+            }),
+            cancellationToken);
 
         return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new
         {

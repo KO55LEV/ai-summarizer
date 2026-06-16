@@ -3,8 +3,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiSummarizer.Application.Reasoning;
+using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.Research;
+using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.Jobs;
+using AiSummarizer.Domain.Workflows;
 using AiSummarizer.Infrastructure.Research.Models;
 using Microsoft.Extensions.Options;
 
@@ -13,6 +16,8 @@ namespace AiSummarizer.Worker.JobsProcessing.Handlers;
 public sealed class ResearchTopicSynthesizeJobHandler(
     IResearchRepository researchRepository,
     IResearchService researchService,
+    IWorkflowsRepository workflowsRepository,
+    IPromptsRepository promptsRepository,
     IReasoningClientFactory reasoningClientFactory,
     IOptions<ResearchSynthesisOptions> options,
     ILogger<ResearchTopicSynthesizeJobHandler> logger) : IJobHandler
@@ -53,6 +58,37 @@ public sealed class ResearchTopicSynthesizeJobHandler(
 
         if (rankingRuns.Count == 0 || rankedDocuments.Count == 0 || documents.Count == 0)
         {
+            var workflowStep = await ResearchWorkflowProgress.StartStepAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                50,
+                "synthesis",
+                "research.synthesize",
+                context.Job.Id,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    rankingRunCount = rankingRuns.Count,
+                    rankedDocumentCount = rankedDocuments.Count,
+                    documentCount = documents.Count
+                }),
+                cancellationToken);
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                workflowStep,
+                "insufficient_ranked_documents",
+                "Research topic run has no ranked documents to synthesize.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    rankingRunCount = rankingRuns.Count,
+                    rankedDocumentCount = rankedDocuments.Count,
+                    documentCount = documents.Count
+                }),
+                cancellationToken);
+
             return JobHandlerResult.DeadLetter(
                 "insufficient_ranked_documents",
                 "Research topic run has no ranked documents to synthesize.",
@@ -89,12 +125,87 @@ public sealed class ResearchTopicSynthesizeJobHandler(
         var synthesisInput = BuildSynthesisInput(topic, run, selectedRankings, selectedDocuments, now, options.Value.MaxCharsPerDocument);
         var synthesisInputJson = JsonSerializer.Serialize(synthesisInput, JsonOptions);
         var inputHash = ComputeHash(synthesisInputJson);
+        var prompt = await promptsRepository.GetPromptByKeyAsync(options.Value.PromptKey, cancellationToken);
+        if (prompt is null)
+        {
+            var promptNotFoundStep = await ResearchWorkflowProgress.StartStepAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                50,
+                "synthesis",
+                "research.synthesize",
+                context.Job.Id,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    promptKey = options.Value.PromptKey
+                }),
+                cancellationToken);
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                promptNotFoundStep,
+                "prompt_not_found",
+                $"Research synthesis prompt {options.Value.PromptKey} was not found.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    promptKey = options.Value.PromptKey
+                }),
+                cancellationToken);
+            return JobHandlerResult.DeadLetter(
+                "prompt_not_found",
+                $"Research synthesis prompt {options.Value.PromptKey} was not found.",
+                JsonSerializer.SerializeToElement(new { researchTopicRunId = payload.ResearchTopicRunId, promptKey = options.Value.PromptKey }));
+        }
+
+        if (!prompt.IsActive)
+        {
+            var promptInactiveStep = await ResearchWorkflowProgress.StartStepAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                50,
+                "synthesis",
+                "research.synthesize",
+                context.Job.Id,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    promptKey = prompt.PromptKey
+                }),
+                cancellationToken);
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                promptInactiveStep,
+                "prompt_inactive",
+                $"Research synthesis prompt {prompt.PromptKey} is not active.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    promptKey = prompt.PromptKey
+                }),
+                cancellationToken);
+            return JobHandlerResult.DeadLetter(
+                "prompt_inactive",
+                $"Research synthesis prompt {prompt.PromptKey} is not active.",
+                JsonSerializer.SerializeToElement(new { researchTopicRunId = payload.ResearchTopicRunId, promptKey = prompt.PromptKey }));
+        }
+
         Guid? persistencePhaseId = null;
         ReasoningResponse? reasoningResponse = null;
         ResearchBriefingDto? briefing = null;
         string? responseJson = null;
         string? outputJson = null;
         string? usageJson = null;
+        WorkflowStep? synthesisStep = null;
+        WorkflowStep? persistenceStep = null;
 
         await context.LogInfoAsync("Research synthesis started", JsonSerializer.SerializeToElement(new
         {
@@ -103,10 +214,31 @@ public sealed class ResearchTopicSynthesizeJobHandler(
             synthesisRunId,
             rankingRunId = rankingRuns[^1].Id,
             selectedDocumentCount = selectedDocuments.Length,
-            provider = options.Value.Provider.ToString(),
-            model = options.Value.Model,
+            promptKey = prompt.PromptKey,
+            provider = prompt.Provider,
+            model = prompt.Model,
             promptVersion = options.Value.PromptVersion
         }), cancellationToken);
+        synthesisStep = await ResearchWorkflowProgress.StartStepAsync(
+            workflowsRepository,
+            run.WorkflowId,
+            50,
+            "synthesis",
+            "research.synthesize",
+            context.Job.Id,
+            JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                synthesisRunId,
+                rankingRunId = rankingRuns[^1].Id,
+                selectedDocumentCount = selectedDocuments.Length,
+                promptKey = prompt.PromptKey,
+                provider = prompt.Provider,
+                model = prompt.Model,
+                promptVersion = options.Value.PromptVersion
+            }),
+            cancellationToken);
 
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
@@ -125,6 +257,7 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                     synthesisRunId,
                     rankingRunId = rankingRuns[^1].Id,
                     selectedDocumentCount = selectedDocuments.Length,
+                    promptKey = prompt.PromptKey,
                     promptVersion = options.Value.PromptVersion
                 }),
                 now,
@@ -137,8 +270,8 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                 topic.Id,
                 rankingRuns[^1].Id,
                 ResearchSynthesisRunStatus.Running,
-                options.Value.Provider.ToString(),
-                options.Value.Model ?? string.Empty,
+                prompt.Provider,
+                prompt.Model,
                 options.Value.PromptVersion,
                 inputHash,
                 synthesisInputJson,
@@ -161,9 +294,9 @@ public sealed class ResearchTopicSynthesizeJobHandler(
         {
             context.ReportProgress(10, "Synthesizing briefing");
 
-            var client = reasoningClientFactory.GetClient(options.Value.Provider);
-            var systemPrompt = BuildSystemPrompt();
-            var userPrompt = BuildUserPrompt(synthesisInput);
+            var client = reasoningClientFactory.GetClient(ParseReasoningProvider(prompt.Provider));
+            var systemPrompt = prompt.SystemPrompt.Trim();
+            var userPrompt = BuildUserPrompt(prompt.UserPrompt, synthesisInput);
             await context.LogInfoAsync("Research synthesis request prepared", JsonSerializer.SerializeToElement(new
             {
                 runId = run.Id,
@@ -172,12 +305,33 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                 selectedDocumentCount = selectedDocuments.Length,
                 maxCharsPerDocument = options.Value.MaxCharsPerDocument,
                 maxSelectedDocuments = options.Value.MaxSelectedDocuments,
-                provider = options.Value.Provider.ToString(),
-                model = options.Value.Model,
+                promptKey = prompt.PromptKey,
+                provider = prompt.Provider,
+                model = prompt.Model,
                 promptVersion = options.Value.PromptVersion
             }), cancellationToken);
+            await ResearchWorkflowProgress.AddEventAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                "synthesis",
+                "info",
+                "Research synthesis request prepared.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    selectedDocumentCount = selectedDocuments.Length,
+                    maxCharsPerDocument = options.Value.MaxCharsPerDocument,
+                    maxSelectedDocuments = options.Value.MaxSelectedDocuments,
+                    promptKey = prompt.PromptKey,
+                    provider = prompt.Provider,
+                    model = prompt.Model,
+                    promptVersion = options.Value.PromptVersion
+                }),
+                cancellationToken);
             reasoningResponse = await client.CompleteAsync(new ReasoningRequest(
-                options.Value.Model,
+                prompt.Model,
                 systemPrompt,
                 userPrompt,
                 null,
@@ -207,6 +361,25 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                 completionTokens = reasoningResponse.Usage?.CompletionTokens,
                 totalTokens = reasoningResponse.Usage?.TotalTokens
             }), cancellationToken);
+            await ResearchWorkflowProgress.AddEventAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                "synthesis",
+                "info",
+                "Research synthesis response received.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    selectedDocumentCount = selectedDocuments.Length,
+                    provider = reasoningResponse.Provider.ToString(),
+                    model = reasoningResponse.Model,
+                    promptTokens = reasoningResponse.Usage?.PromptTokens,
+                    completionTokens = reasoningResponse.Usage?.CompletionTokens,
+                    totalTokens = reasoningResponse.Usage?.TotalTokens
+                }),
+                cancellationToken);
 
             await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
             {
@@ -217,7 +390,7 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                     topic.Id,
                     rankingRuns[^1].Id,
                     ResearchSynthesisRunStatus.Succeeded,
-                    options.Value.Provider.ToString(),
+                    prompt.Provider,
                     reasoningResponse.Model,
                     options.Value.PromptVersion,
                     inputHash,
@@ -258,8 +431,39 @@ public sealed class ResearchTopicSynthesizeJobHandler(
 
                 return 0;
             }, cancellationToken);
+            await ResearchWorkflowProgress.CompleteStepAsync(
+                workflowsRepository,
+                synthesisStep,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    rankingRunId = rankingRuns[^1].Id,
+                    selectedDocumentCount = selectedDocuments.Length,
+                    provider = reasoningResponse.Provider.ToString(),
+                    model = reasoningResponse.Model,
+                    usage = reasoningResponse.Usage
+                }),
+                cancellationToken);
 
             persistencePhaseId = Guid.NewGuid();
+            persistenceStep = await ResearchWorkflowProgress.StartStepAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                60,
+                "persistence",
+                "research.persist",
+                context.Job.Id,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    selectedDocumentCount = selectedDocuments.Length
+                }),
+                cancellationToken);
+
             await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
             {
                 await repository.CreateTopicRunPhaseAsync(new ResearchTopicRunPhaseRecord(
@@ -303,7 +507,7 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                     topic.Id,
                     rankingRuns[^1].Id,
                     ResearchSynthesisRunStatus.Succeeded,
-                    options.Value.Provider.ToString(),
+                    prompt.Provider,
                     reasoningResponse.Model,
                     options.Value.PromptVersion,
                     inputHash,
@@ -344,6 +548,7 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                     run.ResearchTopicId,
                     run.RequestedByUserId,
                     run.JobId,
+                    run.WorkflowId,
                     ResearchTopicRunStatus.Succeeded,
                     run.TriggeredBy,
                     run.StartedAt,
@@ -358,6 +563,26 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                 return 0;
             }, cancellationToken);
 
+            if (run.WorkflowId is not null)
+            {
+                var workflow = await workflowsRepository.GetWorkflowByIdAsync(run.WorkflowId.Value, cancellationToken);
+                if (workflow is not null && workflow.Status is not ("cancelled" or "dead"))
+                {
+                    await workflowsRepository.UpdateWorkflowAsync(workflow with
+                    {
+                        Status = "succeeded",
+                        Result = JsonSerializer.SerializeToElement(new
+                        {
+                            briefingId = briefing.Id,
+                            previewText = briefing.PreviewText
+                        }),
+                        CurrentStepKey = "synthesis",
+                        FinishedAt = DateTimeOffset.UtcNow,
+                        UpdatedAt = DateTimeOffset.UtcNow
+                    }, null, cancellationToken);
+                }
+            }
+
             await context.LogInfoAsync("Research synthesis persisted", JsonSerializer.SerializeToElement(new
             {
                 runId = run.Id,
@@ -367,6 +592,19 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                 selectedDocumentCount = selectedDocuments.Length,
                 previewText = briefing.PreviewText
             }), cancellationToken);
+            await ResearchWorkflowProgress.CompleteStepAsync(
+                workflowsRepository,
+                persistenceStep,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    briefingId = briefing.Id,
+                    selectedDocumentCount = selectedDocuments.Length,
+                    previewText = briefing.PreviewText
+                }),
+                cancellationToken);
         }
         catch (Exception ex)
         {
@@ -382,8 +620,8 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                     topic.Id,
                     rankingRuns[^1].Id,
                     ResearchSynthesisRunStatus.Failed,
-                    options.Value.Provider.ToString(),
-                    reasoningResponse?.Model ?? options.Value.Model ?? string.Empty,
+                    prompt.Provider,
+                    reasoningResponse?.Model ?? prompt.Model,
                     options.Value.PromptVersion,
                     inputHash,
                     synthesisInputJson,
@@ -446,6 +684,7 @@ public sealed class ResearchTopicSynthesizeJobHandler(
                     run.ResearchTopicId,
                     run.RequestedByUserId,
                     run.JobId,
+                    run.WorkflowId,
                     ResearchTopicRunStatus.Failed,
                     run.TriggeredBy,
                     run.StartedAt,
@@ -459,6 +698,38 @@ public sealed class ResearchTopicSynthesizeJobHandler(
 
                 return 0;
             }, cancellationToken);
+
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                persistenceStep ?? synthesisStep,
+                "synthesis_failed",
+                ex.Message,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    synthesisRunId,
+                    selectedDocumentCount = selectedDocuments.Length,
+                    error = ex.GetType().FullName
+                }),
+                cancellationToken);
+
+            if (run.WorkflowId is not null)
+            {
+                var workflow = await workflowsRepository.GetWorkflowByIdAsync(run.WorkflowId.Value, cancellationToken);
+                if (workflow is not null && workflow.Status is not ("cancelled" or "dead"))
+                {
+                    await workflowsRepository.UpdateWorkflowAsync(workflow with
+                    {
+                        Status = "failed",
+                        ErrorCode = "synthesis_failed",
+                        ErrorMessage = ex.Message,
+                        CurrentStepKey = persistenceStep?.StepKey ?? synthesisStep?.StepKey ?? "synthesis",
+                        FinishedAt = failedAt,
+                        UpdatedAt = failedAt
+                    }, null, cancellationToken);
+                }
+            }
 
             return JobHandlerResult.DeadLetter(
                 "synthesis_failed",
@@ -564,32 +835,22 @@ public sealed class ResearchTopicSynthesizeJobHandler(
         };
     }
 
-    private static string BuildSystemPrompt()
-        => """
-           You are a research synthesis engine.
-           Produce only valid JSON matching this schema:
-           {
-             "periodLabel": "string",
-             "readTimeMinutes": 12,
-             "wordCount": 1200,
-             "summary": "string",
-             "previewText": "string",
-             "sections": [
-               { "title": "string", "sentiment": "positive|neutral|negative", "items": ["string"] }
-             ],
-             "sources": [
-               { "title": "string", "domain": "string" }
-             ]
-           }
-           Keep the summary concise, structured, and grounded in the provided evidence.
-           """;
-
-    private static string BuildUserPrompt(object synthesisInput)
-        => JsonSerializer.Serialize(new
+    private static string BuildUserPrompt(string template, object synthesisInput)
+    {
+        var evidenceJson = JsonSerializer.Serialize(synthesisInput, JsonOptions);
+        var rendered = template.Replace("{{evidence}}", evidenceJson, StringComparison.Ordinal);
+        if (!string.Equals(rendered, template, StringComparison.Ordinal))
         {
-            instructions = "Use the evidence to write a weekly or daily research briefing.",
-            evidence = synthesisInput
-        }, JsonOptions);
+            return rendered;
+        }
+
+        return $"{template.Trim()}{Environment.NewLine}{Environment.NewLine}Evidence:{Environment.NewLine}{evidenceJson}";
+    }
+
+    private static ReasoningProvider ParseReasoningProvider(string provider)
+        => Enum.TryParse<ReasoningProvider>(provider, true, out var parsed)
+            ? parsed
+            : throw new InvalidOperationException($"Unsupported reasoning provider '{provider}'.");
 
     private static ResearchSynthesisOutput ParseSynthesisOutput(string text)
     {

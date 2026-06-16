@@ -52,6 +52,7 @@ public sealed record StartResearchTopicRunRequest(
 
 public sealed record StartResearchTopicRunResponse(
     Guid? JobId,
+    Guid? WorkflowId,
     Guid TopicId,
     Guid? ExistingRunId,
     string JobType,
@@ -64,6 +65,7 @@ public sealed record ResearchTopicRunResponse(
     Guid ResearchTopicId,
     Guid? RequestedByUserId,
     Guid? JobId,
+    Guid? WorkflowId,
     string Status,
     string? TriggeredBy,
     DateTimeOffset? StartedAt,

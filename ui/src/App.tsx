@@ -368,7 +368,7 @@ function buildCompletedState(video: VideoRecord): ProcessingState {
 type AppLocation =
   | { kind: 'landing' }
   | { kind: 'auth'; mode: 'login' | 'signup' }
-  | { kind: 'admin'; section: 'users' | 'billing' | 'prompts' | 'llm-lab' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs' }
+  | { kind: 'admin'; section: 'users' | 'billing' | 'prompts' | 'llm-lab' | 'search-providers' | 'runtime-settings' | 'email-templates' | 'billing-rules' | 'workflow-costs'; workflowId: string | null }
   | {
       kind: 'app';
       nav: NavItem;
@@ -419,6 +419,7 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
   const transcriptSourceUrl = params.get('sourceUrl');
   const transcriptTitle = params.get('title');
   const transcriptChannel = params.get('channel');
+  const workflowId = params.get('workflow');
   const projectTab: ProjectTab | null =
     projectTabParam === 'overview' ||
     projectTabParam === 'notes' ||
@@ -433,16 +434,16 @@ function getLocationFromPathname(pathname: string, search = ''): AppLocation {
   }
 
   if (path === '/admin') {
-    return { kind: 'admin', section: 'users' };
+    return { kind: 'admin', section: 'users', workflowId: null };
   }
 
   if (path.startsWith('/admin/')) {
     const section = path.split('/')[2];
     if (section === 'prompts' || section === 'llm-lab' || section === 'search-providers' || section === 'runtime-settings' || section === 'users' || section === 'billing' || section === 'email-templates' || section === 'billing-rules' || section === 'workflow-costs') {
-      return { kind: 'admin', section };
+      return { kind: 'admin', section, workflowId: section === 'workflow-costs' ? workflowId : null };
     }
 
-    return { kind: 'admin', section: 'users' };
+    return { kind: 'admin', section: 'users', workflowId: null };
   }
 
   if (path === '/') {
@@ -1132,6 +1133,30 @@ export default function App() {
     );
   };
 
+  const handleResearchTranscriptOpen = (sourceId: string | null, sourceUrl: string, title: string, channel: string, language?: string | null) => {
+    setSelectedVideo(null);
+    setSelectedHistoryTranscript(null);
+    setSelectedResearchTopic(null);
+    setInsightState(null);
+    setActiveInsightTab('quick-summary');
+
+    const query = new URLSearchParams({
+      sourceUrl,
+      title,
+      channel,
+    });
+
+    if (sourceId) {
+      query.set('sourceId', sourceId);
+    }
+
+    if (language) {
+      query.set('language', language);
+    }
+
+    navigateToPath(`/transcript?${query.toString()}`);
+  };
+
   const navigateToPath = (nextPath: string) => {
     const nextUrl = new URL(nextPath, window.location.origin);
     const normalizedNextPath = normalizePathname(nextUrl.pathname);
@@ -1309,12 +1334,14 @@ export default function App() {
 
         if (selectedResearchTopic) {
           return (
-            <ResearchBriefingPage
+              <ResearchBriefingPage
               topic={selectedResearchTopic}
               briefingId={location.kind === 'app' ? location.researchBriefingId : null}
               onBack={() => navigateToPath('/research')}
               onEdit={() => navigateToPath(`/research/${encodeURIComponent(selectedResearchTopic.id)}/edit`)}
               onOpenBriefing={(briefingId) => navigateToPath(`/research/${encodeURIComponent(selectedResearchTopic.id)}/briefings/${encodeURIComponent(briefingId)}`)}
+              onOpenWorkflow={(workflowId) => navigateToPath(`/admin/workflow-costs?workflow=${encodeURIComponent(workflowId)}`)}
+              onOpenTranscript={handleResearchTranscriptOpen}
               onTopicChanged={(topic) => setSelectedResearchTopic(topic)}
             />
           );
@@ -1512,6 +1539,7 @@ export default function App() {
     return (
       <AdminPage
         initialSection={location.section}
+        initialSelectedWorkflowId={location.workflowId}
         onSectionChange={(section) => navigateToPath(`/admin/${section}`)}
         onBackToApp={() => navigateToPath('/dashboard')}
       />

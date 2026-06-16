@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IAppStateRepository, AppStateRepository>();
         services.AddScoped<ISearchProviderRepository, SearchProvidersRepository>();
         services.AddOptions<ResearchSearchSourceOptions>().Bind(configuration.GetSection("ResearchSearchSources"));
+        services.AddOptions<ResearchSearchPlanningOptions>().Bind(configuration.GetSection(ResearchSearchPlanningOptions.SectionName));
         services.AddOptions<ResearchSynthesisOptions>().Bind(configuration.GetSection(ResearchSynthesisOptions.SectionName));
         services.AddOptions<StorageOptions>().Bind(configuration.GetSection("Storage"));
         services.AddScoped<IPromptsRepository, PromptsRepository>();

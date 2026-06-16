@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
+using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.Jobs;
 
 namespace AiSummarizer.Worker.JobsProcessing.Handlers;
@@ -11,6 +12,7 @@ namespace AiSummarizer.Worker.JobsProcessing.Handlers;
 public sealed class ResearchTopicNormalizeJobHandler(
     IResearchRepository researchRepository,
     IJobsRepository jobsRepository,
+    IWorkflowsRepository workflowsRepository,
     ILogger<ResearchTopicNormalizeJobHandler> logger) : IJobHandler
 {
     private const string NormalizerVersion = "v1";
@@ -55,6 +57,21 @@ public sealed class ResearchTopicNormalizeJobHandler(
         var duplicateCount = 0;
         var skippedCount = 0;
         var seenHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var workflowStep = await ResearchWorkflowProgress.StartStepAsync(
+            workflowsRepository,
+            run.WorkflowId,
+            30,
+            "normalization",
+            "research.normalize",
+            context.Job.Id,
+            JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                contentItemCount = candidates.Length,
+                normalizerVersion = NormalizerVersion
+            }),
+            cancellationToken);
 
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
@@ -105,6 +122,7 @@ public sealed class ResearchTopicNormalizeJobHandler(
                     run.ResearchTopicId,
                     run.RequestedByUserId,
                     run.JobId,
+                    run.WorkflowId,
                     ResearchTopicRunStatus.Failed,
                     run.TriggeredBy,
                     run.StartedAt,
@@ -117,6 +135,20 @@ public sealed class ResearchTopicNormalizeJobHandler(
                     now), transaction, cancellationToken);
                 return 0;
             }, cancellationToken);
+
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                workflowStep,
+                "no_content_to_normalize",
+                "Research topic run has no content items to normalize.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    contentItemCount = 0,
+                    normalizerVersion = NormalizerVersion
+                }),
+                cancellationToken);
 
             return JobHandlerResult.DeadLetter(
                 "no_content_to_normalize",
@@ -286,6 +318,7 @@ public sealed class ResearchTopicNormalizeJobHandler(
                     run.ResearchTopicId,
                     run.RequestedByUserId,
                     run.JobId,
+                    run.WorkflowId,
                     ResearchTopicRunStatus.Failed,
                     run.TriggeredBy,
                     run.StartedAt,
@@ -298,6 +331,23 @@ public sealed class ResearchTopicNormalizeJobHandler(
                     failedAt), transaction, cancellationToken);
                 return 0;
             }, cancellationToken);
+
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                workflowStep,
+                "no_normalized_documents",
+                "Normalization produced no documents.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    contentItemCount = candidates.Length,
+                    documentCount,
+                    chunkCount,
+                    duplicateCount,
+                    skippedCount
+                }),
+                cancellationToken);
 
             return JobHandlerResult.DeadLetter(
                 "no_normalized_documents",
@@ -356,6 +406,7 @@ public sealed class ResearchTopicNormalizeJobHandler(
                 researchTopicId = topic.Id,
                 researchTopicRunId = run.Id,
                 requestedByUserId = payload.RequestedByUserId ?? run.RequestedByUserId ?? topic.RequestedByUserId,
+                workflowId = run.WorkflowId,
                 triggeredBy = payload.TriggeredBy
             }),
             AttemptCount = 0,
@@ -371,6 +422,21 @@ public sealed class ResearchTopicNormalizeJobHandler(
             runId = run.Id,
             topicId = topic.Id
         }), cancellationToken);
+        await ResearchWorkflowProgress.CompleteStepAsync(
+            workflowsRepository,
+            workflowStep,
+            JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                contentItemCount = candidates.Length,
+                documentCount,
+                chunkCount,
+                duplicateCount,
+                skippedCount,
+                nextJobId = rankJob.Id
+            }),
+            cancellationToken);
 
         return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new
         {

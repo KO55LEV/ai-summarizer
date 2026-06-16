@@ -43,6 +43,25 @@ The canonical model should be:
 
 `workflow -> steps -> job execution -> logs/results`
 
+## Implementation Status
+
+Current implementation status:
+
+- `research_topic_runs.workflow_id` links each research run to its top-level workflow.
+- Manual and scheduled research runs create a queued `research.topic` workflow.
+- `WorkflowProcessorHostedService` claims `research.topic`, creates the root `research.topic.run` job, and records the bootstrap `search_intake` workflow step.
+- Research jobs remain the execution mechanism, but every major phase now writes workflow steps and workflow events.
+- Admin workflow screens can inspect the research workflow, ordered steps, workflow events, linked job ids, and job logs.
+- Workflow steps are reused on retry by `step_key`, because `workflow_steps` has unique constraints on `(workflow_id, step_order)` and `(workflow_id, step_key)`.
+
+Important current behavior:
+
+- `research.topic` workflows now enter the workflow queue first. The root research job is created by the workflow processor, while the existing research job handlers still execute the phase work underneath the workflow.
+- The current visible step keys are `search_intake`, `content_acquisition`, `normalization`, `ranking`, `synthesis`, and `persistence`.
+- Existing `research_*` tables still store the detailed domain artifacts: search runs/results, content items, normalized documents, ranking output, synthesis metadata, and briefing records.
+- Research run history can deep-link to Admin Workflows through `workflowId`.
+- Workflow cancellation requests cancel active workflow steps, request cancellation for linked jobs, and mark the linked `research_topic_runs` row as `cancelled`.
+
 ## Design Principles
 
 1. `Workflow` is the domain object the user understands.
@@ -52,9 +71,9 @@ The canonical model should be:
 5. Logging must be step-aware and searchable.
 6. The admin surface should show workflow state first, job details second.
 
-## Proposed Research Workflow Steps
+## Research Workflow Steps
 
-The research workflow should be broken into these steps:
+The target conceptual workflow is:
 
 1. `plan`
 2. `search`
@@ -63,6 +82,15 @@ The research workflow should be broken into these steps:
 5. `rank`
 6. `synthesize`
 7. `persist`
+
+The current implementation maps that model to these persisted workflow steps:
+
+1. `search_intake`
+2. `content_acquisition`
+3. `normalization`
+4. `ranking`
+5. `synthesis`
+6. `persistence`
 
 ### Step responsibilities
 
@@ -215,10 +243,11 @@ Goal:
 
 Tasks:
 
-- add a research workflow type for top-level runs
-- add step records for each research phase
-- map the current root job to workflow creation
-- keep current jobs for execution underneath the workflow
+- [x] add a research workflow type for top-level runs
+- [x] add step records for each research phase
+- [x] map manual run creation to workflow creation
+- [x] map scheduled run creation to workflow creation
+- [x] keep current jobs for execution underneath the workflow
 
 ### Phase 2: Move orchestration to workflow steps
 
@@ -229,9 +258,11 @@ Goal:
 
 Tasks:
 
-- convert `research.topic.run` into a workflow step runner
-- create step-specific job payloads for search/fetch/normalize/rank/synthesize
-- update step state as each job starts, succeeds, or fails
+- [x] attach `workflowId` to the root job payload
+- [x] thread `workflowId` through fetch, normalize, rank, and synthesize jobs
+- [x] update step state as each job starts, succeeds, or fails
+- [x] mark the workflow succeeded only after briefing persistence
+- [ ] convert research execution fully into a generic workflow processor, if we decide to remove job-chain orchestration later
 
 ### Phase 3: Consolidate observability
 
@@ -241,10 +272,12 @@ Goal:
 
 Tasks:
 
-- show research workflows in the admin `Workflows` area
-- show each workflow step and linked job id
-- show step logs and job logs side by side
-- expose the current running step and failure reason clearly
+- [x] show research workflows in the admin workflow area
+- [x] show each workflow step and linked job id
+- [x] show workflow events and linked job logs
+- [x] expose the current running step and failure reason clearly
+- [x] add direct links from research run history to the workflow detail view
+- [x] support workflow-level cancellation from the admin workflow detail view
 
 ### Phase 4: Reduce duplicate state
 
@@ -344,4 +377,3 @@ When this migration is complete:
 - steps will be explicit and debuggable
 - jobs will still exist, but only as execution units
 - admin will see one coherent process instead of mixed models
-

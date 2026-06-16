@@ -32,6 +32,7 @@ public sealed record ResearchTopicRunDto(
     Guid ResearchTopicId,
     Guid? RequestedByUserId,
     Guid? JobId,
+    Guid? WorkflowId,
     ResearchTopicRunStatus Status,
     string? TriggeredBy,
     DateTimeOffset? StartedAt,
@@ -46,6 +47,7 @@ public sealed record ResearchTopicRunDto(
 public sealed record ResearchActiveTopicRunDto(
     Guid Id,
     Guid? JobId,
+    Guid? WorkflowId,
     string Status,
     DateTimeOffset CreatedAt);
 
@@ -68,6 +70,7 @@ public sealed record ResearchTopicRunRecord(
     Guid ResearchTopicId,
     Guid? RequestedByUserId,
     Guid? JobId,
+    Guid? WorkflowId,
     ResearchTopicRunStatus Status,
     string? TriggeredBy,
     DateTimeOffset? StartedAt,

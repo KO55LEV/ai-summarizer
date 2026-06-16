@@ -1,9 +1,10 @@
 using System.Text.Json;
+using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Users;
 
 namespace AiSummarizer.Application.Research;
 
-public sealed class ResearchService(IResearchRepository repository, IUsersRepository usersRepository) : IResearchService
+public sealed class ResearchService(IResearchRepository repository, IUsersRepository usersRepository, IJobsService jobsService) : IResearchService
 {
     public async Task<ResearchListDto> GetResearchListAsync(Guid? requestedByUserId, int limit, int offset, CancellationToken cancellationToken)
     {
@@ -47,6 +48,7 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
             return id;
         }, cancellationToken);
 
+        await ScheduleSearchPlanRefreshAsync(topicId, requestedByUserId, "research.topic.create", cancellationToken);
         return await GetTopicAsync(topicId, cancellationToken);
     }
 
@@ -80,6 +82,7 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
             return 0;
         }, cancellationToken);
 
+        await ScheduleSearchPlanRefreshAsync(existing.Id, existing.RequestedByUserId, "research.topic.update", cancellationToken);
         return await GetTopicAsync(topicId, cancellationToken);
     }
 
@@ -176,6 +179,23 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
     private static string? NormalizeNullable(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static IReadOnlyList<string> NormalizeList(IReadOnlyList<string> values)
         => values.Select(NormalizeNullable).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    private async Task ScheduleSearchPlanRefreshAsync(Guid topicId, Guid? requestedByUserId, string triggeredBy, CancellationToken cancellationToken)
+    {
+        _ = await jobsService.CreateJobAsync(new CreateJobCommand(
+            "research.topic.plan",
+            JsonSerializer.SerializeToElement(new
+            {
+                researchTopicId = topicId,
+                requestedByUserId,
+                triggeredBy,
+                forceRefresh = true
+            }),
+            15,
+            requestedByUserId,
+            null,
+            3), cancellationToken);
+    }
 
     private static DateTimeOffset? CalculateNextRunAt(string frequency, DateTimeOffset generatedAt, TimeOnly? deliveryTime)
     {

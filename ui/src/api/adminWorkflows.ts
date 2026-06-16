@@ -1,7 +1,7 @@
 import { getAuthAccessToken } from '../config/auth';
 import type { WorkflowResponse } from '../types';
 import type { WorkflowStepResponse } from '../types';
-import { getMockActiveWorkflows, getMockWorkflowEvents, getMockWorkflowSteps } from '../mocks/api/adminWorkflows';
+import { getMockActiveWorkflows, getMockHistoryWorkflows, getMockWorkflowEvents, getMockWorkflowSteps } from '../mocks/api/adminWorkflows';
 
 export interface WorkflowEventResponse {
   id: string;
@@ -54,6 +54,21 @@ export async function listActiveWorkflows(limit = 50, offset = 0, accessToken?: 
   });
 }
 
+export async function listHistoryWorkflows(limit = 50, offset = 0, accessToken?: string): Promise<WorkflowResponse[]> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return getMockHistoryWorkflows(limit, offset);
+  }
+
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return requestJson<WorkflowResponse[]>(`/api/workflows/history?${params.toString()}`, {
+    headers: getAuthHeaders(accessToken),
+  });
+}
+
 export async function getWorkflowEvents(workflowId: string, limit = 100, offset = 0, accessToken?: string): Promise<WorkflowEventResponse[]> {
   if (import.meta.env.VITE_USE_MOCK_API === 'true') {
     return getMockWorkflowEvents(workflowId, limit, offset);
@@ -75,6 +90,17 @@ export async function getWorkflowSteps(workflowId: string, accessToken?: string)
   }
 
   return requestJson<WorkflowStepResponse[]>(`/api/workflows/${encodeURIComponent(workflowId)}/steps`, {
+    headers: getAuthHeaders(accessToken),
+  });
+}
+
+export async function requestWorkflowCancel(workflowId: string, accessToken?: string): Promise<boolean> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    return true;
+  }
+
+  return requestJson<boolean>(`/api/workflows/${encodeURIComponent(workflowId)}/request-cancel`, {
+    method: 'POST',
     headers: getAuthHeaders(accessToken),
   });
 }

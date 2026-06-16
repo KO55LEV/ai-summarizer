@@ -12,17 +12,22 @@ import {
   Pause,
   RotateCcw,
   Trash2,
+  Video,
+  Youtube,
+  Languages,
 } from 'lucide-react';
-import type { ResearchTopic, ResearchBriefing, PastBriefing, ResearchTopicRun } from '../../api/types';
+import type { ResearchTopic, ResearchBriefing, PastBriefing, ResearchTopicRun, ResearchSearchResult } from '../../api/types';
 import {
   deleteResearchTopic,
   getResearchBriefing,
   getResearchBriefingById,
   listResearchBriefings,
+  listResearchRunSearchResults,
   listResearchRuns,
   startResearchRun,
   updateResearchTopic,
 } from '../../api/research';
+import { analyzeVideo } from '../../api';
 import { getCurrentUserId } from '../../config/currentUser';
 
 const SENTIMENT_COLORS: Record<string, string> = {
@@ -44,6 +49,8 @@ interface ResearchBriefingPageProps {
   onBack: () => void;
   onEdit: () => void;
   onOpenBriefing: (briefingId: string) => void;
+  onOpenWorkflow: (workflowId: string) => void;
+  onOpenTranscript: (sourceId: string | null, sourceUrl: string, title: string, channel: string, language?: string | null) => void;
   onTopicChanged: (topic: ResearchTopic) => void;
 }
 
@@ -53,12 +60,16 @@ export function ResearchBriefingPage({
   onBack,
   onEdit,
   onOpenBriefing,
+  onOpenWorkflow,
+  onOpenTranscript,
   onTopicChanged,
 }: ResearchBriefingPageProps) {
   const [briefing, setBriefing] = useState<ResearchBriefing | null>(null);
   const [history, setHistory] = useState<PastBriefing[]>([]);
   const [runs, setRuns] = useState<ResearchTopicRun[]>([]);
+  const [searchResults, setSearchResults] = useState<ResearchSearchResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'latest' | 'history' | 'runs' | 'settings'>(briefingId ? 'latest' : 'latest');
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -92,6 +103,52 @@ export function ResearchBriefingPage({
     };
   }, [briefingId, topic.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (runs.length === 0) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const latestRun = runs
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+    if (!latestRun) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setSearchLoading(true);
+    listResearchRunSearchResults(latestRun.id)
+      .then((results) => {
+        if (!cancelled) {
+          setSearchResults(results);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSearchResults([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSearchLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runs]);
+
   const refreshRuns = async () => {
     setRuns(await listResearchRuns(topic.id));
   };
@@ -105,6 +162,31 @@ export function ResearchBriefingPage({
       await refreshRuns();
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : 'Failed to start research run');
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const processVideo = async (video: ResearchSearchResult) => {
+    setActionBusy(video.id);
+    setMessage(null);
+    try {
+      const response = await analyzeVideo({
+        youtubeUrl: video.canonicalUrl ?? video.url,
+        requestedByUserId: getCurrentUserId(),
+        projectId: topic.projectId,
+      });
+
+      const sourceId = response.transcript?.sourceId ?? response.workflow?.sourceId;
+      if (sourceId) {
+        onOpenTranscript(sourceId, video.canonicalUrl ?? video.url, video.title, video.authorName ?? video.domain ?? 'YouTube', video.language);
+        return;
+      }
+
+      setMessage(response.workflow?.status === 'queued' ? 'Video queued for processing.' : 'Video processing started.');
+      await refreshRuns();
+    } catch (processError) {
+      setError(processError instanceof Error ? processError.message : 'Failed to process video');
     } finally {
       setActionBusy(null);
     }
@@ -216,24 +298,115 @@ export function ResearchBriefingPage({
       </div>
 
       {activeTab === 'latest' && (
-        briefing ? <ReportView briefing={briefing} topic={topic} /> : <EmptyReport onRunNow={runNow} disabled={Boolean(actionBusy) || hasActiveRun} />
+        briefing ? (
+          <ReportView
+            briefing={briefing}
+            topic={topic}
+            searchResults={searchResults}
+            searchLoading={searchLoading}
+            actionBusy={actionBusy}
+            onProcessVideo={processVideo}
+          />
+        ) : (
+          <EmptyReport onRunNow={runNow} disabled={Boolean(actionBusy) || hasActiveRun} />
+        )
       )}
 
       {activeTab === 'history' && (
         <HistoryView history={history} currentBriefingId={briefing?.id ?? null} onOpenBriefing={onOpenBriefing} />
       )}
 
-      {activeTab === 'runs' && <RunsView runs={runs} />}
+      {activeTab === 'runs' && <RunsView runs={runs} onOpenWorkflow={onOpenWorkflow} />}
 
       {activeTab === 'settings' && <SettingsView topic={topic} />}
     </main>
   );
 }
 
-function ReportView({ briefing, topic }: { briefing: ResearchBriefing; topic: ResearchTopic }) {
+function ReportView({
+  briefing,
+  topic,
+  searchResults,
+  searchLoading,
+  actionBusy,
+  onProcessVideo,
+}: {
+  briefing: ResearchBriefing;
+  topic: ResearchTopic;
+  searchResults: ResearchSearchResult[];
+  searchLoading: boolean;
+  actionBusy: string | null;
+  onProcessVideo: (video: ResearchSearchResult) => void;
+}) {
+  const videoResults = searchResults.filter((result) => result.sourceKey.toLowerCase() === 'youtube' || (result.domain ?? '').toLowerCase().includes('youtube'));
+
   return (
     <div className="grid grid-cols-3 gap-5">
       <div className="col-span-2 flex flex-col gap-4">
+        <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Found videos</h2>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                {searchLoading ? 'Loading search results...' : `${videoResults.length} YouTube results ready for review.`}
+              </p>
+            </div>
+            <Youtube size={16} className="text-[var(--color-text-muted)]" />
+          </div>
+
+          {videoResults.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[var(--color-border)] px-4 py-6 text-sm text-[var(--color-text-muted)]">
+              No YouTube results are available yet for this run.
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {videoResults.map((video) => {
+                const sourceTitle = video.title || 'Untitled video';
+                const channel = video.authorName || video.domain || 'YouTube';
+                const language = video.language?.toUpperCase() ?? '—';
+                const sourceUrl = video.canonicalUrl ?? video.url;
+                return (
+                  <div key={video.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Video size={14} className="shrink-0 text-[var(--color-accent)]" />
+                          <h3 className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{sourceTitle}</h3>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
+                          <span>{channel}</span>
+                          <span className="inline-flex items-center gap-1"><Languages size={11} />{language}</span>
+                          <span>{video.domain ?? video.sourceKey}</span>
+                        </div>
+                        {video.snippet && <p className="mt-2 line-clamp-2 text-sm text-[var(--color-text-secondary)]">{video.snippet}</p>}
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onProcessVideo(video)}
+                          disabled={actionBusy === video.id}
+                          className="inline-flex items-center gap-1 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-black transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Play size={12} fill="black" />
+                          {actionBusy === video.id ? 'Processing...' : 'Process video'}
+                        </button>
+                        <a
+                          href={sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                        >
+                          Open
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Executive Summary</h2>
           <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{briefing.summary}</p>
@@ -336,7 +509,7 @@ function HistoryView({ history, currentBriefingId, onOpenBriefing }: { history: 
   );
 }
 
-function RunsView({ runs }: { runs: ResearchTopicRun[] }) {
+function RunsView({ runs, onOpenWorkflow }: { runs: ResearchTopicRun[]; onOpenWorkflow: (workflowId: string) => void }) {
   if (runs.length === 0) {
     return <div className="rounded-xl bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">No runs yet.</div>;
   }
@@ -344,28 +517,44 @@ function RunsView({ runs }: { runs: ResearchTopicRun[] }) {
   return (
     <div className="rounded-xl bg-[var(--color-bg-card)] p-5">
       <div className="space-y-3">
-        {runs.map((run) => (
-          <div key={run.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <RunStatusBadge status={run.status} />
-                <span className="text-sm font-medium text-[var(--color-text-primary)]">{run.triggeredBy ?? 'unknown'} run</span>
+        {runs.map((run) => {
+          const workflowId = run.workflowId;
+          return (
+            <div key={run.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <RunStatusBadge status={run.status} />
+                  <span className="text-sm font-medium text-[var(--color-text-primary)]">{run.triggeredBy ?? 'unknown'} run</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {workflowId && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenWorkflow(workflowId)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                    >
+                      <ExternalLink size={12} />
+                      Workflow
+                    </button>
+                  )}
+                  <span className="text-xs text-[var(--color-text-muted)]">{new Date(run.createdAt).toLocaleString()}</span>
+                </div>
               </div>
-              <span className="text-xs text-[var(--color-text-muted)]">{new Date(run.createdAt).toLocaleString()}</span>
-            </div>
-            <div className="mt-2 grid gap-2 text-xs text-[var(--color-text-muted)] md:grid-cols-3">
-              <div>Started: {run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}</div>
-              <div>Finished: {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '—'}</div>
-              <div>Job: {run.jobId ?? '—'}</div>
-            </div>
-            {(run.errorCode || run.errorMessage) && (
-              <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                {run.errorCode ? `${run.errorCode}: ` : ''}{run.errorMessage}
+              <div className="mt-2 grid gap-2 text-xs text-[var(--color-text-muted)] md:grid-cols-3">
+                <div>Started: {run.startedAt ? new Date(run.startedAt).toLocaleString() : '—'}</div>
+                <div>Finished: {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '—'}</div>
+                <div>Workflow: {run.workflowId ?? '—'}</div>
+                <div>Job: {run.jobId ?? '—'}</div>
               </div>
-            )}
-            {run.summaryPreview && <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{run.summaryPreview}</p>}
-          </div>
-        ))}
+              {(run.errorCode || run.errorMessage) && (
+                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {run.errorCode ? `${run.errorCode}: ` : ''}{run.errorMessage}
+                </div>
+              )}
+              {run.summaryPreview && <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{run.summaryPreview}</p>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

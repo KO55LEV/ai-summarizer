@@ -1,8 +1,9 @@
-select id, job_id, status, created_at
+select id, job_id, workflow_id, status, created_at
 from (
     select
         id,
         job_id,
+        workflow_id,
         status,
         created_at
     from research_topic_runs
@@ -14,6 +15,7 @@ from (
     select
         id,
         id as job_id,
+        nullif(payload_json->>'workflowId', '')::uuid as workflow_id,
         case when status = 'retry_wait' then 'queued' else status end as status,
         created_at
     from jobs

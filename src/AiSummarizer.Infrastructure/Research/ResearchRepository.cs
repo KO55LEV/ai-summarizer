@@ -66,6 +66,7 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         => QuerySingleOrDefaultAsync("Research/GetActiveResearchTopicRun.sql", cmd => cmd.Parameters.AddWithValue("topic_id", topicId), cancellationToken, reader => new ResearchActiveTopicRunDto(
             reader.GetGuid(reader.GetOrdinal("id")),
             reader.IsDBNull(reader.GetOrdinal("job_id")) ? null : reader.GetGuid(reader.GetOrdinal("job_id")),
+            reader.IsDBNull(reader.GetOrdinal("workflow_id")) ? null : reader.GetGuid(reader.GetOrdinal("workflow_id")),
             reader.GetString(reader.GetOrdinal("status")),
             reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))));
 
@@ -104,6 +105,15 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             cmd.Parameters.AddWithValue("next_run_at", (object?)nextRunAt?.UtcDateTime ?? DBNull.Value);
             cmd.Parameters.AddWithValue("updated_at", DateTimeOffset.UtcNow.UtcDateTime);
         }, transaction, cancellationToken);
+
+    public Task<ResearchSearchPlanRecord?> GetSearchPlanByTopicIdAsync(Guid topicId, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Research/GetResearchTopicSearchPlanByTopicId.sql", cmd => cmd.Parameters.AddWithValue("topic_id", topicId), cancellationToken, MapSearchPlan);
+
+    public Task<Guid> UpsertSearchPlanAsync(ResearchSearchPlanRecord plan, DbTransaction? transaction, CancellationToken cancellationToken)
+        => QuerySingleAsync("Research/UpsertResearchTopicSearchPlan.sql", cmd =>
+        {
+            BindSearchPlan(cmd, plan);
+        }, transaction, cancellationToken, reader => reader.GetGuid(reader.GetOrdinal("id")));
 
     public Task ReplaceTopicSourcesAsync(Guid topicId, IReadOnlyList<string> sources, DbTransaction? transaction, CancellationToken cancellationToken)
         => ExecuteNonQueryAsync("Research/ReplaceResearchTopicSources.sql", cmd =>
@@ -206,6 +216,40 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         {
             BindTopicRun(cmd, run);
         }, transaction, cancellationToken);
+
+    public async Task<bool> CancelTopicRunByWorkflowIdAsync(Guid workflowId, string reason, DbTransaction? transaction, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow.UtcDateTime;
+        void Configure(NpgsqlCommand cmd)
+        {
+            cmd.Parameters.AddWithValue("workflow_id", workflowId);
+            cmd.Parameters.AddWithValue("reason", reason);
+            cmd.Parameters.AddWithValue("finished_at", now);
+            cmd.Parameters.AddWithValue("updated_at", now);
+        }
+
+        if (transaction is not null)
+        {
+            await using var command = CreateCommand("ResearchRuns/CancelResearchTopicRunByWorkflowId.sql", (NpgsqlTransaction)transaction);
+            Configure(command);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            return await reader.ReadAsync(cancellationToken);
+        }
+
+        if (_transaction is not null)
+        {
+            await using var command = CreateCommand("ResearchRuns/CancelResearchTopicRunByWorkflowId.sql", _transaction);
+            Configure(command);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            return await reader.ReadAsync(cancellationToken);
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transientCommand = new NpgsqlCommand(sqlScriptLoader.Load("ResearchRuns/CancelResearchTopicRunByWorkflowId.sql"), connection);
+        Configure(transientCommand);
+        await using var transientReader = await transientCommand.ExecuteReaderAsync(cancellationToken);
+        return await transientReader.ReadAsync(cancellationToken);
+    }
 
     public Task<ResearchTopicRunDto?> GetTopicRunByIdAsync(Guid runId, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("ResearchRuns/GetResearchTopicRunById.sql", cmd => cmd.Parameters.AddWithValue("run_id", runId), cancellationToken, MapTopicRun);
@@ -519,6 +563,10 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         {
             Value = (object?)run.JobId ?? DBNull.Value
         });
+        command.Parameters.Add(new NpgsqlParameter("workflow_id", NpgsqlDbType.Uuid)
+        {
+            Value = (object?)run.WorkflowId ?? DBNull.Value
+        });
         command.Parameters.AddWithValue("status", run.Status.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("triggered_by", (object?)run.TriggeredBy ?? DBNull.Value);
         command.Parameters.AddWithValue("started_at", (object?)run.StartedAt?.UtcDateTime ?? DBNull.Value);
@@ -804,6 +852,29 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         command.Parameters.AddWithValue("updated_at", topic.UpdatedAt.UtcDateTime);
     }
 
+    private static void BindSearchPlan(NpgsqlCommand command, ResearchSearchPlanRecord plan)
+    {
+        command.Parameters.AddWithValue("id", plan.Id);
+        command.Parameters.AddWithValue("research_topic_id", plan.ResearchTopicId);
+        command.Parameters.AddWithValue("plan_version", plan.PlanVersion);
+        command.Parameters.AddWithValue("prompt_key", plan.PromptKey);
+        command.Parameters.AddWithValue("prompt_version", plan.PromptVersion);
+        command.Parameters.AddWithValue("provider", plan.Provider);
+        command.Parameters.AddWithValue("model", plan.Model);
+        command.Parameters.AddWithValue("status", plan.Status.ToString().ToLowerInvariant());
+        command.Parameters.Add(new NpgsqlParameter("plan_json", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(plan.PlanJson) ? DBNull.Value : plan.PlanJson
+        });
+        command.Parameters.AddWithValue("input_hash", plan.InputHash);
+        command.Parameters.AddWithValue("source_hash", (object?)plan.SourceHash ?? DBNull.Value);
+        command.Parameters.AddWithValue("generated_at", (object?)plan.GeneratedAt?.UtcDateTime ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_code", (object?)plan.ErrorCode ?? DBNull.Value);
+        command.Parameters.AddWithValue("error_message", (object?)plan.ErrorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("created_at", plan.CreatedAt.UtcDateTime);
+        command.Parameters.AddWithValue("updated_at", plan.UpdatedAt.UtcDateTime);
+    }
+
     private static void BindBriefing(NpgsqlCommand command, ResearchBriefingRecord briefing)
     {
         command.Parameters.AddWithValue("id", briefing.Id);
@@ -884,6 +955,7 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             reader.GetGuid(reader.GetOrdinal("research_topic_id")),
             reader.IsDBNull(reader.GetOrdinal("requested_by_user_id")) ? null : reader.GetGuid(reader.GetOrdinal("requested_by_user_id")),
             reader.IsDBNull(reader.GetOrdinal("job_id")) ? null : reader.GetGuid(reader.GetOrdinal("job_id")),
+            reader.IsDBNull(reader.GetOrdinal("workflow_id")) ? null : reader.GetGuid(reader.GetOrdinal("workflow_id")),
             Enum.Parse<ResearchTopicRunStatus>(reader.GetString(reader.GetOrdinal("status")), true),
             reader.IsDBNull(reader.GetOrdinal("triggered_by")) ? null : reader.GetString(reader.GetOrdinal("triggered_by")),
             reader.IsDBNull(reader.GetOrdinal("started_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at")),
@@ -907,6 +979,25 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
             reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
             reader.IsDBNull(reader.GetOrdinal("metrics_json")) ? null : reader.GetString(reader.GetOrdinal("metrics_json")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
+            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
+
+    private static ResearchSearchPlanRecord MapSearchPlan(NpgsqlDataReader reader)
+        => new(
+            reader.GetGuid(reader.GetOrdinal("id")),
+            reader.GetGuid(reader.GetOrdinal("research_topic_id")),
+            reader.GetInt32(reader.GetOrdinal("plan_version")),
+            reader.GetString(reader.GetOrdinal("prompt_key")),
+            reader.GetString(reader.GetOrdinal("prompt_version")),
+            reader.GetString(reader.GetOrdinal("provider")),
+            reader.GetString(reader.GetOrdinal("model")),
+            Enum.Parse<ResearchSearchPlanStatus>(reader.GetString(reader.GetOrdinal("status")), true),
+            reader.IsDBNull(reader.GetOrdinal("plan_json")) ? null : reader.GetString(reader.GetOrdinal("plan_json")),
+            reader.GetString(reader.GetOrdinal("input_hash")),
+            reader.IsDBNull(reader.GetOrdinal("source_hash")) ? null : reader.GetString(reader.GetOrdinal("source_hash")),
+            reader.IsDBNull(reader.GetOrdinal("generated_at")) ? null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("generated_at")),
+            reader.IsDBNull(reader.GetOrdinal("error_code")) ? null : reader.GetString(reader.GetOrdinal("error_code")),
+            reader.IsDBNull(reader.GetOrdinal("error_message")) ? null : reader.GetString(reader.GetOrdinal("error_message")),
             reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at")),
             reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("updated_at")));
 

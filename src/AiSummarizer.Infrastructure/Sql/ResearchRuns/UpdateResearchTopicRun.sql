@@ -3,6 +3,7 @@ set
     research_topic_id = @research_topic_id,
     requested_by_user_id = @requested_by_user_id,
     job_id = @job_id,
+    workflow_id = @workflow_id,
     status = @status,
     triggered_by = @triggered_by,
     started_at = @started_at,

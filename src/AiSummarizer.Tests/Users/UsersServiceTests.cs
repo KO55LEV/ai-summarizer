@@ -397,6 +397,7 @@ public sealed class UsersServiceTests
         public Task<IReadOnlyList<JobDto>> ListActiveJobsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<IReadOnlyList<JobDto>> ListHistoryJobsAsync(int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<IReadOnlyList<JobLogDto>> ListLogsAsync(Guid jobId, int limit, int offset, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<bool> RequestCancelAsync(Guid jobId, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     private sealed class FakePasswordHasher : ISecurePasswordHasher

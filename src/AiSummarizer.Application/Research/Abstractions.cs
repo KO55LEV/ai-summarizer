@@ -70,7 +70,12 @@ public sealed record SearchProviderQuotaDto(
 
 public interface ISearchQueryPlanner
 {
-    IReadOnlyList<ResearchSearchQuery> BuildQueries(string topic, IReadOnlyList<string> sourceKeys, string frequency);
+    IReadOnlyList<ResearchSearchQuery> BuildQueries(ResearchSearchPlan plan, string frequency);
+}
+
+public interface IResearchSearchPlanningService
+{
+    Task<ResearchSearchPlanRecord> EnsureSearchPlanAsync(Guid topicId, Guid? workflowId, Guid? jobId, string? stepKey, bool forceRefresh, CancellationToken cancellationToken);
 }
 
 public interface IResearchRepository
@@ -86,6 +91,8 @@ public interface IResearchRepository
     Task<Guid> UpdateTopicAsync(ResearchTopicRecord topic, DbTransaction? transaction, CancellationToken cancellationToken);
     Task DeleteTopicAsync(Guid topicId, DbTransaction? transaction, CancellationToken cancellationToken);
     Task UpdateTopicNextRunAtAsync(Guid topicId, DateTimeOffset? nextRunAt, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<ResearchSearchPlanRecord?> GetSearchPlanByTopicIdAsync(Guid topicId, CancellationToken cancellationToken);
+    Task<Guid> UpsertSearchPlanAsync(ResearchSearchPlanRecord plan, DbTransaction? transaction, CancellationToken cancellationToken);
     Task ReplaceTopicSourcesAsync(Guid topicId, IReadOnlyList<string> sources, DbTransaction? transaction, CancellationToken cancellationToken);
     Task ReplaceTopicTagsAsync(Guid topicId, IReadOnlyList<string> tags, DbTransaction? transaction, CancellationToken cancellationToken);
     Task ReplaceTopicOutputsAsync(Guid topicId, IReadOnlyList<string> outputs, DbTransaction? transaction, CancellationToken cancellationToken);
@@ -99,6 +106,7 @@ public interface IResearchRepository
     Task UpdateTopicBriefingStateAsync(Guid topicId, DateTimeOffset? lastRunAt, DateTimeOffset? nextRunAt, string? lastBriefingPreview, DbTransaction? transaction, CancellationToken cancellationToken);
     Task<Guid> CreateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken);
     Task UpdateTopicRunAsync(ResearchTopicRunRecord run, DbTransaction? transaction, CancellationToken cancellationToken);
+    Task<bool> CancelTopicRunByWorkflowIdAsync(Guid workflowId, string reason, DbTransaction? transaction, CancellationToken cancellationToken);
     Task<ResearchTopicRunDto?> GetTopicRunByIdAsync(Guid runId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ResearchTopicRunDto>> ListTopicRunsAsync(Guid topicId, int limit, int offset, CancellationToken cancellationToken);
     Task<IReadOnlyList<ResearchTopicRunDto>> ListActiveTopicRunJobsAsync(Guid topicId, CancellationToken cancellationToken);

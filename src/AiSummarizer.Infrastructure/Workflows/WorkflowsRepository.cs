@@ -50,6 +50,14 @@ public sealed class WorkflowsRepository(NpgsqlDataSource dataSource, ISqlScriptL
             cmd.Parameters.AddWithValue("workflow_type", workflowType);
         }, cancellationToken);
 
+    public Task<Workflow?> GetActiveWorkflowByInputGuidAsync(string workflowType, string inputKey, Guid inputValue, CancellationToken cancellationToken)
+        => QuerySingleOrDefaultAsync("Workflows/GetActiveWorkflowByInputGuid.sql", cmd =>
+        {
+            cmd.Parameters.AddWithValue("workflow_type", workflowType);
+            cmd.Parameters.AddWithValue("input_key", inputKey);
+            cmd.Parameters.AddWithValue("input_value", inputValue.ToString());
+        }, cancellationToken);
+
     public Task<Workflow?> GetActiveWorkflowBySourceUrlAsync(string sourceUrl, CancellationToken cancellationToken)
         => QuerySingleOrDefaultAsync("Workflows/GetActiveWorkflowBySourceUrl.sql", cmd =>
         {

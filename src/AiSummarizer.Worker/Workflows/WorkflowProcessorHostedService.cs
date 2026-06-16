@@ -8,6 +8,7 @@ using AiSummarizer.Application.MediaSources;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Prompts;
 using AiSummarizer.Application.Reasoning;
+using AiSummarizer.Application.Research;
 using AiSummarizer.Application.Settings;
 using AiSummarizer.Application.Workflows;
 using AiSummarizer.Application.Transcripts;
@@ -23,6 +24,7 @@ namespace AiSummarizer.Worker.Workflows;
 
 public sealed class WorkflowProcessorHostedService(
     IBillingService billingService,
+    IResearchRepository researchRepository,
     IMediaSourcesRepository mediaSourcesRepository,
     ITranscriptsRepository transcriptsRepository,
     IPromptsRepository promptsRepository,
@@ -85,6 +87,12 @@ public sealed class WorkflowProcessorHostedService(
 
     private async Task ProcessWorkflowAsync(Workflow workflow, string workerId, TimeSpan leaseDuration, WorkflowOptions workflowOptions, CancellationToken cancellationToken)
     {
+        if (string.Equals(workflow.WorkflowType, "research.topic", StringComparison.OrdinalIgnoreCase))
+        {
+            await ProcessResearchTopicWorkflowAsync(workflow, workerId, leaseDuration, cancellationToken);
+            return;
+        }
+
         if (IsInsightWorkflowType(workflow.WorkflowType))
         {
             await ProcessInsightWorkflowAsync(workflow, workerId, leaseDuration, cancellationToken);
@@ -203,6 +211,178 @@ public sealed class WorkflowProcessorHostedService(
             }
 
         await StartWorkflowAsync(workflow, mediaSource, sourceIdentity, sourceUrl, preferredLanguage, preferNativeTranscript, workflowRootDirectory, transcribeProvider, cancellationToken);
+    }
+
+    private async Task ProcessResearchTopicWorkflowAsync(Workflow workflow, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        var input = workflow.Input;
+        var researchTopicId = ReadGuid(input, "researchTopicId");
+        if (researchTopicId is null)
+        {
+            await FailWorkflowAsync(workflow, "invalid_input", "Research workflow input is missing researchTopicId.", cancellationToken, markLibraryFailed: false);
+            return;
+        }
+
+        var requestedByUserId = ReadGuid(input, "requestedByUserId") ?? workflow.RequestedByUserId;
+        var triggeredBy = ReadString(input, "triggeredBy") ?? "workflow";
+        var forceRun = ReadBool(input, "forceRun", false);
+        var currentStep = await GetLatestStepAsync(workflow.Id, cancellationToken);
+
+        if (currentStep is null)
+        {
+            var topic = await researchRepository.GetTopicByIdAsync(researchTopicId.Value, cancellationToken);
+            if (topic is null)
+            {
+                await FailWorkflowAsync(workflow, "topic_not_found", $"Research topic {researchTopicId.Value} was not found.", cancellationToken, markLibraryFailed: false);
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var payload = JsonSerializer.SerializeToElement(new
+            {
+                researchTopicId = researchTopicId.Value,
+                requestedByUserId = requestedByUserId ?? topic.RequestedByUserId,
+                workflowId = workflow.Id,
+                triggeredBy,
+                forceRun
+            });
+
+            var job = await jobsRepository.CreateJobAsync(new Job
+            {
+                Id = Guid.NewGuid(),
+                ParentJobId = null,
+                RequestedByUserId = requestedByUserId ?? topic.RequestedByUserId,
+                JobType = "research.topic.run",
+                Priority = 50,
+                Status = JobStatus.Queued,
+                Payload = payload,
+                Result = null,
+                AttemptCount = 0,
+                MaxAttempts = 3,
+                AvailableAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            }, cancellationToken);
+
+            var step = new WorkflowStep
+            {
+                Id = Guid.NewGuid(),
+                WorkflowId = workflow.Id,
+                StepOrder = 10,
+                StepKey = "search_intake",
+                StepType = "research.search",
+                JobId = job.Id,
+                Status = "waiting",
+                Input = payload,
+                Output = null,
+                StartedAt = now,
+                FinishedAt = null,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            workflow = workflow with
+            {
+                Status = "waiting",
+                CurrentStepKey = step.StepKey,
+                AttemptCount = workflow.AttemptCount + 1,
+                StartedAt = workflow.StartedAt ?? now,
+                ProgressPercent = 5,
+                ProgressMessage = "Queued research search intake",
+                LockedBy = null,
+                LockedAt = null,
+                LockedUntil = null,
+                HeartbeatAt = now,
+                UpdatedAt = now
+            };
+
+            await workflowsRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
+            {
+                await repository.CreateWorkflowStepAsync(step, transaction, cancellationToken);
+                await repository.UpdateWorkflowAsync(workflow, transaction, cancellationToken);
+                await repository.AddWorkflowEventAsync(workflow.Id, step.StepKey, "info", "Queued research root job.", JsonSerializer.SerializeToElement(new
+                {
+                    jobId = job.Id,
+                    researchTopicId = researchTopicId.Value,
+                    topicName = topic.Name,
+                    triggeredBy,
+                    forceRun
+                }), transaction, cancellationToken);
+                return 0;
+            }, cancellationToken);
+            return;
+        }
+
+        if (currentStep.JobId is null)
+        {
+            await workflowsRepository.UpdateWorkflowAsync(workflow with
+            {
+                Status = "running",
+                CurrentStepKey = currentStep.StepKey,
+                LockedBy = null,
+                LockedAt = null,
+                LockedUntil = null,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }, null, cancellationToken);
+            return;
+        }
+
+        var currentJob = await jobsRepository.GetJobByIdAsync(currentStep.JobId.Value, cancellationToken);
+        if (currentJob is null)
+        {
+            await FailWorkflowAsync(workflow, "job_missing", $"Research workflow step {currentStep.StepKey} references a missing job.", cancellationToken, markLibraryFailed: false, failedStep: currentStep);
+            return;
+        }
+
+        if (!IsTerminal(currentJob.Status))
+        {
+            await workflowsRepository.HeartbeatWorkflowAsync(workflow.Id, workerId, currentJob.ProgressPercent, currentJob.ProgressMessage, leaseDuration, cancellationToken);
+            await workflowsRepository.UpdateWorkflowAsync(workflow with
+            {
+                Status = "waiting",
+                CurrentStepKey = currentStep.StepKey,
+                ProgressPercent = currentJob.ProgressPercent,
+                ProgressMessage = currentJob.ProgressMessage ?? workflow.ProgressMessage,
+                LockedBy = null,
+                LockedAt = null,
+                LockedUntil = null,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }, null, cancellationToken);
+            return;
+        }
+
+        if (currentJob.Status is JobStatus.Cancelled)
+        {
+            await workflowsRepository.UpdateWorkflowAsync(workflow with
+            {
+                Status = "cancelled",
+                ErrorCode = "cancelled",
+                ErrorMessage = "Research workflow job was cancelled.",
+                LockedBy = null,
+                LockedAt = null,
+                LockedUntil = null,
+                FinishedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }, null, cancellationToken);
+            await researchRepository.CancelTopicRunByWorkflowIdAsync(workflow.Id, "Research workflow job was cancelled.", null, cancellationToken);
+            return;
+        }
+
+        if (currentJob.Status is JobStatus.Failed or JobStatus.Dead)
+        {
+            await FailWorkflowAsync(workflow, currentJob.ErrorCode ?? "job_failed", currentJob.ErrorMessage ?? $"Research job {currentJob.Id} failed.", cancellationToken, markLibraryFailed: false, failedStep: currentStep);
+            return;
+        }
+
+        await workflowsRepository.UpdateWorkflowAsync(workflow with
+        {
+            Status = "running",
+            CurrentStepKey = currentStep.StepKey,
+            LockedBy = null,
+            LockedAt = null,
+            LockedUntil = null,
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, null, cancellationToken);
     }
 
     private async Task StartWorkflowAsync(Workflow workflow, MediaSource mediaSource, MediaSourceIdentity sourceIdentity, string sourceUrl, string? preferredLanguage, bool preferNativeTranscript, string workflowRootDirectory, string transcribeProvider, CancellationToken cancellationToken)

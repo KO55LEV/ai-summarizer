@@ -1,0 +1,42 @@
+{
+  "runs": {
+    "r1": [
+      {
+        "id": "r1-latest-run",
+        "researchTopicId": "r1",
+        "requestedByUserId": null,
+        "jobId": null,
+        "workflowId": "wf-r1-latest",
+        "status": "succeeded",
+        "triggeredBy": "manual",
+        "startedAt": "2026-06-01T08:00:00Z",
+        "finishedAt": "2026-06-01T08:15:00Z",
+        "nextRetryAt": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "summaryPreview": "OpenAI previewed GPT-5 Turbo, Google DeepMind published agent research, and the EU finalised AI Act guidance.",
+        "createdAt": "2026-06-01T08:00:00Z",
+        "updatedAt": "2026-06-01T08:15:00Z"
+      }
+    ],
+    "r4": [
+      {
+        "id": "r4-latest-run",
+        "researchTopicId": "r4",
+        "requestedByUserId": null,
+        "jobId": null,
+        "workflowId": "wf-r4-latest",
+        "status": "succeeded",
+        "triggeredBy": "manual",
+        "startedAt": "2026-05-18T08:00:00Z",
+        "finishedAt": "2026-05-18T08:12:00Z",
+        "nextRetryAt": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "summaryPreview": "Starship IFT-4 succeeded and Artemis III moved to November 2027.",
+        "createdAt": "2026-05-18T08:00:00Z",
+        "updatedAt": "2026-05-18T08:12:00Z"
+      }
+    ]
+  }
+}

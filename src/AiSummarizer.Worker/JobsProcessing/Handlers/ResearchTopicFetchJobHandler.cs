@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiSummarizer.Application.Jobs;
 using AiSummarizer.Application.Research;
+using AiSummarizer.Application.Workflows;
 using AiSummarizer.Domain.Jobs;
 using Microsoft.Extensions.Options;
 
@@ -16,6 +17,7 @@ namespace AiSummarizer.Worker.JobsProcessing.Handlers;
 public sealed class ResearchTopicFetchJobHandler(
     IResearchRepository researchRepository,
     IJobsRepository jobsRepository,
+    IWorkflowsRepository workflowsRepository,
     IHttpClientFactory httpClientFactory,
     IOptions<YouTubeDownloadOptions> youtubeOptions,
     ILogger<ResearchTopicFetchJobHandler> logger) : IJobHandler
@@ -56,6 +58,33 @@ public sealed class ResearchTopicFetchJobHandler(
         var searchResults = await researchRepository.ListSearchResultsAsync(payload.ResearchTopicRunId, 10_000, 0, cancellationToken);
         if (searchResults.Count == 0)
         {
+            var noSearchResultsStep = await ResearchWorkflowProgress.StartStepAsync(
+                workflowsRepository,
+                run.WorkflowId,
+                20,
+                "content_acquisition",
+                "research.fetch",
+                context.Job.Id,
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    searchResultCount = 0
+                }),
+                cancellationToken);
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                noSearchResultsStep,
+                "no_search_results",
+                "Research topic run has no search results to fetch.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    searchResultCount = 0
+                }),
+                cancellationToken);
+
             return JobHandlerResult.DeadLetter(
                 "no_search_results",
                 "Research topic run has no search results to fetch.",
@@ -66,6 +95,22 @@ public sealed class ResearchTopicFetchJobHandler(
         var contentRunId = Guid.NewGuid();
         var contentPhaseId = Guid.NewGuid();
         var contentRunStartedAt = now;
+        var workflowStep = await ResearchWorkflowProgress.StartStepAsync(
+            workflowsRepository,
+            run.WorkflowId,
+            20,
+            "content_acquisition",
+            "research.fetch",
+            context.Job.Id,
+            JsonSerializer.SerializeToElement(new
+            {
+                runId = run.Id,
+                topicId = topic.Id,
+                contentRunId,
+                searchResultCount = searchResults.Count,
+                sourceCount = searchResults.Select(item => item.SourceKey).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+            }),
+            cancellationToken);
 
         await context.LogInfoAsync("Research content acquisition started", JsonSerializer.SerializeToElement(new
         {
@@ -299,6 +344,7 @@ public sealed class ResearchTopicFetchJobHandler(
                     run.ResearchTopicId,
                     run.RequestedByUserId,
                     run.JobId,
+                    run.WorkflowId,
                     ResearchTopicRunStatus.Failed,
                     run.TriggeredBy,
                     run.StartedAt,
@@ -326,6 +372,23 @@ public sealed class ResearchTopicFetchJobHandler(
 
         if (!contentSucceeded)
         {
+            await ResearchWorkflowProgress.FailStepAsync(
+                workflowsRepository,
+                workflowStep,
+                "content_fetch_failed",
+                "Content acquisition did not fetch any items.",
+                JsonSerializer.SerializeToElement(new
+                {
+                    contentRunId,
+                    runId = run.Id,
+                    topicId = topic.Id,
+                    total = uniqueResults.Length,
+                    successful = successfulItems,
+                    failed = failedItems,
+                    failures = itemErrors
+                }),
+                cancellationToken);
+
             return JobHandlerResult.DeadLetter(
                 "content_fetch_failed",
                 "Content acquisition did not fetch any items.",
@@ -350,6 +413,7 @@ public sealed class ResearchTopicFetchJobHandler(
                 researchTopicId = topic.Id,
                 researchTopicRunId = run.Id,
                 requestedByUserId = payload.RequestedByUserId ?? run.RequestedByUserId ?? topic.RequestedByUserId,
+                workflowId = run.WorkflowId,
                 triggeredBy = payload.TriggeredBy
             }),
             AttemptCount = 0,
@@ -365,6 +429,20 @@ public sealed class ResearchTopicFetchJobHandler(
             runId = run.Id,
             topicId = topic.Id
         }), cancellationToken);
+        await ResearchWorkflowProgress.CompleteStepAsync(
+            workflowsRepository,
+            workflowStep,
+            JsonSerializer.SerializeToElement(new
+            {
+                contentRunId,
+                runId = run.Id,
+                topicId = topic.Id,
+                total = uniqueResults.Length,
+                successful = successfulItems,
+                failed = failedItems,
+                nextJobId = normalizeJob.Id
+            }),
+            cancellationToken);
 
         return JobHandlerResult.Success(JsonSerializer.SerializeToElement(new
         {

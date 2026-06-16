@@ -1,5 +1,5 @@
 using AiSummarizer.Application.Research;
-using AiSummarizer.Application.Jobs;
+using AiSummarizer.Application.Workflows;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -186,7 +186,7 @@ public sealed class ResearchController(IResearchService researchService) : Contr
     public async Task<ActionResult<StartResearchTopicRunResponse>> StartRun(
         [FromRoute] Guid topicId,
         [FromBody] StartResearchTopicRunRequest request,
-        [FromServices] IJobsService jobsService,
+        [FromServices] IWorkflowsRepository workflowsRepository,
         [FromServices] IResearchRepository researchRepository,
         CancellationToken cancellationToken)
     {
@@ -202,6 +202,7 @@ public sealed class ResearchController(IResearchService researchService) : Contr
         {
             return Ok(new StartResearchTopicRunResponse(
                 activeRun.JobId,
+                activeRun.WorkflowId,
                 topicId,
                 activeRun.Id,
                 "research.topic.run",
@@ -210,28 +211,56 @@ public sealed class ResearchController(IResearchService researchService) : Contr
                 "A research run is already queued or running for this topic."));
         }
 
-        var job = await jobsService.CreateJobAsync(new CreateJobCommand(
-            "research.topic.run",
-            JsonSerializer.SerializeToElement(new
+        var activeWorkflow = await workflowsRepository.GetActiveWorkflowByInputGuidAsync("research.topic", "researchTopicId", topicId, cancellationToken);
+        if (activeWorkflow is not null)
+        {
+            return Ok(new StartResearchTopicRunResponse(
+                null,
+                activeWorkflow.Id,
+                topicId,
+                null,
+                "research.topic.run",
+                "already_running",
+                activeWorkflow.CreatedAt,
+                "A research workflow is already queued or running for this topic."));
+        }
+
+        var workflowId = Guid.NewGuid();
+        var triggeredBy = string.IsNullOrWhiteSpace(request.TriggeredBy) ? "api" : request.TriggeredBy.Trim();
+        var now = DateTimeOffset.UtcNow;
+        var workflow = await workflowsRepository.CreateWorkflowAsync(new Domain.Workflows.Workflow
+        {
+            Id = workflowId,
+            RequestedByUserId = requestedByUserId,
+            SourceId = null,
+            WorkflowType = "research.topic",
+            Status = "queued",
+            Input = JsonSerializer.SerializeToElement(new
             {
                 researchTopicId = topicId,
+                topicName = topic.Name,
                 requestedByUserId,
-                triggeredBy = string.IsNullOrWhiteSpace(request.TriggeredBy) ? "api" : request.TriggeredBy.Trim(),
+                triggeredBy,
                 forceRun = request.ForceRun
             }),
-            50,
-            requestedByUserId,
-            null,
-            3), cancellationToken);
+            Result = null,
+            CurrentStepKey = null,
+            AttemptCount = 0,
+            MaxAttempts = 3,
+            AvailableAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        }, null, cancellationToken);
 
         return Ok(new StartResearchTopicRunResponse(
-            job.Job.Id,
+            null,
+            workflow.Id,
             topicId,
             null,
-            job.Job.JobType,
+            "research.topic.run",
             "queued",
-            job.Job.CreatedAt,
-            "Research run queued."));
+            workflow.CreatedAt,
+            "Research workflow queued."));
     }
 
     [HttpGet("runs/{runId:guid}")]
@@ -374,6 +403,7 @@ public sealed class ResearchController(IResearchService researchService) : Contr
             run.ResearchTopicId,
             run.RequestedByUserId,
             run.JobId,
+            run.WorkflowId,
             run.Status.ToString().ToLowerInvariant(),
             run.TriggeredBy,
             run.StartedAt,

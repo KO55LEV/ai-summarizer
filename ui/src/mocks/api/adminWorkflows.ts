@@ -69,6 +69,12 @@ export async function getMockActiveWorkflows(limit = 50, offset = 0): Promise<Wo
   return clone(active.slice(offset, offset + limit).map(toWorkflowResponse));
 }
 
+export async function getMockHistoryWorkflows(limit = 50, offset = 0): Promise<WorkflowResponse[]> {
+  await delay();
+  const history = state.items.filter((item) => !['queued', 'running', 'waiting'].includes(item.workflowStatus));
+  return clone(history.slice(offset, offset + limit).map(toWorkflowResponse));
+}
+
 export async function getMockWorkflowEvents(workflowId: string, limit = 100, offset = 0): Promise<WorkflowEventResponse[]> {
   await delay();
   const workflow = state.items.find((item) => item.workflowId === workflowId);
