@@ -171,6 +171,7 @@ export interface ResearchTopic {
   name: string;
   description: string;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  lookbackWindow: 'hour' | 'day' | 'week' | 'month' | null;
   status: 'active' | 'paused' | 'draft';
   deliveryTime: string | null;
   sources: string[];

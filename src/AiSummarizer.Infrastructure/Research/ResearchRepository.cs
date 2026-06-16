@@ -840,6 +840,7 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
         command.Parameters.AddWithValue("name", topic.Name);
         command.Parameters.AddWithValue("description", (object?)topic.Description ?? DBNull.Value);
         command.Parameters.AddWithValue("frequency", topic.Frequency);
+        command.Parameters.AddWithValue("lookback_window", (object?)topic.LookbackWindow ?? DBNull.Value);
         command.Parameters.AddWithValue("status", topic.Status);
         command.Parameters.Add(new NpgsqlParameter("delivery_time", NpgsqlDbType.Time)
         {
@@ -902,6 +903,7 @@ public sealed class ResearchRepository(NpgsqlDataSource dataSource, ISqlScriptLo
             reader.GetString(reader.GetOrdinal("name")),
             reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
             reader.GetString(reader.GetOrdinal("frequency")),
+            reader.IsDBNull(reader.GetOrdinal("lookback_window")) ? null : reader.GetString(reader.GetOrdinal("lookback_window")),
             reader.GetString(reader.GetOrdinal("status")),
             reader.IsDBNull(reader.GetOrdinal("delivery_time")) ? null : TimeOnly.FromTimeSpan(reader.GetFieldValue<TimeSpan>(reader.GetOrdinal("delivery_time"))),
             ReadStringArray(reader, "sources"),

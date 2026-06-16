@@ -96,7 +96,7 @@ The current implementation maps that model to these persisted workflow steps:
 
 #### `plan`
 
-- Build source-aware queries from the topic name, description, tags, and frequency.
+- Build source-aware queries from the topic name, description, tags, cadence, and lookback window.
 - Decide which sources are eligible for the run.
 - Store the planner version and planning metadata.
 

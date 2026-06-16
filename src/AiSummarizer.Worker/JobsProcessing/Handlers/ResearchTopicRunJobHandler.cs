@@ -116,6 +116,7 @@ public sealed class ResearchTopicRunJobHandler(
                 topicSeed,
                 sourceCount = topic.Sources.Count,
                 frequency = topic.Frequency,
+                lookbackWindow = topic.LookbackWindow,
                 triggeredBy = payload.TriggeredBy,
                 forceRun = payload.ForceRun
             }),
@@ -216,6 +217,7 @@ public sealed class ResearchTopicRunJobHandler(
             planVersion = plan.PlanVersion,
             promptKey = plan.PromptKey,
             frequency = topic.Frequency,
+            lookbackWindow = topic.LookbackWindow,
             triggeredBy = payload.TriggeredBy,
             forceRun = payload.ForceRun
         }), cancellationToken);
@@ -248,7 +250,7 @@ public sealed class ResearchTopicRunJobHandler(
 
         context.ReportProgress(10, "Running source searches");
 
-        var queries = searchQueryPlanner.BuildQueries(plannedSearch, topic.Frequency);
+        var queries = searchQueryPlanner.BuildQueries(plannedSearch, topic.Frequency, topic.LookbackWindow);
         var groupedQueries = queries.GroupBy(query => query.Source).ToArray();
         await ResearchWorkflowProgress.AddEventAsync(
             workflowsRepository,

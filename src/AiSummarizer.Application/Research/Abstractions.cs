@@ -70,7 +70,7 @@ public sealed record SearchProviderQuotaDto(
 
 public interface ISearchQueryPlanner
 {
-    IReadOnlyList<ResearchSearchQuery> BuildQueries(ResearchSearchPlan plan, string frequency);
+    IReadOnlyList<ResearchSearchQuery> BuildQueries(ResearchSearchPlan plan, string frequency, string? lookbackWindow);
 }
 
 public interface IResearchSearchPlanningService

@@ -32,6 +32,7 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
                 command.Name.Trim(),
                 NormalizeNullable(command.Description),
                 NormalizeKey(command.Frequency),
+                NormalizeLookbackWindow(command.LookbackWindow),
                 NormalizeStatus(command.Status),
                 command.DeliveryTime,
                 null,
@@ -68,6 +69,7 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
                 command.Name.Trim(),
                 NormalizeNullable(command.Description),
                 nextFrequency,
+                NormalizeLookbackWindow(command.LookbackWindow) ?? existing.LookbackWindow,
                 nextStatus,
                 command.DeliveryTime,
                 existing.LastRunAt,
@@ -168,6 +170,23 @@ public sealed class ResearchService(IResearchRepository repository, IUsersReposi
         => requestedByUserId ?? throw new ResearchValidationException("RequestedByUserId is required.");
 
     private static string NormalizeKey(string value) => value.Trim().ToLowerInvariant();
+    private static string? NormalizeLookbackWindow(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "hour" or "hourly" => "hour",
+            "day" or "daily" => "day",
+            "week" or "weekly" => "week",
+            "month" or "monthly" => "month",
+            _ => throw new ResearchValidationException("LookbackWindow must be hour, day, week, or month.")
+        };
+    }
     private static string NormalizeStatus(string value)
     {
         var status = NormalizeKey(value);

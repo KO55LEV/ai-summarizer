@@ -194,6 +194,7 @@ public sealed class ResearchSearchPlanningService(
             topic.Name,
             topic.Description,
             topic.Frequency,
+            topic.LookbackWindow,
             topic.Sources,
             topic.Tags,
             topic.Outputs
@@ -211,6 +212,7 @@ public sealed class ResearchSearchPlanningService(
             sources = topic.Sources,
             tags = topic.Tags,
             frequency = topic.Frequency,
+            lookbackWindow = topic.LookbackWindow,
             inputHash,
             existingPlanVersion = existing?.PlanVersion,
             workflowId,
@@ -226,7 +228,8 @@ public sealed class ResearchSearchPlanningService(
             .Replace("{{intent}}", topic.Description?.Trim() ?? string.Empty, StringComparison.Ordinal)
             .Replace("{{sources}}", string.Join(", ", topic.Sources), StringComparison.Ordinal)
             .Replace("{{tags}}", string.Join(", ", topic.Tags), StringComparison.Ordinal)
-            .Replace("{{frequency}}", topic.Frequency.Trim(), StringComparison.Ordinal);
+            .Replace("{{frequency}}", topic.Frequency.Trim(), StringComparison.Ordinal)
+            .Replace("{{lookbackWindow}}", topic.LookbackWindow ?? "same as cadence", StringComparison.Ordinal);
 
     private static ResearchSearchPlan ParsePlan(string text)
     {

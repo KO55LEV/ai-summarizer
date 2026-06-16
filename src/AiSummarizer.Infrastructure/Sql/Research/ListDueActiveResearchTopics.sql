@@ -5,6 +5,7 @@ select
     t.name,
     t.description,
     t.frequency,
+    t.lookback_window,
     t.status,
     t.delivery_time,
     t.last_run_at,

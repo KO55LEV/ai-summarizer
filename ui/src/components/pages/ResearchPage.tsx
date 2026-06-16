@@ -81,6 +81,7 @@ export function ResearchPage({ onTopicSelect, onCreateNew }: ResearchPageProps) 
         name: topic.name,
         description: topic.description,
         frequency: topic.frequency,
+        lookbackWindow: topic.lookbackWindow,
         status: topic.status === 'active' ? 'paused' : 'active',
         deliveryTime: topic.deliveryTime,
         sources: topic.sources,

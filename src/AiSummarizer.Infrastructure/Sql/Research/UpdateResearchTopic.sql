@@ -5,6 +5,7 @@ set
     name = @name,
     description = @description,
     frequency = @frequency,
+    lookback_window = @lookback_window,
     status = @status,
     delivery_time = @delivery_time,
     last_run_at = @last_run_at,

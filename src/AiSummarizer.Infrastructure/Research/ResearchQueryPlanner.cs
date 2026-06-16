@@ -4,10 +4,10 @@ namespace AiSummarizer.Infrastructure.Research;
 
 public sealed class ResearchQueryPlanner : ISearchQueryPlanner
 {
-    public IReadOnlyList<ResearchSearchQuery> BuildQueries(ResearchSearchPlan plan, string frequency)
+    public IReadOnlyList<ResearchSearchQuery> BuildQueries(ResearchSearchPlan plan, string frequency, string? lookbackWindow)
     {
         var now = DateTimeOffset.UtcNow;
-        var fallbackWindow = ResolveWindow(frequency);
+        var fallbackWindow = ResolveWindow(lookbackWindow) ?? ResolveWindow(frequency) ?? TimeSpan.FromDays(7);
         return plan.SourcePlans
             .SelectMany(sourcePlan =>
             {
@@ -17,7 +17,10 @@ public sealed class ResearchQueryPlanner : ISearchQueryPlanner
                     return Array.Empty<ResearchSearchQuery>();
                 }
 
-                var window = ResolveWindow(sourcePlan.Recency) ?? fallbackWindow;
+                var sourceWindow = ResolveWindow(sourcePlan.Recency);
+                var window = sourceWindow is null || sourceWindow.Value < fallbackWindow
+                    ? fallbackWindow
+                    : sourceWindow.Value;
                 var start = now - window;
                 var end = now;
                 var maxResults = sourcePlan.MaxResults ?? ResolveDefaultMaxResults(source);

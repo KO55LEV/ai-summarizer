@@ -43,6 +43,13 @@ const FREQ_OPTIONS: { value: 'hourly' | 'daily' | 'weekly' | 'monthly'; label: s
   { value: 'monthly', label: 'Monthly', description: 'High-level trend review and long horizon.' },
 ];
 
+const LOOKBACK_OPTIONS: { value: 'hour' | 'day' | 'week' | 'month'; label: string; description: string }[] = [
+  { value: 'hour', label: 'Hour', description: 'Use a very narrow snapshot for fast-moving events.' },
+  { value: 'day', label: 'Day', description: 'Use the last 24 hours as the snapshot window.' },
+  { value: 'week', label: 'Week', description: 'Use the last seven days as the snapshot window.' },
+  { value: 'month', label: 'Month', description: 'Use the last 30 days as the snapshot window.' },
+];
+
 const OUTPUT_OPTIONS = [
   { id: 'briefing', label: 'HTML briefing', icon: <LayoutTemplate size={15} />, description: 'A polished web-ready report with sections, links, and callouts.' },
   { id: 'voice', label: 'Voice summary', icon: <Volume2 size={15} />, description: 'A concise spoken version for client delivery or internal review.' },
@@ -70,6 +77,16 @@ function navigateWithinApp(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+function getInitialLookbackWindow(frequency: 'hourly' | 'daily' | 'weekly' | 'monthly'): 'hour' | 'day' | 'week' | 'month' {
+  return frequency === 'hourly'
+    ? 'hour'
+    : frequency === 'daily'
+      ? 'day'
+      : frequency === 'weekly'
+        ? 'week'
+        : 'month';
+}
+
 interface ResearchCreatePageProps {
   onBack: () => void;
   topic?: ResearchTopic | null;
@@ -82,6 +99,7 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
   const [description, setDescription] = useState(topic?.description ?? '');
   const [sources, setSources] = useState<string[]>(topic?.sources ?? ['web', 'news']);
   const [frequency, setFrequency] = useState<'hourly' | 'daily' | 'weekly' | 'monthly'>(topic?.frequency ?? 'daily');
+  const [lookbackWindow, setLookbackWindow] = useState<'hour' | 'day' | 'week' | 'month'>(topic?.lookbackWindow ?? getInitialLookbackWindow(topic?.frequency ?? 'daily'));
   const [status, setStatus] = useState<'active' | 'paused' | 'draft'>(topic?.status ?? 'active');
   const [deliveryTime, setDeliveryTime] = useState(topic?.deliveryTime ?? '08:00');
   const [tagInput, setTagInput] = useState('');
@@ -132,6 +150,7 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
           name: name.trim(),
           description: description.trim() || undefined,
           frequency,
+          lookbackWindow,
           status,
           deliveryTime,
           sources,
@@ -145,6 +164,7 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
           name: name.trim(),
           description: description.trim() || undefined,
           frequency,
+          lookbackWindow,
           status,
           deliveryTime,
           sources,
@@ -182,9 +202,17 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
             : frequency === 'weekly'
               ? 'Weekly deep dive'
               : 'Monthly trend report',
+      lookbackCopy:
+        lookbackWindow === 'hour'
+          ? 'Hourly snapshot'
+          : lookbackWindow === 'day'
+            ? 'Daily snapshot'
+            : lookbackWindow === 'week'
+              ? 'Weekly snapshot'
+              : 'Monthly snapshot',
       deliveryCopy: `Delivery at ${deliveryTime}`,
     };
-  }, [description, deliveryTime, frequency, name, outputs, sources, tags]);
+  }, [description, deliveryTime, frequency, lookbackWindow, name, outputs, sources, tags]);
 
   const handleBack = () => {
     if (initialCreateContext.returnTo) {
@@ -311,6 +339,37 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
                 </div>
               </PanelCard>
             </div>
+
+            <PanelCard title="Lookback window" subtitle="How far back should each run inspect?">
+              <div className="grid gap-2">
+                {LOOKBACK_OPTIONS.map((item) => {
+                  const active = lookbackWindow === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      onClick={() => setLookbackWindow(item.value)}
+                      className="rounded-xl border p-3 text-left transition-all"
+                      style={{
+                        background: active ? 'var(--color-accent)11' : 'var(--color-bg-hover)',
+                        borderColor: active ? 'var(--color-accent)' : 'var(--color-border)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold" style={{ color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)' }}>
+                            {item.label}
+                          </div>
+                          <div className="mt-0.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                            {item.description}
+                          </div>
+                        </div>
+                        {active && <CheckCircle2 size={16} className="text-[var(--color-accent)]" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </PanelCard>
 
             <PanelCard title="Output formats" subtitle="What should the system produce?">
               <div className="grid gap-2 xl:grid-cols-3">
@@ -471,8 +530,9 @@ export function ResearchCreatePage({ onBack, topic }: ResearchCreatePageProps) {
                 <p className="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">{preview.description}</p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <MiniStat icon={<Clock3 size={14} />} label="Cadence" value={preview.cadenceCopy} />
+                <MiniStat icon={<Clock3 size={14} />} label="Lookback" value={preview.lookbackCopy} />
                 <MiniStat icon={<ShieldCheck size={14} />} label="Sources" value={preview.sources.join(' · ')} />
                 <MiniStat icon={<Volume2 size={14} />} label="Outputs" value={preview.outputs.join(' · ')} />
               </div>

@@ -2,6 +2,7 @@
 
 This document describes the next iteration of the research pipeline.
 The goal is to separate topic understanding from search execution so the system can reuse a cached plan and avoid calling the LLM on every run.
+`frequency` controls cadence, while `lookbackWindow` controls how far back each run searches.
 
 ## Goal
 
@@ -29,6 +30,7 @@ If planning cannot be completed because the LLM is unavailable or returns an inv
 - If no valid plan exists at run time, workflow step zero must create it.
 - If the LLM is unavailable during planning, the workflow fails.
 - Planning should happen once per topic update, not once per run.
+- The topic `lookbackWindow` should be passed into planning and used as the default search window.
 
 ## Data Model
 
@@ -54,6 +56,7 @@ Recommended columns:
 - `updated_at`
 - `error_code`
 - `error_message`
+- `lookback_window`
 
 ### Suggested status values
 
@@ -134,6 +137,7 @@ Inputs:
 - selected sources
 - topic tags
 - topic frequency
+- topic lookbackWindow
 
 Outputs:
 

@@ -9,6 +9,7 @@ interface ApiResearchTopic {
   name: string;
   description: string | null;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  lookbackWindow: 'hour' | 'day' | 'week' | 'month' | null;
   status: 'active' | 'paused' | 'draft';
   deliveryTime: string | null;
   sources: string[];
@@ -94,6 +95,7 @@ interface CreateResearchTopicInput {
   name: string;
   description?: string;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  lookbackWindow?: 'hour' | 'day' | 'week' | 'month' | null;
   status?: 'active' | 'paused' | 'draft';
   deliveryTime?: string | null;
   sources: string[];
@@ -107,6 +109,7 @@ export interface UpdateResearchTopicInput {
   name: string;
   description?: string;
   frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  lookbackWindow?: 'hour' | 'day' | 'week' | 'month' | null;
   status: 'active' | 'paused' | 'draft';
   deliveryTime?: string | null;
   sources: string[];
@@ -201,6 +204,7 @@ function mapTopic(topic: ApiResearchTopic): ResearchTopic {
     name: topic.name,
     description: topic.description ?? '',
     frequency: topic.frequency,
+    lookbackWindow: topic.lookbackWindow ?? null,
     status: topic.status,
     deliveryTime: topic.deliveryTime,
     sources: topic.sources,
@@ -348,6 +352,7 @@ export async function createResearchTopic(input: CreateResearchTopicInput): Prom
       name: input.name,
       description: input.description ?? '',
       frequency: input.frequency,
+      lookbackWindow: input.lookbackWindow ?? null,
       status: input.status ?? 'active',
       deliveryTime: input.deliveryTime ?? null,
       sources: input.sources,

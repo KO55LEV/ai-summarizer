@@ -15,6 +15,7 @@ export async function getMockResearchList(): Promise<ResearchListData> {
       requestedByUserId: null,
       projectId: topic.projectId ?? null,
       deliveryTime: topic.deliveryTime ?? '08:00',
+      lookbackWindow: topic.lookbackWindow ?? null,
       outputs: topic.outputs ?? ['briefing', 'structured'],
       lastRunAt: topic.lastRunAt ?? null,
       nextRunAt: topic.nextRunAt ?? null,

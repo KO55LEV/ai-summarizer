@@ -65,7 +65,7 @@
       "provider": "openrouter",
       "model": "openai/gpt-4.1-mini",
       "systemPrompt": "You are a research search planner. Produce only valid JSON and nothing else.",
-      "userPrompt": "Topic title: {{title}}\n\nTopic intent: {{intent}}\n\nSelected sources: {{sources}}\n\nTopic tags: {{tags}}\n\nFrequency: {{frequency}}\n\nGenerate the shortest useful search plan.",
+      "userPrompt": "Topic title: {{title}}\n\nTopic intent: {{intent}}\n\nSelected sources: {{sources}}\n\nTopic tags: {{tags}}\n\nFrequency: {{frequency}}\n\nLookback window: {{lookbackWindow}}\n\nGenerate the shortest useful search plan.",
       "isActive": true,
       "createdAt": "2026-06-16T00:00:00Z",
       "updatedAt": "2026-06-16T00:00:00Z"

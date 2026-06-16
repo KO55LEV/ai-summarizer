@@ -201,6 +201,7 @@ export function ResearchBriefingPage({
         name: topic.name,
         description: topic.description,
         frequency: topic.frequency,
+        lookbackWindow: topic.lookbackWindow,
         status: topic.status === 'active' ? 'paused' : 'active',
         deliveryTime: topic.deliveryTime,
         sources: topic.sources,
@@ -565,7 +566,7 @@ function SettingsView({ topic }: { topic: ResearchTopic }) {
     <div className="grid gap-4 md:grid-cols-2">
       <SettingsCard title="Intent">{topic.description || 'No intent provided.'}</SettingsCard>
       <SettingsCard title="Schedule">
-        Cadence: {topic.frequency}. Delivery: {topic.deliveryTime ?? '—'}. Next run: {topic.nextRun}.
+        Cadence: {topic.frequency}. Lookback: {topic.lookbackWindow ?? 'same as cadence'}. Delivery: {topic.deliveryTime ?? '—'}. Next run: {topic.nextRun}.
       </SettingsCard>
       <SettingsCard title="Sources">{topic.sources.join(', ') || 'No sources selected.'}</SettingsCard>
       <SettingsCard title="Outputs">

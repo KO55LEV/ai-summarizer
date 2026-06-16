@@ -48,6 +48,8 @@ Rules:
 - Keep queries short, usually 2 to 6 words.
 - Remove duplicate wording from the title and intent.
 - Prefer natural search phrases, not full sentences.
+- Prefer the topic lookback window when choosing source recency.
+- If lookback window is provided, do not make the search narrower than that window.
 - For YouTube, prefer video-discovery terms, creator names, channel names, titles, or topics.
 - For news, prefer recent event wording.
 - For Reddit, prefer discussion-oriented wording.
@@ -65,6 +67,8 @@ Selected sources: {{sources}}
 Topic tags: {{tags}}
 
 Frequency: {{frequency}}
+
+Lookback window: {{lookbackWindow}}
 
 Generate the shortest useful search plan.$$,
         true,
