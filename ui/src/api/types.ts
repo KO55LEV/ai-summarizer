@@ -253,6 +253,26 @@ export interface ResearchSearchResult {
   updatedAt: string;
 }
 
+export interface ResearchRankedDocument {
+  id: string;
+  researchRankingRunId: string;
+  researchTopicRunId: string;
+  researchTopicId: string;
+  researchDocumentId: string;
+  sourceKey: string;
+  title: string;
+  canonicalUrl: string;
+  score: number;
+  freshnessScore: number;
+  sourceWeight: number;
+  lengthScore: number;
+  rankPosition: number;
+  isSelected: boolean;
+  reasonJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ResearchTopicRun {
   id: string;
   researchTopicId: string;

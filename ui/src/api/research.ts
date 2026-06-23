@@ -1,5 +1,5 @@
 import { getCurrentUserId } from '../config/currentUser';
-import type { ResearchBriefing, ResearchListData, ResearchSearchResult, ResearchTopic, ResearchTopicRun } from './types';
+import type { ResearchBriefing, ResearchListData, ResearchRankedDocument, ResearchSearchResult, ResearchTopic, ResearchTopicRun } from './types';
 import { getMockResearchList, getMockResearchBriefing, listMockResearchRuns, listMockResearchRunSearchResults } from '../mocks/api/research';
 
 interface ApiResearchTopic {
@@ -85,6 +85,26 @@ interface ApiResearchSearchResult {
   language: string | null;
   resultRank: number;
   rawResultJson: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ApiResearchRankedDocument {
+  id: string;
+  researchRankingRunId: string;
+  researchTopicRunId: string;
+  researchTopicId: string;
+  researchDocumentId: string;
+  sourceKey: string;
+  title: string;
+  canonicalUrl: string;
+  score: number;
+  freshnessScore: number;
+  sourceWeight: number;
+  lengthScore: number;
+  rankPosition: number;
+  isSelected: boolean;
+  reasonJson: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -266,6 +286,28 @@ function mapSearchResult(item: ApiResearchSearchResult): ResearchSearchResult {
   };
 }
 
+function mapRankedDocument(item: ApiResearchRankedDocument): ResearchRankedDocument {
+  return {
+    id: item.id,
+    researchRankingRunId: item.researchRankingRunId,
+    researchTopicRunId: item.researchTopicRunId,
+    researchTopicId: item.researchTopicId,
+    researchDocumentId: item.researchDocumentId,
+    sourceKey: item.sourceKey,
+    title: item.title,
+    canonicalUrl: item.canonicalUrl,
+    score: item.score,
+    freshnessScore: item.freshnessScore,
+    sourceWeight: item.sourceWeight,
+    lengthScore: item.lengthScore,
+    rankPosition: item.rankPosition,
+    isSelected: item.isSelected,
+    reasonJson: item.reasonJson,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+}
+
 export async function getResearchList(requestedByUserId = getCurrentUserId()): Promise<ResearchListData> {
   if (import.meta.env.VITE_USE_MOCK_API === 'true') {
     return getMockResearchList();
@@ -341,6 +383,36 @@ export async function listResearchBriefings(topicId: string): Promise<ResearchBr
     date: formatGeneratedAt(item.generatedAt),
     preview: item.previewText,
   }));
+}
+
+export async function listResearchRunRankedDocuments(runId: string): Promise<ResearchRankedDocument[]> {
+  if (import.meta.env.VITE_USE_MOCK_API === 'true') {
+    const results = await listMockResearchRunSearchResults(runId);
+    return results.map((item, index) => ({
+      id: item.id,
+      researchRankingRunId: item.researchTopicRunId,
+      researchTopicRunId: item.researchTopicRunId,
+      researchTopicId: item.researchTopicId,
+      researchDocumentId: item.id,
+      sourceKey: item.sourceKey,
+      title: item.title,
+      canonicalUrl: item.canonicalUrl ?? item.url,
+      score: item.score,
+      freshnessScore: 0,
+      sourceWeight: 0,
+      lengthScore: 0,
+      rankPosition: index + 1,
+      isSelected: index < 5,
+      reasonJson: item.rawResultJson,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    }));
+  }
+
+  const res = await fetch(`/api/research/runs/${encodeURIComponent(runId)}/ranked-documents`);
+  if (!res.ok) throw new Error('Failed to fetch research ranked documents');
+  const data = await res.json() as ApiResearchRankedDocument[];
+  return data.map(mapRankedDocument);
 }
 
 export async function createResearchTopic(input: CreateResearchTopicInput): Promise<ResearchTopic> {

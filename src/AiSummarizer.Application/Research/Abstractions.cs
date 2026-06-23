@@ -76,6 +76,7 @@ public interface ISearchQueryPlanner
 public interface IResearchSearchPlanningService
 {
     Task<ResearchSearchPlanRecord> EnsureSearchPlanAsync(Guid topicId, Guid? workflowId, Guid? jobId, string? stepKey, bool forceRefresh, CancellationToken cancellationToken);
+    Task<ResearchSearchPlanRecord> GetCachedSearchPlanAsync(Guid topicId, CancellationToken cancellationToken);
 }
 
 public interface IResearchRepository

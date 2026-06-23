@@ -3,10 +3,10 @@ import type { ReactNode } from 'react';
 import {
   ArrowLeft,
   Edit3,
+  FileText,
   Play,
   Clock,
   Calendar,
-  FileText,
   ExternalLink,
   ChevronRight,
   Pause,
@@ -22,6 +22,7 @@ import {
   getResearchBriefing,
   getResearchBriefingById,
   listResearchBriefings,
+  listResearchRunRankedDocuments,
   listResearchRunSearchResults,
   listResearchRuns,
   startResearchRun,
@@ -29,6 +30,7 @@ import {
 } from '../../api/research';
 import { analyzeVideo } from '../../api';
 import { getCurrentUserId } from '../../config/currentUser';
+import type { ResearchRankedDocument } from '../../api/types';
 
 const SENTIMENT_COLORS: Record<string, string> = {
   positive: 'var(--color-accent)',
@@ -42,6 +44,29 @@ const FREQ_COLORS: Record<string, string> = {
   weekly: '#a78bfa',
   monthly: '#f59e0b',
 };
+
+function normalizeHost(urlOrHost: string): string {
+  try {
+    const value = urlOrHost.includes('://') ? new URL(urlOrHost).hostname : urlOrHost;
+    return value.replace(/^www\./i, '').trim().toLowerCase();
+  } catch {
+    return urlOrHost.replace(/^www\./i, '').trim().toLowerCase();
+  }
+}
+
+function extractDomainCitation(text: string): { domain: string; label: string } | null {
+  const match = text.match(/\(([^()]+)\)$/);
+  if (!match) return null;
+
+  const parts = match[1].split(',').map((part) => part.trim()).filter(Boolean);
+  const domain = parts[parts.length - 1];
+  if (!domain || !domain.includes('.')) return null;
+
+  return {
+    domain,
+    label: match[1],
+  };
+}
 
 interface ResearchBriefingPageProps {
   topic: ResearchTopic;
@@ -68,8 +93,10 @@ export function ResearchBriefingPage({
   const [history, setHistory] = useState<PastBriefing[]>([]);
   const [runs, setRuns] = useState<ResearchTopicRun[]>([]);
   const [searchResults, setSearchResults] = useState<ResearchSearchResult[]>([]);
+  const [rankedDocuments, setRankedDocuments] = useState<ResearchRankedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [referencesLoading, setReferencesLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'latest' | 'history' | 'runs' | 'settings'>(briefingId ? 'latest' : 'latest');
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -141,6 +168,52 @@ export function ResearchBriefingPage({
       .finally(() => {
         if (!cancelled) {
           setSearchLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runs]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (runs.length === 0) {
+      setRankedDocuments([]);
+      setReferencesLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const latestRun = runs
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+    if (!latestRun) {
+      setRankedDocuments([]);
+      setReferencesLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setReferencesLoading(true);
+    listResearchRunRankedDocuments(latestRun.id)
+      .then((documents) => {
+        if (!cancelled) {
+          setRankedDocuments(documents);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRankedDocuments([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setReferencesLoading(false);
         }
       });
 
@@ -233,93 +306,124 @@ export function ResearchBriefingPage({
   if (loading) return <BriefingSkeletonLoader onBack={onBack} />;
 
   return (
-    <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
-      <div className="mb-5 flex items-center justify-between">
-        <BackButton onBack={onBack} />
-        <div className="flex items-center gap-2">
-          <ActionButton onClick={runNow} disabled={Boolean(actionBusy) || hasActiveRun} accent icon={<Play size={13} fill="black" />}>
-            {hasActiveRun ? 'Run active' : actionBusy === 'run' ? 'Queueing...' : 'Run now'}
-          </ActionButton>
-          <ActionButton onClick={onEdit} disabled={Boolean(actionBusy)} icon={<Edit3 size={13} />}>
-            Edit
-          </ActionButton>
-          <ActionButton onClick={toggleStatus} disabled={Boolean(actionBusy)} icon={topic.status === 'active' ? <Pause size={13} /> : <RotateCcw size={13} />}>
-            {topic.status === 'active' ? 'Pause' : 'Resume'}
-          </ActionButton>
-          <ActionButton onClick={deleteTopic} disabled={Boolean(actionBusy)} danger icon={<Trash2 size={13} />}>
-            Delete
-          </ActionButton>
+    <main className="relative flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(0,212,170,0.07),transparent_28%),radial-gradient(circle_at_top_right,rgba(94,234,212,0.05),transparent_22%),linear-gradient(180deg,#0b1120_0%,#0c1221_32%,#0c1221_100%)] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <BackButton onBack={onBack} />
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionButton onClick={runNow} disabled={Boolean(actionBusy) || hasActiveRun} accent icon={<Play size={13} fill="black" />}>
+              {hasActiveRun ? 'Run active' : actionBusy === 'run' ? 'Queueing...' : 'Run now'}
+            </ActionButton>
+            <ActionButton onClick={onEdit} disabled={Boolean(actionBusy)} icon={<Edit3 size={13} />}>
+              Edit
+            </ActionButton>
+            <ActionButton onClick={toggleStatus} disabled={Boolean(actionBusy)} icon={topic.status === 'active' ? <Pause size={13} /> : <RotateCcw size={13} />}>
+              {topic.status === 'active' ? 'Pause' : 'Resume'}
+            </ActionButton>
+            <ActionButton onClick={deleteTopic} disabled={Boolean(actionBusy)} danger icon={<Trash2 size={13} />}>
+              Delete
+            </ActionButton>
+          </div>
+        </div>
+
+        <section className="relative overflow-hidden rounded-[28px] border border-white/5 bg-[linear-gradient(180deg,rgba(15,21,38,0.98),rgba(11,17,31,0.98))] px-6 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] sm:px-7 sm:py-7">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--color-accent)]/35 to-transparent" />
+          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[var(--color-accent)]/10 blur-3xl" />
+          <div className="pointer-events-none absolute -left-16 bottom-0 h-56 w-56 rounded-full bg-cyan-400/5 blur-3xl" />
+
+          <div className="relative flex flex-col gap-5">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="max-w-[1120px]">
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--color-text-muted)]">
+                  <span>Research</span>
+                  <span className="text-[var(--color-text-muted)]/60">/</span>
+                  <span>Topic overview</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-3xl font-semibold tracking-tight text-[var(--color-text-primary)] sm:text-[34px]">
+                    {topic.name}
+                  </h1>
+                  <StatusBadge status={topic.status} />
+                </div>
+                <p className="mt-3 max-w-[1200px] text-[15px] leading-7 text-[var(--color-text-secondary)]">
+                  {topic.description}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <InfoPill icon={<Calendar size={14} />} label="Frequency">
+                <span className="font-medium capitalize" style={{ color: FREQ_COLORS[topic.frequency] }}>{topic.frequency}</span>
+              </InfoPill>
+              <InfoPill icon={<Clock size={14} />} label="Delivery">{topic.deliveryTime ?? '—'}</InfoPill>
+              <InfoPill icon={<Clock size={14} />} label="Last run">{topic.lastRun}</InfoPill>
+              <InfoPill icon={<ChevronRight size={14} />} label="Next run">{topic.nextRun}</InfoPill>
+              <InfoPill icon={<FileText size={14} />} label="Briefings">{topic.briefingsCount}</InfoPill>
+            </div>
+          </div>
+        </section>
+
+        {message && (
+          <div className="rounded-2xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-3 text-sm text-[var(--color-accent)] shadow-[0_10px_30px_rgba(0,212,170,0.08)]">
+            {message}
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-white/5 bg-[linear-gradient(180deg,rgba(14,20,35,0.92),rgba(11,17,31,0.96))] p-1 shadow-[0_14px_40px_rgba(0,0,0,0.16)]">
+          <div className="flex flex-wrap gap-1">
+            {(['latest', 'history', 'runs', 'settings'] as const).map((tab) => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className="rounded-xl px-4 py-2.5 text-sm font-medium capitalize transition-all"
+                  style={{
+                    color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                    background: isActive ? 'rgba(0, 212, 170, 0.1)' : 'transparent',
+                    boxShadow: isActive ? 'inset 0 0 0 1px rgba(0, 212, 170, 0.25)' : 'none',
+                  }}
+                >
+                  {tab === 'latest' ? (briefingId ? 'Report' : 'Latest report') : tab}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="pb-4">
+          {activeTab === 'latest' && (
+            briefing ? (
+              <ReportView
+                briefing={briefing}
+                topic={topic}
+                searchResults={searchResults}
+                rankedDocuments={rankedDocuments}
+                searchLoading={searchLoading}
+                referencesLoading={referencesLoading}
+                actionBusy={actionBusy}
+                onProcessVideo={processVideo}
+              />
+            ) : (
+              <EmptyReport onRunNow={runNow} disabled={Boolean(actionBusy) || hasActiveRun} />
+            )
+          )}
+
+          {activeTab === 'history' && (
+            <HistoryView history={history} currentBriefingId={briefing?.id ?? null} onOpenBriefing={onOpenBriefing} />
+          )}
+
+          {activeTab === 'runs' && <RunsView runs={runs} onOpenWorkflow={onOpenWorkflow} />}
+
+          {activeTab === 'settings' && <SettingsView topic={topic} />}
         </div>
       </div>
-
-      <div className="mb-5">
-        <div className="mb-2 flex items-center gap-2">
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">{topic.name}</h1>
-          <StatusBadge status={topic.status} />
-        </div>
-        <p className="text-sm text-[var(--color-text-muted)]">{topic.description}</p>
-      </div>
-
-      <div className="mb-5 flex flex-wrap items-center gap-5 rounded-xl bg-[var(--color-bg-card)] px-5 py-3 text-sm">
-        <InfoPill icon={<Calendar size={14} />} label="Frequency">
-          <span className="capitalize font-medium" style={{ color: FREQ_COLORS[topic.frequency] }}>{topic.frequency}</span>
-        </InfoPill>
-        <InfoPill icon={<Clock size={14} />} label="Delivery">{topic.deliveryTime ?? '—'}</InfoPill>
-        <InfoPill icon={<Clock size={14} />} label="Last run">{topic.lastRun}</InfoPill>
-        <InfoPill icon={<ChevronRight size={14} />} label="Next run">{topic.nextRun}</InfoPill>
-        <InfoPill icon={<FileText size={14} />} label="Briefings">{topic.briefingsCount}</InfoPill>
-      </div>
-
-      {message && (
-        <div className="mb-5 rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 px-4 py-3 text-sm text-[var(--color-accent)]">
-          {message}
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
-      <div className="mb-5 flex gap-2 border-b border-[var(--color-border)]">
-        {(['latest', 'history', 'runs', 'settings'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className="px-4 py-2.5 text-sm font-medium capitalize transition-colors"
-            style={{
-              color: activeTab === tab ? 'var(--color-accent)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === tab ? '2px solid var(--color-accent)' : '2px solid transparent',
-            }}
-          >
-            {tab === 'latest' ? (briefingId ? 'Report' : 'Latest report') : tab}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'latest' && (
-        briefing ? (
-          <ReportView
-            briefing={briefing}
-            topic={topic}
-            searchResults={searchResults}
-            searchLoading={searchLoading}
-            actionBusy={actionBusy}
-            onProcessVideo={processVideo}
-          />
-        ) : (
-          <EmptyReport onRunNow={runNow} disabled={Boolean(actionBusy) || hasActiveRun} />
-        )
-      )}
-
-      {activeTab === 'history' && (
-        <HistoryView history={history} currentBriefingId={briefing?.id ?? null} onOpenBriefing={onOpenBriefing} />
-      )}
-
-      {activeTab === 'runs' && <RunsView runs={runs} onOpenWorkflow={onOpenWorkflow} />}
-
-      {activeTab === 'settings' && <SettingsView topic={topic} />}
     </main>
   );
 }
@@ -328,23 +432,66 @@ function ReportView({
   briefing,
   topic,
   searchResults,
+  rankedDocuments,
   searchLoading,
+  referencesLoading,
   actionBusy,
   onProcessVideo,
 }: {
   briefing: ResearchBriefing;
   topic: ResearchTopic;
   searchResults: ResearchSearchResult[];
+  rankedDocuments: ResearchRankedDocument[];
   searchLoading: boolean;
+  referencesLoading: boolean;
   actionBusy: string | null;
   onProcessVideo: (video: ResearchSearchResult) => void;
 }) {
   const videoResults = searchResults.filter((result) => result.sourceKey.toLowerCase() === 'youtube' || (result.domain ?? '').toLowerCase().includes('youtube'));
+  const references = rankedDocuments
+    .slice()
+    .sort((a, b) => a.rankPosition - b.rankPosition)
+    .filter((doc) => Boolean(doc.canonicalUrl));
+  const referenceUrlByDomain = new Map<string, string>();
+  for (const reference of references) {
+    const domain = normalizeHost(reference.canonicalUrl);
+    if (domain && !referenceUrlByDomain.has(domain)) {
+      referenceUrlByDomain.set(domain, reference.canonicalUrl);
+    }
+  }
+
+  const linkForDomain = (domain: string | null | undefined): string => {
+    if (!domain) {
+      return '#references';
+    }
+
+    return referenceUrlByDomain.get(normalizeHost(domain)) ?? '#references';
+  };
+
+  const renderBriefingItem = (item: string, tone: string) => {
+    const citation = extractDomainCitation(item);
+    const href = linkForDomain(citation?.domain);
+    const isExternal = href !== '#references';
+
+    return (
+      <a
+        href={href}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
+        className="group inline-flex items-start gap-2 rounded-lg px-1 py-0.5 transition-colors hover:bg-[var(--color-bg-hover)]/30 hover:text-[var(--color-text-primary)]"
+        title={citation?.domain ? `Open reference for ${citation.domain}` : 'Open references'}
+      >
+        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: SENTIMENT_COLORS[tone] ?? SENTIMENT_COLORS.neutral }} />
+        <span>{item}</span>
+        <ExternalLink size={11} className="mt-1 shrink-0 text-[var(--color-text-muted)] opacity-0 transition-opacity group-hover:opacity-100" />
+      </a>
+    );
+  };
 
   return (
-    <div className="grid grid-cols-3 gap-5">
-      <div className="col-span-2 flex flex-col gap-4">
-        <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_380px]">
+      <div className="flex flex-col gap-4">
+        <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Found videos</h2>
@@ -356,7 +503,7 @@ function ReportView({
           </div>
 
           {videoResults.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[var(--color-border)] px-4 py-6 text-sm text-[var(--color-text-muted)]">
+            <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 px-4 py-6 text-sm text-[var(--color-text-muted)]">
               No YouTube results are available yet for this run.
             </div>
           ) : (
@@ -367,7 +514,7 @@ function ReportView({
                 const language = video.language?.toUpperCase() ?? '—';
                 const sourceUrl = video.canonicalUrl ?? video.url;
                 return (
-                  <div key={video.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+                  <div key={video.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/70 p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -408,15 +555,15 @@ function ReportView({
           )}
         </section>
 
-        <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+        <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Executive Summary</h2>
-          <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{briefing.summary}</p>
+          <p className="text-sm leading-7 text-[var(--color-text-secondary)]">{briefing.summary}</p>
         </section>
 
         {briefing.sections.map((section) => (
           <section
             key={section.title}
-            className="rounded-xl bg-[var(--color-bg-card)] p-5"
+            className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]"
             style={{ borderLeft: `3px solid ${SENTIMENT_COLORS[section.sentiment]}` }}
           >
             <div className="mb-3 flex items-center gap-2">
@@ -425,9 +572,8 @@ function ReportView({
             </div>
             <ul className="space-y-2">
               {section.items.map((item, i) => (
-                <li key={i} className="flex gap-2 text-sm text-[var(--color-text-secondary)]">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: SENTIMENT_COLORS[section.sentiment] }} />
-                  {item}
+                <li key={i} className="text-sm text-[var(--color-text-secondary)]">
+                  {renderBriefingItem(item, section.sentiment)}
                 </li>
               ))}
             </ul>
@@ -436,7 +582,7 @@ function ReportView({
       </div>
 
       <div className="flex flex-col gap-4">
-        <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+        <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
             Report Metadata
           </h2>
@@ -448,15 +594,15 @@ function ReportView({
           </div>
         </section>
 
-        <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+        <section id="references" className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Sources ({briefing.sources.length})</h2>
           <div className="flex flex-wrap gap-2">
             {briefing.sources.map((source) => (
               <a
                 key={`${source.domain}-${source.title}`}
-                href={`https://${source.domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={linkForDomain(source.domain)}
+                target={linkForDomain(source.domain) === '#references' ? undefined : '_blank'}
+                rel={linkForDomain(source.domain) === '#references' ? undefined : 'noopener noreferrer'}
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)] hover:opacity-80"
                 title={source.title}
               >
@@ -467,7 +613,43 @@ function ReportView({
           </div>
         </section>
 
-        <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+        <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">References ({references.length})</h2>
+          {referencesLoading ? (
+            <div className="space-y-2">
+              <div className="h-12 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 animate-pulse" />
+              <div className="h-12 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 animate-pulse" />
+            </div>
+          ) : references.length === 0 ? (
+            <p className="text-xs text-[var(--color-text-muted)]">No article references are available for this report yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {references.slice(0, 12).map((reference) => (
+                <a
+                  key={reference.id}
+                  href={reference.canonicalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group block rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/55 px-3 py-3 transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-bg-hover)]/80"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[var(--color-text-primary)]">{reference.title}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
+                        <span>{reference.sourceKey}</span>
+                        <span>•</span>
+                        <span className="truncate">{reference.canonicalUrl}</span>
+                      </div>
+                    </div>
+                    <ExternalLink size={12} className="mt-0.5 shrink-0 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)]" />
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Structured Insights</h2>
           {topic.outputs.includes('structured') ? (
             <pre className="max-h-64 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-3 text-xs text-[var(--color-text-secondary)]">
@@ -484,14 +666,14 @@ function ReportView({
 
 function HistoryView({ history, currentBriefingId, onOpenBriefing }: { history: PastBriefing[]; currentBriefingId: string | null; onOpenBriefing: (briefingId: string) => void }) {
   if (history.length === 0) {
-    return <div className="rounded-xl bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">No historical reports yet.</div>;
+    return <div className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-6 text-sm text-[var(--color-text-muted)] shadow-[0_18px_45px_rgba(0,0,0,0.2)]">No historical reports yet.</div>;
   }
 
   return (
-    <div className="rounded-xl bg-[var(--color-bg-card)] p-5">
+    <div className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
       <div className="space-y-3">
         {history.map((item) => (
-          <div key={item.id} className="flex items-start justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+          <div key={item.id} className="flex items-start justify-between gap-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/70 p-4">
             <div>
               <div className="text-sm font-semibold text-[var(--color-text-primary)]">{item.date}</div>
               <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">{item.preview}</p>
@@ -512,16 +694,16 @@ function HistoryView({ history, currentBriefingId, onOpenBriefing }: { history: 
 
 function RunsView({ runs, onOpenWorkflow }: { runs: ResearchTopicRun[]; onOpenWorkflow: (workflowId: string) => void }) {
   if (runs.length === 0) {
-    return <div className="rounded-xl bg-[var(--color-bg-card)] p-6 text-sm text-[var(--color-text-muted)]">No runs yet.</div>;
+    return <div className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-6 text-sm text-[var(--color-text-muted)] shadow-[0_18px_45px_rgba(0,0,0,0.2)]">No runs yet.</div>;
   }
 
   return (
-    <div className="rounded-xl bg-[var(--color-bg-card)] p-5">
+    <div className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
       <div className="space-y-3">
         {runs.map((run) => {
           const workflowId = run.workflowId;
           return (
-            <div key={run.id} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-4">
+            <div key={run.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/70 p-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <RunStatusBadge status={run.status} />
@@ -562,55 +744,137 @@ function RunsView({ runs, onOpenWorkflow }: { runs: ResearchTopicRun[]; onOpenWo
 }
 
 function SettingsView({ topic }: { topic: ResearchTopic }) {
+  const lookbackLabel = formatLookbackWindow(topic.lookbackWindow, topic.frequency);
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SettingsCard title="Intent">{topic.description || 'No intent provided.'}</SettingsCard>
-      <SettingsCard title="Schedule">
-        Cadence: {topic.frequency}. Lookback: {topic.lookbackWindow ?? 'same as cadence'}. Delivery: {topic.deliveryTime ?? '—'}. Next run: {topic.nextRun}.
-      </SettingsCard>
-      <SettingsCard title="Sources">{topic.sources.join(', ') || 'No sources selected.'}</SettingsCard>
-      <SettingsCard title="Outputs">
-        {topic.outputs.join(', ') || 'No outputs selected.'}
-        {topic.outputs.includes('voice') && <div className="mt-2 text-xs text-[var(--color-text-muted)]">Voice summary is stored as a preference only. Audio generation is coming later.</div>}
-      </SettingsCard>
-      <SettingsCard title="Tags">{topic.tags.join(', ') || 'No tags.'}</SettingsCard>
-      <SettingsCard title="Project">{topic.projectId ?? 'Not linked to a project.'}</SettingsCard>
+    <div className="space-y-4">
+      <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
+        <div className="grid gap-3 md:grid-cols-4">
+          <SettingsMetric label="Cadence" value={formatCadence(topic.frequency)} />
+          <SettingsMetric label="Lookback window" value={lookbackLabel} />
+          <SettingsMetric label="Delivery" value={topic.deliveryTime ?? '—'} />
+          <SettingsMetric label="Next run" value={topic.nextRun} />
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <SettingsCard title="Intent">{topic.description || 'No intent provided.'}</SettingsCard>
+        <SettingsCard title="Schedule">
+          <div className="space-y-2">
+            <SettingsRow label="Cadence" value={formatCadence(topic.frequency)} />
+            <SettingsRow label="Lookback window" value={lookbackLabel} />
+            <SettingsRow label="Delivery" value={topic.deliveryTime ?? '—'} />
+            <SettingsRow label="Next run" value={topic.nextRun} />
+          </div>
+        </SettingsCard>
+        <SettingsCard title="Sources">{topic.sources.join(', ') || 'No sources selected.'}</SettingsCard>
+        <SettingsCard title="Outputs">
+          {topic.outputs.join(', ') || 'No outputs selected.'}
+          {topic.outputs.includes('voice') && <div className="mt-2 text-xs text-[var(--color-text-muted)]">Voice summary is stored as a preference only. Audio generation is coming later.</div>}
+        </SettingsCard>
+        <SettingsCard title="Tags">{topic.tags.join(', ') || 'No tags.'}</SettingsCard>
+        <SettingsCard title="Project">{topic.projectId ?? 'Not linked to a project.'}</SettingsCard>
+      </div>
     </div>
   );
 }
 
 function EmptyReport({ onRunNow, disabled }: { onRunNow: () => void; disabled: boolean }) {
   return (
-    <div className="rounded-xl bg-[var(--color-bg-card)] p-10 text-center">
-      <div className="mb-2 text-lg font-semibold text-[var(--color-text-primary)]">No briefing available yet.</div>
-      <p className="mb-5 text-sm text-[var(--color-text-muted)]">Run this topic to generate the first online report.</p>
-      <button
-        onClick={onRunNow}
-        disabled={disabled}
-        className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
-        style={{ background: 'var(--color-accent)' }}
-      >
-        <Play size={14} fill="black" />
-        Run now
-      </button>
+    <div className="rounded-[28px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.2)] sm:p-8">
+      <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[24px] border border-dashed border-[var(--color-border)] bg-[radial-gradient(circle_at_top,rgba(0,212,170,0.08),transparent_55%),rgba(10,15,28,0.4)] px-6 py-10 text-center">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-hover)] text-[var(--color-accent)] shadow-[0_0_0_1px_rgba(0,212,170,0.05)]">
+          <FileText size={22} />
+        </div>
+        <div className="mb-2 text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">No briefing available yet.</div>
+        <p className="max-w-xl text-sm leading-6 text-[var(--color-text-muted)]">
+          Run this topic to generate the first online report.
+        </p>
+        <button
+          onClick={onRunNow}
+          disabled={disabled}
+          className="mt-6 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ background: 'var(--color-accent)' }}
+        >
+          <Play size={14} fill="black" />
+          Run now
+        </button>
+        <div className="mt-6 grid gap-2 text-xs text-[var(--color-text-muted)] sm:grid-cols-3">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 px-3 py-2">Schedules the first scan</div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 px-3 py-2">Collects sources and runs</div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/50 px-3 py-2">Generates a briefing</div>
+        </div>
+      </div>
     </div>
   );
 }
 
 function SettingsCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-xl bg-[var(--color-bg-card)] p-5">
+    <section className="rounded-[24px] border border-white/5 bg-[linear-gradient(180deg,rgba(18,24,41,0.96),rgba(13,19,34,0.98))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">{title}</h2>
       <div className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{children}</div>
     </section>
   );
 }
 
+function SettingsMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/70 px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">{label}</div>
+      <div className="mt-1 text-sm font-medium text-[var(--color-text-primary)]">{value}</div>
+    </div>
+  );
+}
+
+function SettingsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/70 px-3 py-2">
+      <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">{label}</span>
+      <span className="text-sm font-medium text-[var(--color-text-primary)] text-right">{value}</span>
+    </div>
+  );
+}
+
+function formatCadence(frequency: ResearchTopic['frequency']): string {
+  switch (frequency) {
+    case 'hourly':
+      return 'Hourly';
+    case 'daily':
+      return 'Daily';
+    case 'weekly':
+      return 'Weekly';
+    case 'monthly':
+      return 'Monthly';
+    default:
+      return frequency;
+  }
+}
+
+function formatLookbackWindow(lookbackWindow: ResearchTopic['lookbackWindow'], frequency: ResearchTopic['frequency']): string {
+  if (!lookbackWindow) {
+    return `Same as ${formatCadence(frequency).toLowerCase()}`;
+  }
+
+  switch (lookbackWindow) {
+    case 'hour':
+      return '1 hour';
+    case 'day':
+      return '1 day';
+    case 'week':
+      return '1 week';
+    case 'month':
+      return '1 month';
+    default:
+      return lookbackWindow;
+  }
+}
+
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] transition-colors">
+    <button onClick={onBack} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/5 bg-[rgba(14,20,35,0.78)] px-4 py-2 text-sm text-[var(--color-text-muted)] shadow-[0_10px_30px_rgba(0,0,0,0.16)] transition-colors hover:border-[var(--color-border)] hover:text-[var(--color-text-primary)]">
       <ArrowLeft size={15} />
-      Research
+      <span>Research</span>
     </button>
   );
 }
@@ -634,7 +898,7 @@ function ActionButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       style={{
         background: accent ? 'var(--color-accent)' : danger ? '#ef444422' : 'var(--color-bg-card)',
         color: accent ? 'black' : danger ? '#ef4444' : 'var(--color-text-secondary)',
@@ -649,17 +913,19 @@ function ActionButton({
 
 function InfoPill({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-[rgba(10,15,28,0.6)] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <span className="text-[var(--color-text-muted)]">{icon}</span>
-      <span className="text-xs text-[var(--color-text-muted)]">{label}:</span>
-      <span className="text-xs font-medium text-[var(--color-text-primary)]">{children}</span>
+      <div className="min-w-0">
+        <span className="block text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">{label}</span>
+        <span className="block text-sm font-medium text-[var(--color-text-primary)]">{children}</span>
+      </div>
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: ResearchTopic['status'] }) {
   const color = status === 'active' ? 'var(--color-accent)' : status === 'paused' ? '#f59e0b' : 'var(--color-text-muted)';
-  return <span className="rounded-full px-2 py-0.5 text-xs font-medium capitalize" style={{ background: `${color}22`, color }}>{status}</span>;
+  return <span className="rounded-full px-2.5 py-1 text-xs font-medium capitalize" style={{ background: `${color}22`, color }}>{status}</span>;
 }
 
 function RunStatusBadge({ status }: { status: string }) {
@@ -677,18 +943,22 @@ function SentimentBadge({ sentiment }: { sentiment: 'positive' | 'neutral' | 'ne
 
 function BriefingSkeletonLoader({ onBack }: { onBack: () => void }) {
   return (
-    <main className="flex-1 overflow-y-auto bg-[var(--color-bg-main)] p-6">
-      <BackButton onBack={onBack} />
-      <div className="mt-5 space-y-4">
-        <div className="h-7 w-64 animate-pulse rounded-lg bg-[var(--color-bg-card)]" />
-        <div className="h-12 animate-pulse rounded-xl bg-[var(--color-bg-card)]" />
-        <div className="grid grid-cols-3 gap-5">
-          <div className="col-span-2 space-y-4">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-32 animate-pulse rounded-xl bg-[var(--color-bg-card)]" />)}
-          </div>
-          <div className="space-y-4">
-            <div className="h-32 animate-pulse rounded-xl bg-[var(--color-bg-card)]" />
-            <div className="h-24 animate-pulse rounded-xl bg-[var(--color-bg-card)]" />
+    <main className="relative flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(0,212,170,0.07),transparent_28%),radial-gradient(circle_at_top_right,rgba(94,234,212,0.05),transparent_22%),linear-gradient(180deg,#0b1120_0%,#0c1221_32%,#0c1221_100%)] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
+        <BackButton onBack={onBack} />
+        <div className="space-y-4">
+          <div className="h-14 animate-pulse rounded-[28px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+          <div className="h-20 animate-pulse rounded-[28px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_380px]">
+            <div className="space-y-4">
+              <div className="h-72 animate-pulse rounded-[24px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+              <div className="h-40 animate-pulse rounded-[24px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+            </div>
+            <div className="space-y-4">
+              <div className="h-40 animate-pulse rounded-[24px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+              <div className="h-40 animate-pulse rounded-[24px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+              <div className="h-40 animate-pulse rounded-[24px] border border-white/5 bg-[rgba(19,28,48,0.5)]" />
+            </div>
           </div>
         </div>
       </div>

@@ -679,6 +679,7 @@ export default function AdminPage({ initialSection, initialSelectedWorkflowId, o
   const [workflowCostStatusFilter, setWorkflowCostStatusFilter] = useState<WorkflowCostStatusFilter>('all');
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStepResponse[]>([]);
   const [selectedWorkflowStepId, setSelectedWorkflowStepId] = useState<string | null>(null);
+  const [workflowEventScope, setWorkflowEventScope] = useState<'step' | 'all'>('step');
   const [workflowStepsLoading, setWorkflowStepsLoading] = useState(false);
   const [workflowStepsError, setWorkflowStepsError] = useState<string | null>(null);
   const [workflowStepJobLogs, setWorkflowStepJobLogs] = useState<JobLogResponse[]>([]);
@@ -3745,7 +3746,56 @@ export default function AdminPage({ initialSection, initialSelectedWorkflowId, o
       }
     };
 
+    const getContextString = (context: Record<string, unknown>, key: string): string | null => {
+      const value = context[key];
+      return typeof value === 'string' ? value : null;
+    };
+
+    const getContextNumber = (context: Record<string, unknown>, key: string): number | null => {
+      const value = context[key];
+      return typeof value === 'number' ? value : null;
+    };
+
+    const getContextArray = (context: Record<string, unknown>, key: string): Record<string, unknown>[] => {
+      const value = context[key];
+      return Array.isArray(value)
+        ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+        : [];
+    };
+
     const selectedStepLogsHeader = selectedWorkflowStep ? `${selectedWorkflowStep.stepKey} logs` : 'Step logs';
+    const selectedStepEvents = selectedWorkflowStep
+      ? workflowEvents
+        .filter((event) => event.stepKey === selectedWorkflowStep.stepKey)
+        .slice()
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      : [];
+    const selectedSearchPlanningEvent = selectedWorkflowStep?.stepKey === 'search_intake'
+      ? selectedStepEvents.find((event) => event.message === 'Research queries planned.')
+      : null;
+    const selectedSearchSources = selectedWorkflowStep?.stepKey === 'search_intake'
+      ? selectedStepEvents
+        .filter((event) => event.message === 'Research source search started.')
+        .map((startEvent) => {
+          const searchRunId = getContextString(startEvent.context, 'searchRunId');
+          const finishEvent = searchRunId
+            ? selectedStepEvents.find((event) =>
+              event.message === 'Research source search finished.' &&
+              getContextString(event.context, 'searchRunId') === searchRunId)
+            : null;
+
+          return {
+            searchRunId,
+            source: getContextString(startEvent.context, 'source') ?? 'unknown',
+            adapter: getContextString(startEvent.context, 'adapter') ?? 'unknown',
+            queryCount: getContextNumber(startEvent.context, 'queryCount'),
+            queries: getContextArray(startEvent.context, 'queries'),
+            startEvent,
+            finishEvent,
+          };
+        })
+      : [];
+    const visibleWorkflowEvents = workflowEventScope === 'all' ? workflowEvents : selectedStepEvents;
 
     return (
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -4106,45 +4156,240 @@ export default function AdminPage({ initialSection, initialSelectedWorkflowId, o
 
                 <section className="rounded-2xl border border-border bg-bg-input/40 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-[12px] font-semibold text-text-primary">Workflow events</div>
-                    <Badge tone={workflowEventsLoading ? 'muted' : workflowEventsError ? 'muted' : 'accent'}>
-                      {workflowEventsLoading ? 'Loading' : workflowEventsError ? 'Error' : `${workflowEvents.length} events`}
-                    </Badge>
+                    <div className="text-[12px] font-semibold text-text-primary">Step details</div>
+                    <div className="flex items-center gap-2">
+                      <div className="inline-flex rounded-full border border-border bg-bg-card p-1">
+                        <button
+                          type="button"
+                          onClick={() => setWorkflowEventScope('step')}
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                            workflowEventScope === 'step'
+                              ? 'bg-accent text-bg-primary'
+                              : 'text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          Step events
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWorkflowEventScope('all')}
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                            workflowEventScope === 'all'
+                              ? 'bg-accent text-bg-primary'
+                              : 'text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          All events
+                        </button>
+                      </div>
+                      {selectedWorkflowStep && (
+                        <Badge tone={selectedWorkflowStep.status === 'succeeded' ? 'accent' : selectedWorkflowStep.status === 'failed' ? 'muted' : 'default'}>
+                          {selectedWorkflowStep.status}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  {workflowEventsError ? (
-                    <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
-                      {workflowEventsError}
-                    </div>
-                  ) : workflowEventsLoading ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
-                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
-                      <div className="h-12 rounded-xl border border-border bg-bg-card/60 animate-pulse" />
-                    </div>
-                  ) : workflowEvents.length === 0 ? (
-                    <div className="mt-3 text-[11px] text-text-muted">No events recorded for this workflow.</div>
-                  ) : (
-                    <div className="mt-3 space-y-2">
-                      {workflowEvents.map((event) => (
-                        <div key={event.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Badge tone={event.level === 'error' ? 'muted' : 'accent'}>{event.level}</Badge>
-                              <div className="truncate text-[11px] font-semibold text-text-primary">{event.message}</div>
-                            </div>
-                            <div className="text-[10px] text-text-muted">{formatDateTime(event.createdAt)}</div>
+
+                  {selectedWorkflowStep ? (
+                    <div className="mt-3 space-y-4">
+                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                          <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Step order</div>
+                          <div className="mt-1 text-[12px] font-semibold text-text-primary">{selectedWorkflowStep.stepOrder}</div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                          <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Type</div>
+                          <div className="mt-1 text-[12px] font-semibold text-text-primary">{selectedWorkflowStep.stepType}</div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                          <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Job ID</div>
+                          <div className="mt-1 break-all text-[12px] font-semibold text-text-primary">{selectedWorkflowStep.jobId ?? '—'}</div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                          <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Updated</div>
+                          <div className="mt-1 text-[12px] font-semibold text-text-primary">
+                            {selectedWorkflowStep.finishedAt ? formatDateTime(selectedWorkflowStep.finishedAt) : formatDateTime(selectedWorkflowStep.startedAt)}
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
-                            <span>{event.stepKey ?? 'root'}</span>
-                            <span>•</span>
-                            <span>{event.workflowId}</span>
-                          </div>
-                          <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-border bg-bg-secondary/60 p-2 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
-                            {eventContextText(event.context)}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-2xl border border-border bg-bg-card/70 p-4">
+                          <div className="text-[12px] font-semibold text-text-primary">Input</div>
+                          <pre className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-bg-secondary/60 p-3 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                            {eventContextText(selectedWorkflowStep.input ?? {})}
                           </pre>
                         </div>
-                      ))}
+                        <div className="rounded-2xl border border-border bg-bg-card/70 p-4">
+                          <div className="text-[12px] font-semibold text-text-primary">Output</div>
+                          <pre className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-bg-secondary/60 p-3 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                            {eventContextText(selectedWorkflowStep.output ?? {})}
+                          </pre>
+                        </div>
+                      </div>
+
+                      {selectedWorkflowStep.stepKey === 'search_intake' && (
+                        <div className="space-y-3">
+                          <div className="text-[12px] font-semibold text-text-primary">Search intake breakdown</div>
+
+                          {selectedSearchPlanningEvent && (
+                            <div className="rounded-2xl border border-border bg-bg-card/70 p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-[12px] font-semibold text-text-primary">Planned sources</div>
+                                  <div className="mt-0.5 text-[11px] text-text-muted">
+                                    {getContextString(selectedSearchPlanningEvent.context, 'topicSummary') ?? 'Topic summary unavailable.'}
+                                  </div>
+                                </div>
+                                <Badge tone="accent">
+                                  {getContextNumber(selectedSearchPlanningEvent.context, 'queryCount') ?? 0} queries
+                                </Badge>
+                              </div>
+
+                              <div className="mt-3 grid gap-2">
+                                {getContextArray(selectedSearchPlanningEvent.context, 'sources').map((sourcePlan, index) => {
+                                  const source = getContextString(sourcePlan, 'source') ?? `source ${index + 1}`;
+                                  const queries = getContextArray(sourcePlan, 'queries');
+                                  const queryLabels = queries
+                                    .map((queryPlan) => getContextString(queryPlan, 'query') ?? '')
+                                    .filter(Boolean);
+
+                                  return (
+                                    <div key={`${source}-${index}`} className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div className="text-[12px] font-semibold text-text-primary">{source}</div>
+                                        <Badge tone="muted">{getContextNumber(sourcePlan, 'queryCount') ?? queries.length} queries</Badge>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {queryLabels.length > 0 ? queryLabels.map((query) => (
+                                          <span key={query} className="rounded-full border border-border bg-bg-card px-2.5 py-1 text-[10px] text-text-secondary">
+                                            {query}
+                                          </span>
+                                        )) : (
+                                          <span className="text-[11px] text-text-muted">No query text recorded.</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedSearchSources.length > 0 && (
+                            <div className="grid gap-3">
+                              {selectedSearchSources.map((sourceRun) => {
+                                const finishContext = sourceRun.finishEvent?.context ?? {};
+                                const queryLabels = sourceRun.queries
+                                  .map((queryPlan) => getContextString(queryPlan, 'query') ?? '')
+                                  .filter(Boolean);
+                                const topResults = Array.isArray(finishContext['topResults'])
+                                  ? finishContext['topResults'].filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+                                  : [];
+
+                                return (
+                                  <div key={sourceRun.searchRunId ?? sourceRun.source} className="rounded-2xl border border-border bg-bg-card/70 p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                      <div>
+                                        <div className="text-[12px] font-semibold text-text-primary">{sourceRun.source}</div>
+                                        <div className="mt-0.5 text-[11px] text-text-muted">{sourceRun.adapter}</div>
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        <Badge tone="muted">{sourceRun.queryCount ?? sourceRun.queries.length} queries</Badge>
+                                        <Badge tone={sourceRun.finishEvent ? 'accent' : 'default'}>
+                                          {sourceRun.finishEvent ? 'completed' : 'running'}
+                                        </Badge>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                      <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                        <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Search run</div>
+                                        <div className="mt-1 break-all text-[11px] font-semibold text-text-primary">{sourceRun.searchRunId ?? '—'}</div>
+                                      </div>
+                                      <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                        <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Results</div>
+                                        <div className="mt-1 text-[11px] font-semibold text-text-primary">
+                                          {getContextNumber(finishContext, 'uniqueResultCount') ?? getContextNumber(finishContext, 'combinedResultCount') ?? 0}
+                                        </div>
+                                      </div>
+                                      <div className="rounded-xl border border-border bg-bg-input/40 px-3 py-3">
+                                        <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Finished</div>
+                                        <div className="mt-1 text-[11px] font-semibold text-text-primary">
+                                          {formatDateTime(sourceRun.finishEvent?.createdAt ?? sourceRun.startEvent.createdAt)}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3">
+                                      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Queries</div>
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {queryLabels.length > 0 ? queryLabels.map((query) => (
+                                          <span key={query} className="rounded-full border border-border bg-bg-input/40 px-2.5 py-1 text-[10px] text-text-secondary">
+                                            {query}
+                                          </span>
+                                        )) : (
+                                          <span className="text-[11px] text-text-muted">No queries recorded.</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {topResults.length > 0 && (
+                                      <div className="mt-3">
+                                        <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Top results</div>
+                                        <div className="mt-2 space-y-2">
+                                          {topResults.slice(0, 5).map((result, index) => (
+                                            <div key={`${sourceRun.searchRunId ?? sourceRun.source}-${index}`} className="rounded-xl border border-border bg-bg-input/40 px-3 py-2">
+                                              <div className="truncate text-[11px] font-semibold text-text-primary">
+                                                {typeof result.title === 'string' ? result.title : 'Untitled result'}
+                                              </div>
+                                              <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                                                {typeof result.url === 'string' ? result.url : '—'}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {visibleWorkflowEvents.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-[12px] font-semibold text-text-primary">
+                            {workflowEventScope === 'all' ? 'All workflow events' : 'Step events'}
+                          </div>
+                          <div className="space-y-2">
+                            {visibleWorkflowEvents.map((event) => (
+                              <div key={event.id} className="rounded-xl border border-border bg-bg-card px-3 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Badge tone={event.level === 'error' ? 'muted' : 'accent'}>{event.level}</Badge>
+                                    <div className="truncate text-[11px] font-semibold text-text-primary">{event.message}</div>
+                                  </div>
+                                  <div className="text-[10px] text-text-muted">{formatDateTime(event.createdAt)}</div>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+                                  <span>{event.stepKey ?? 'root'}</span>
+                                  <span>•</span>
+                                  <span>{event.workflowId}</span>
+                                </div>
+                                <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-border bg-bg-secondary/60 p-2 text-[10px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
+                                  {eventContextText(event.context)}
+                                </pre>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  ) : (
+                    <div className="mt-3 text-[11px] text-text-muted">Pick a step to inspect inputs, outputs, and child activity.</div>
                   )}
                 </section>
 

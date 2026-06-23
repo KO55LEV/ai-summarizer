@@ -20,6 +20,30 @@ public sealed class ResearchSearchPlanningService(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
 
+    public async Task<ResearchSearchPlanRecord> GetCachedSearchPlanAsync(Guid topicId, CancellationToken cancellationToken)
+    {
+        var topic = await researchRepository.GetTopicByIdAsync(topicId, cancellationToken)
+            ?? throw new ResearchSearchPlanningException("topic_not_found", $"Research topic {topicId} was not found.");
+
+        var existing = await researchRepository.GetSearchPlanByTopicIdAsync(topicId, cancellationToken);
+        if (existing is null || existing.Status != ResearchSearchPlanStatus.Ready || string.IsNullOrWhiteSpace(existing.PlanJson))
+        {
+            throw new ResearchSearchPlanningException(
+                "search_plan_not_ready",
+                "The research search plan is not ready yet. Save the research and wait for planning to finish.");
+        }
+
+        var inputHash = ComputeHash(BuildPlanInput(topic));
+        if (!string.Equals(existing.InputHash, inputHash, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ResearchSearchPlanningException(
+                "search_plan_stale",
+                "The cached research search plan is stale. Save the research again so planning can refresh it.");
+        }
+
+        return existing;
+    }
+
     public async Task<ResearchSearchPlanRecord> EnsureSearchPlanAsync(Guid topicId, Guid? workflowId, Guid? jobId, string? stepKey, bool forceRefresh, CancellationToken cancellationToken)
     {
         var topic = await researchRepository.GetTopicByIdAsync(topicId, cancellationToken)

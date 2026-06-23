@@ -78,7 +78,6 @@ public sealed class ResearchTopicRunJobHandler(
         var runId = Guid.NewGuid();
         var phaseId = Guid.NewGuid();
         var plannerVersion = "v1";
-        var topicSeed = string.Join(" ", new[] { topic.Name, topic.Description ?? string.Empty }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
         await researchRepository.ExecuteInTransactionAsync(async (repository, transaction) =>
         {
@@ -113,7 +112,6 @@ public sealed class ResearchTopicRunJobHandler(
             {
                 researchTopicId = topic.Id,
                 runId,
-                topicSeed,
                 sourceCount = topic.Sources.Count,
                 frequency = topic.Frequency,
                 lookbackWindow = topic.LookbackWindow,
@@ -122,13 +120,13 @@ public sealed class ResearchTopicRunJobHandler(
             }),
             cancellationToken);
 
-        context.ReportProgress(5, "Planning search terms");
+        context.ReportProgress(5, "Loading search plan");
 
         ResearchSearchPlanRecord plan;
         ResearchSearchPlan plannedSearch;
         try
         {
-            plan = await searchPlanningService.EnsureSearchPlanAsync(topic.Id, payload.WorkflowId, context.Job.Id, "research.plan", payload.ForceRun, cancellationToken);
+            plan = await searchPlanningService.GetCachedSearchPlanAsync(topic.Id, cancellationToken);
             plannedSearch = ParseSearchPlan(plan.PlanJson);
             await ResearchWorkflowProgress.CompleteStepAsync(
                 workflowsRepository,
@@ -141,7 +139,10 @@ public sealed class ResearchTopicRunJobHandler(
                     promptKey = plan.PromptKey,
                     provider = plan.Provider,
                     model = plan.Model,
-                    status = plan.Status.ToString().ToLowerInvariant()
+                    status = plan.Status.ToString().ToLowerInvariant(),
+                    planSource = "cache",
+                    planJson = plan.PlanJson,
+                    searchPlan = plannedSearch
                 }),
                 cancellationToken);
         }
